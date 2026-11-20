@@ -1,0 +1,10 @@
+{
+  "name": "silicon-genesis",
+  "version": "1.0.0",
+  "description": "SILICON GENESIS — Build a CPU from NAND gates in underground shelter ARK-7",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

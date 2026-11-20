@@ -1,0 +1,227 @@
+/**
+ * SILICON GENESIS — Story Dialogue & Spacious Mobile Story-Theater Controller
+ *
+ * Uses a spacious full-screen visual-novel reader (#story-theater) whenever
+ * multi-line intro/outro story conversations play (so mobile players get big,
+ * crisp, unclipped Japanese text!), and collapses down to a compact, unclipped
+ * Mission Strip (#dialogue-box) during active circuit wiring.
+ */
+
+import { CHARACTERS, SCENES } from '../data/characters.js';
+import { sound } from '../audio/sound.js';
+
+export class DialogueController {
+  constructor(stripEl, theaterEl) {
+    // Compact Mission Strip (above workbench)
+    this.strip = stripEl;
+    this.stripPortrait = stripEl.querySelector('#dlg-portrait');
+    this.stripSpeaker = stripEl.querySelector('#dlg-speaker');
+    this.stripProgress = stripEl.querySelector('#dlg-progress');
+    this.stripText = stripEl.querySelector('#dlg-text');
+    this.btnOpenStory = stripEl.querySelector('#btn-open-story');
+
+    // Spacious Story Theater Overlay
+    this.theater = theaterEl;
+    this.stBg = theaterEl.querySelector('#st-bg');
+    this.stBadge = theaterEl.querySelector('#st-stage-badge');
+    this.stProgress = theaterEl.querySelector('#st-progress');
+    this.btnSkip = theaterEl.querySelector('#btn-st-skip');
+    this.stVisualCard = theaterEl.querySelector('#st-visual-card');
+    this.stCard = theaterEl.querySelector('#st-card');
+    this.stPortrait = theaterEl.querySelector('#st-portrait');
+    this.stSpeaker = theaterEl.querySelector('#st-speaker');
+    this.stRole = theaterEl.querySelector('#st-role');
+    this.stText = theaterEl.querySelector('#st-text');
+    this.btnNext = theaterEl.querySelector('#btn-st-next');
+
+    this.lines = [];
+    this.index = 0;
+    this.fullText = '';
+    this.charIdx = 0;
+    this.typing = false;
+    this._timer = null;
+    this.onComplete = null;
+    this.idleGoal = '';
+    this.endBtnLabel = '作業を始める ▶';
+
+    // Reopen stage intro story from mission strip
+    const reopen = (e) => {
+      e.stopPropagation();
+      this.strip.dispatchEvent(new CustomEvent('replay-intro', { bubbles: true }));
+    };
+    this.btnOpenStory.addEventListener('click', reopen);
+    this.strip.addEventListener('click', reopen);
+
+    // Story theater controls
+    this.btnSkip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sound.playSwitch(false);
+      this._finishLines();
+    });
+    this.btnNext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.advance();
+    });
+    this.theater.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      this.advance();
+    });
+  }
+
+  playLines(
+    lines,
+    {
+      onComplete = null,
+      fallbackGoal = '',
+      incidentBrief = null,
+      sceneKey = 'shelter_hub',
+      stageBadge = '',
+      endLabel = '回路を組む ▶',
+    } = {}
+  ) {
+    this._stopTimer();
+    this.lines = Array.isArray(lines) ? lines : [];
+    this.index = 0;
+    this.onComplete = onComplete;
+    this.endBtnLabel = endLabel;
+    this.incidentBrief = incidentBrief;
+    if (fallbackGoal) this.idleGoal = fallbackGoal;
+
+    // Update compact mission strip immediately so it's ready underneath
+    this.showGoal(this.idleGoal, 'hako', incidentBrief);
+
+    if (this.lines.length === 0) {
+      this.theater.classList.add('hidden');
+      if (this.onComplete) this.onComplete();
+      return;
+    }
+
+    const sceneDef = SCENES[sceneKey] || SCENES.shelter_hub;
+    this.stBg.src = sceneDef.image;
+    this.stBadge.textContent = stageBadge || sceneDef.label;
+    this.theater.classList.remove('hidden');
+    this._showLine(0);
+  }
+
+  showGoal(goalText, speakerKey = 'hako', incidentBrief = null) {
+    this.idleGoal = goalText;
+    const ch = CHARACTERS[speakerKey] || CHARACTERS.hako;
+    this.stripPortrait.src = ch.portrait;
+    this.stripPortrait.alt = ch.name;
+    this.stripSpeaker.textContent = incidentBrief ? `🚨 ${incidentBrief.where}` : ch.name;
+    this.stripSpeaker.style.color = incidentBrief ? '#ffb84d' : ch.color;
+    this.stripProgress.textContent = incidentBrief ? 'TROUBLE' : 'MISSION';
+    this.stripText.textContent = incidentBrief
+      ? `${incidentBrief.shortRule || incidentBrief.condition}`
+      : goalText;
+    this.strip.style.setProperty('--speaker-color', ch.color);
+  }
+
+  isOpen() {
+    return !this.theater.classList.contains('hidden');
+  }
+
+  close() {
+    this._stopTimer();
+    this.theater.classList.add('hidden');
+  }
+
+  _showLine(idx) {
+    const line = this.lines[idx];
+    if (!line) return;
+    const ch = CHARACTERS[line.speaker] || CHARACTERS.kagari;
+
+    this.stPortrait.src = ch.portrait;
+    this.stPortrait.alt = ch.name;
+    this.stSpeaker.textContent = ch.name;
+    this.stSpeaker.style.color = ch.color;
+    this.stRole.textContent = ch.role;
+    this.theater.style.setProperty('--pro-accent', ch.color);
+
+    // Optional illustrated guide card OR automatic Incident Trouble Summary Card!
+    if (this.stVisualCard) {
+      const isLastLine = idx === this.lines.length - 1;
+      if (line.visualCard) {
+        const vc = line.visualCard;
+        this.stVisualCard.className = 'st-visual-card';
+        this.stVisualCard.style.setProperty('--vc-accent', vc.accent || '#ffb84d');
+        this.stVisualCard.innerHTML = `
+          <div class="vc-tag">${vc.tag || '博士のメモ'}</div>
+          <div class="vc-title">${vc.title || ''}</div>
+          ${vc.diagram ? `<div class="vc-diagram">${vc.diagram}</div>` : ''}
+          <div class="vc-rule">${vc.rule || ''}</div>
+        `;
+      } else if (this.incidentBrief && (line.showIncident || isLastLine)) {
+        const ib = this.incidentBrief;
+        this.stVisualCard.className = 'st-visual-card st-incident-card';
+        this.stVisualCard.style.setProperty('--vc-accent', '#ff7b6b');
+        this.stVisualCard.innerHTML = `
+          <div class="inc-head">🚨 現場トラブル要約 // ${ib.where}</div>
+          <div class="inc-row"><span class="inc-lbl bad">異常</span><span>${ib.trouble}</span></div>
+          <div class="inc-row"><span class="inc-lbl ok">目標</span><span class="inc-cond">${ib.condition}</span></div>
+        `;
+      } else {
+        this.stVisualCard.className = 'st-visual-card hidden';
+        this.stVisualCard.innerHTML = '';
+      }
+    }
+
+    this.fullText = line.text;
+    this.charIdx = 0;
+    this.typing = true;
+    this.stText.textContent = '';
+    this.stProgress.textContent = `${idx + 1} / ${this.lines.length}`;
+    this.btnNext.textContent = idx < this.lines.length - 1 ? '次へ ▶' : this.endBtnLabel;
+
+    const pitch = line.speaker === 'mina' ? 560 : line.speaker === 'kagari' ? 420 : 320;
+    this._stopTimer();
+    this._timer = setInterval(() => {
+      this.charIdx += 2;
+      if (this.charIdx >= this.fullText.length) {
+        this.stText.textContent = this.fullText;
+        this.typing = false;
+        this._stopTimer();
+      } else {
+        this.stText.textContent = this.fullText.slice(0, this.charIdx);
+        if (this.charIdx % 6 === 0) sound.playBlip(pitch);
+      }
+    }, 22);
+  }
+
+  advance() {
+    if (this.lines.length === 0) {
+      this.theater.classList.add('hidden');
+      return;
+    }
+    if (this.typing) {
+      this._stopTimer();
+      this.stText.textContent = this.fullText;
+      this.typing = false;
+      return;
+    }
+    sound.playSwitch(true);
+    if (this.index < this.lines.length - 1) {
+      this.index++;
+      this._showLine(this.index);
+    } else {
+      this._finishLines();
+    }
+  }
+
+  _finishLines() {
+    this._stopTimer();
+    this.lines = [];
+    this.typing = false;
+    this.theater.classList.add('hidden');
+    const cb = this.onComplete;
+    this.onComplete = null;
+    if (cb) cb();
+  }
+
+  _stopTimer() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
+  }
+}

@@ -1,0 +1,293 @@
+/**
+ * SILICON GENESIS — Full-Screen Title & Atmospheric Story Prologue Overlay
+ */
+
+import { CHARACTERS } from '../data/characters.js';
+import { PROLOGUE_STEPS } from '../data/prologue.js';
+import { STAGES } from '../data/stages.js';
+import { sound } from '../audio/sound.js';
+
+export class PrologueOverlay {
+  constructor(rootEl, { onFinish, onContinue }) {
+    this.root = rootEl;
+    this.onFinish = onFinish;
+    this.onContinue = onContinue;
+
+    this.titleScreen = rootEl.querySelector('#title-screen');
+    this.storyScreen = rootEl.querySelector('#prologue-story');
+    this.btnStartNew = rootEl.querySelector('#btn-title-start');
+    this.btnContinue = rootEl.querySelector('#btn-title-continue');
+    this.btnReplayPrologue = rootEl.querySelector('#btn-title-prologue');
+    this.titleProgressMeta = rootEl.querySelector('#title-progress-meta');
+
+    this.bgImg = rootEl.querySelector('#pro-bg');
+    this.moodLayer = rootEl.querySelector('#pro-mood');
+    this.datelineEl = rootEl.querySelector('#pro-dateline');
+    this.chapterCard = rootEl.querySelector('#pro-chapter-card');
+    this.relicCard = rootEl.querySelector('#pro-nand-relic');
+    this.stepCounter = rootEl.querySelector('#pro-step-counter');
+    this.btnSkip = rootEl.querySelector('#btn-pro-skip');
+    this.portraitWrap = rootEl.querySelector('#pro-portrait-wrap');
+    this.portraitImg = rootEl.querySelector('#pro-portrait');
+    this.speakerName = rootEl.querySelector('#pro-speaker');
+    this.speakerRole = rootEl.querySelector('#pro-role');
+    this.textEl = rootEl.querySelector('#pro-text');
+    this.nextCue = rootEl.querySelector('#pro-next-cue');
+    this.choicesWrap = rootEl.querySelector('#pro-choices');
+    this.storyTapArea = rootEl.querySelector('#pro-tap-area');
+
+    this.stepIdx = 0;
+    this.fullText = '';
+    this.charIdx = 0;
+    this.typing = false;
+    this.awaitingChoice = false;
+    this.pendingReply = null;
+    this._timer = null;
+
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    this.btnStartNew.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.startStory();
+    });
+
+    this.btnContinue.addEventListener('click', () => {
+      sound.playSwitch(true);
+      this.hide();
+      this.onContinue?.();
+    });
+
+    this.btnReplayPrologue.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.startStory();
+    });
+
+    this.btnSkip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sound.playSwitch(false);
+      this._finishStory();
+    });
+
+    this.storyTapArea.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      if (this.awaitingChoice) return;
+      this._advance();
+    });
+  }
+
+  showTitle(save) {
+    this._stopTimer();
+    const hasProgress = Boolean(
+      save.seenPrologue || (save.clearedStages && save.clearedStages.length > 0)
+    );
+    const clearedCount = save.clearedStages?.length || 0;
+    const curStage = STAGES.find((s) => s.id === save.currentStageId) || STAGES[0];
+
+    this.root.classList.remove('hidden');
+    this.titleScreen.classList.remove('hidden');
+    this.storyScreen.classList.add('hidden');
+
+    if (hasProgress) {
+      this.btnStartNew.classList.add('hidden');
+      this.btnContinue.classList.remove('hidden');
+      this.btnReplayPrologue.classList.remove('hidden');
+      this.btnContinue.textContent = `▶ つづきから（STAGE ${curStage.code}）`;
+      this.titleProgressMeta.textContent = `復興進捗: ${clearedCount} / ${STAGES.length} 回路復元済 · カスタムチップ ${Object.keys(save.customChips || {}).length}種`;
+      this.titleProgressMeta.classList.remove('hidden');
+    } else {
+      this.btnStartNew.classList.remove('hidden');
+      this.btnContinue.classList.add('hidden');
+      this.btnReplayPrologue.classList.add('hidden');
+      this.titleProgressMeta.classList.add('hidden');
+    }
+  }
+
+  startStory() {
+    this._stopTimer();
+    this.root.classList.remove('hidden');
+    this.titleScreen.classList.add('hidden');
+    this.storyScreen.classList.remove('hidden');
+    this.stepIdx = 0;
+    this.pendingReply = null;
+    this.awaitingChoice = false;
+    this._renderStep(0);
+  }
+
+  hide() {
+    this._stopTimer();
+    this.root.classList.add('hidden');
+  }
+
+  _renderStep(idx) {
+    const step = PROLOGUE_STEPS[idx];
+    if (!step) {
+      this._finishStory();
+      return;
+    }
+
+    this.awaitingChoice = false;
+    this.choicesWrap.classList.add('hidden');
+    this.choicesWrap.innerHTML = '';
+
+    // Backdrop transition
+    if (this.bgImg.getAttribute('src') !== step.scene) {
+      this.bgImg.classList.remove('bg-fade-in');
+      void this.bgImg.offsetWidth;
+      this.bgImg.src = step.scene;
+      this.bgImg.classList.add('bg-fade-in');
+    }
+
+    // Mood lighting & optional screen shake
+    this.moodLayer.className = `pro-mood mood-${step.mood || 'dim'}`;
+    this.storyScreen.classList.remove('pro-shake');
+    if (step.fx === 'shake') {
+      void this.storyScreen.offsetWidth;
+      this.storyScreen.classList.add('pro-shake');
+    }
+
+    // SFX cues
+    if (step.sfx === 'alarm') sound.playAlarm();
+    else if (step.sfx === 'powerup') sound.playPowerUp();
+
+    // Dateline & step counter
+    this.datelineEl.textContent = step.dateline || '';
+    this.stepCounter.textContent = `${idx + 1} / ${PROLOGUE_STEPS.length}`;
+
+    // Cinematic chapter interstitial banner (e.g. PROLOGUE · I / II / III)
+    if (this.chapterCard) {
+      if (step.chapterCard) {
+        const cc = step.chapterCard;
+        this.chapterCard.innerHTML = `
+          <div class="ch-roman">${cc.roman}</div>
+          <div class="ch-title">${cc.title}</div>
+          <div class="ch-sub">${cc.sub}</div>
+        `;
+        this.chapterCard.classList.remove('hidden');
+      } else {
+        this.chapterCard.classList.add('hidden');
+      }
+    }
+
+    // NAND relic showcase card
+    this.relicCard.classList.toggle('hidden', !step.showNandRelic);
+
+    // Speaker & portrait
+    this._applySpeaker(step.speaker);
+    this._typeText(step.text, step.speaker, () => {
+      if (step.choices && step.choices.length > 0) {
+        this._showChoices(step.choices);
+      }
+    });
+  }
+
+  _applySpeaker(speakerKey) {
+    if (!speakerKey) {
+      this.portraitWrap.classList.add('hidden');
+      this.speakerName.textContent = 'SYSTEM ARCHIVE';
+      this.speakerName.style.color = '#b88a48';
+      this.speakerRole.textContent = '地下シェルター記録ログ';
+      this.storyScreen.style.setProperty('--pro-accent', '#b88a48');
+      return;
+    }
+    const ch = CHARACTERS[speakerKey] || CHARACTERS.kagari;
+    this.portraitWrap.classList.remove('hidden');
+    this.portraitImg.src = ch.portrait;
+    this.portraitImg.alt = ch.name;
+    this.speakerName.textContent = ch.name;
+    this.speakerName.style.color = ch.color;
+    this.speakerRole.textContent = ch.role;
+    this.storyScreen.style.setProperty('--pro-accent', ch.color);
+  }
+
+  _typeText(text, speakerKey, onDone = null) {
+    this._stopTimer();
+    this.fullText = text;
+    this.charIdx = 0;
+    this.typing = true;
+    this.textEl.textContent = '';
+    this.nextCue.textContent = '…';
+    this._onTypeDone = onDone;
+
+    const pitch =
+      speakerKey === 'mina' ? 560 : speakerKey === 'kagari' ? 420 : speakerKey === 'hako' ? 310 : 370;
+
+    this._timer = setInterval(() => {
+      this.charIdx += 2;
+      if (this.charIdx >= this.fullText.length) {
+        this.textEl.textContent = this.fullText;
+        this.typing = false;
+        this._stopTimer();
+        this.nextCue.textContent = this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'タップでミッション開始 ▶' : 'タップで次へ ▶';
+        if (this._onTypeDone) {
+          const cb = this._onTypeDone;
+          this._onTypeDone = null;
+          cb();
+        }
+      } else {
+        this.textEl.textContent = this.fullText.slice(0, this.charIdx);
+        if (this.charIdx % 6 === 0) sound.playBlip(pitch);
+      }
+    }, 24);
+  }
+
+  _showChoices(choices) {
+    this.awaitingChoice = true;
+    this.nextCue.textContent = '返答を選んでください';
+    this.choicesWrap.innerHTML = '';
+    this.choicesWrap.classList.remove('hidden');
+
+    choices.forEach((choice) => {
+      const btn = document.createElement('button');
+      btn.className = 'pro-choice-btn';
+      btn.textContent = choice.label;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sound.playWireConnect();
+        this.awaitingChoice = false;
+        this.choicesWrap.classList.add('hidden');
+        this.pendingReply = true;
+        this._applySpeaker(choice.replySpeaker);
+        this._typeText(choice.replyText, choice.replySpeaker);
+      });
+      this.choicesWrap.appendChild(btn);
+    });
+  }
+
+  _advance() {
+    if (this.typing) {
+      this._stopTimer();
+      this.textEl.textContent = this.fullText;
+      this.typing = false;
+      this.nextCue.textContent = this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'タップでミッション開始 ▶' : 'タップで次へ ▶';
+      if (this._onTypeDone) {
+        const cb = this._onTypeDone;
+        this._onTypeDone = null;
+        cb();
+      }
+      return;
+    }
+
+    sound.playSwitch(true);
+    this.pendingReply = false;
+    this.stepIdx++;
+    if (this.stepIdx >= PROLOGUE_STEPS.length) {
+      this._finishStory();
+    } else {
+      this._renderStep(this.stepIdx);
+    }
+  }
+
+  _finishStory() {
+    this.hide();
+    this.onFinish?.();
+  }
+
+  _stopTimer() {
+    if (this._timer) {
+      clearInterval(this._timer);
+      this._timer = null;
+    }
+  }
+}
