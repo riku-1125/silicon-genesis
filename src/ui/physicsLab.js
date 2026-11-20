@@ -29,6 +29,7 @@ export class PhysicsLabCanvas {
     this.offsetY = 0;
     this.feedbackMsg = '';
     this.feedbackColor = '#ffb84d';
+    this.particles = [];
     this._raf = null;
 
     this._bindEvents();
@@ -294,6 +295,24 @@ export class PhysicsLabCanvas {
 
   _placeInSlot(slotId, partId) {
     this.slots[slotId] = partId;
+    const placedDef = this._getSlotDefs().find((d) => d.id === slotId);
+    if (placedDef) {
+      const cx = placedDef.x + placedDef.w / 2;
+      const cy = placedDef.y + placedDef.h / 2;
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+        const spd = 42 + Math.random() * 72;
+        this.particles.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          life: 0.5,
+          maxLife: 0.5,
+          color: placedDef.ideal === partId ? '#52e3b6' : '#ffd166',
+        });
+      }
+    }
     this.armedPart = null;
     this.cb.onArmedChange?.(null);
     this.cb.onSlotsChange?.({ ...this.slots });
@@ -400,6 +419,15 @@ export class PhysicsLabCanvas {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       this.time += dt;
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const p = this.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.92;
+        p.vy *= 0.92;
+        p.life -= dt;
+        if (p.life <= 0) this.particles.splice(i, 1);
+      }
       this.render();
       this._raf = requestAnimationFrame(loop);
     };
@@ -452,6 +480,17 @@ export class PhysicsLabCanvas {
       this._renderTransistorLab(ctx);
     } else {
       this._renderPullupLab(ctx);
+    }
+
+    for (const p of this.particles) {
+      const a = Math.max(0, p.life / p.maxLife);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3 * a + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     ctx.restore();

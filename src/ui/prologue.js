@@ -88,6 +88,7 @@ export class PrologueOverlay {
     this.root.classList.remove('hidden');
     this.titleScreen.classList.remove('hidden');
     this.storyScreen.classList.add('hidden');
+    sound.setBgmTrack('title');
 
     if (hasProgress) {
       this.btnStartNew.classList.add('hidden');
@@ -147,7 +148,11 @@ export class PrologueOverlay {
       this.storyScreen.classList.add('pro-shake');
     }
 
-    // SFX cues
+    // SFX & dynamic BGM mood cues
+    if (step.mood === 'alert') sound.setBgmTrack('crisis');
+    else if (step.mood === 'amber') sound.setBgmTrack('finale');
+    else if (step.mood === 'ash' || step.mood === 'calm') sound.setBgmTrack('title');
+
     if (step.sfx === 'alarm') sound.playAlarm();
     else if (step.sfx === 'powerup') sound.playPowerUp();
 

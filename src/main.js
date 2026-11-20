@@ -29,6 +29,8 @@ class SiliconGenesisApp {
     this.save = loadSaveData();
     sound.setEnabled(this.save.soundEnabled);
     sound.setVolume(this.save.soundVolume ?? 0.8);
+    sound.setBgmEnabled(this.save.bgmEnabled !== false);
+    sound.setBgmVolume(this.save.bgmVolume ?? 0.55);
     sound.setDroneEnabled(this.save.droneEnabled);
 
     this.stage = null;
@@ -167,7 +169,18 @@ class SiliconGenesisApp {
     const openSettingsHandler = (fromTitle = false) => {
       sound.unlock();
       sound.playSwitch(true);
-      this.modals.openSettings(this.save, sound.getStateSummary(), {
+      this.modals.openSettings(this.save, sound.getStateSummary(), sound.getCurrentTrackName(), {
+        onChangeBgmEnabled: (enabled) => {
+          this.save.bgmEnabled = enabled;
+          sound.setBgmEnabled(enabled);
+          persistSaveData(this.save);
+          return sound.getCurrentTrackName();
+        },
+        onChangeBgmVolume: (vol) => {
+          this.save.bgmVolume = vol;
+          sound.setBgmVolume(vol);
+          persistSaveData(this.save);
+        },
         onChangeSoundEnabled: (enabled) => {
           this.save.soundEnabled = enabled;
           sound.setEnabled(enabled);
@@ -211,6 +224,8 @@ class SiliconGenesisApp {
           this.save = resetSaveData();
           sound.setEnabled(this.save.soundEnabled);
           sound.setVolume(this.save.soundVolume);
+          sound.setBgmEnabled(this.save.bgmEnabled);
+          sound.setBgmVolume(this.save.bgmVolume);
           sound.setDroneEnabled(this.save.droneEnabled);
           this.loadStage('stage_00a', { autoIntro: false });
           this.prologue.showTitle(this.save);
@@ -415,6 +430,11 @@ class SiliconGenesisApp {
       this._syncSceneCanvas();
     }
 
+    // Switch BGM track smoothly to match the current Act/mood!
+    if (this.dom.prologueOverlay.classList.contains('hidden')) {
+      sound.setBgmTrack(this.stage.act >= 5 || this.stage.isSandbox ? 'finale' : 'workbench');
+    }
+
     this._syncUndoBtn();
     persistSaveData(this.save);
   }
@@ -602,6 +622,8 @@ class SiliconGenesisApp {
       y,
     };
     this.circuit.nodes.push(node);
+    const dim = this.workbench.getChipDimensions(type);
+    this.workbench.spawnBurst(x + dim.w / 2, y + dim.h / 2, '#ffd166', 12);
     sound.playChipPlace();
     this._afterCircuitEdit();
   }
@@ -910,6 +932,10 @@ class SiliconGenesisApp {
 
   _handleStageClear(metrics) {
     sound.playVictory();
+    if (this.stage.mode !== 'physics') {
+      this.workbench.spawnBurst(330, 180, '#52e3b6', 24);
+      this.workbench.spawnBurst(330, 180, '#ffd166', 16);
+    }
 
     // 1. Forge & permanently save custom chip with player's actual circuit!
     const reward = this.stage.rewardChip;

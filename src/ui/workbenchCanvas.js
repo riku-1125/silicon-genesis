@@ -63,6 +63,7 @@ export class WorkbenchCanvas {
     this.selectedNodeId = null;
     this.selectedWireId = null;
     this.highlightTestPulse = 0;
+    this.particles = [];
 
     // Pointer tracking (multi-touch ready)
     this.pointers = new Map();
@@ -117,6 +118,23 @@ export class WorkbenchCanvas {
 
   triggerTestFlash() {
     this.highlightTestPulse = 1.0;
+  }
+
+  spawnBurst(wx, wy, color = '#ffd166', count = 12) {
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+      const spd = 38 + Math.random() * 75;
+      this.particles.push({
+        x: wx,
+        y: wy,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        life: 0.45 + Math.random() * 0.2,
+        maxLife: 0.65,
+        color,
+        r: 2 + Math.random() * 2,
+      });
+    }
   }
 
   fitToView() {
@@ -404,6 +422,10 @@ export class WorkbenchCanvas {
     if (!pinA || !pinB || pinA.role === pinB.role) return false;
     const src = pinA.role === 'src' ? pinA.endpoint : pinB.endpoint;
     const dst = pinA.role === 'dst' ? pinA.endpoint : pinB.endpoint;
+    const dstPos = pinA.role === 'dst' ? pinA : pinB;
+    if (dstPos && typeof dstPos.x === 'number') {
+      this.spawnBurst(dstPos.x, dstPos.y, '#52e3b6', 10);
+    }
     this.pendingPin = null;
     this.wireDragPos = null;
     this.cb.onConnectWire?.(src, dst);
@@ -708,6 +730,15 @@ export class WorkbenchCanvas {
       if (this.highlightTestPulse > 0) {
         this.highlightTestPulse = Math.max(0, this.highlightTestPulse - dt * 1.8);
       }
+      for (let i = this.particles.length - 1; i >= 0; i--) {
+        const p = this.particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.92;
+        p.vy *= 0.92;
+        p.life -= dt;
+        if (p.life <= 0) this.particles.splice(i, 1);
+      }
       this.render();
       this._raf = requestAnimationFrame(loop);
     };
@@ -763,6 +794,7 @@ export class WorkbenchCanvas {
     this._drawOutputRail(ctx);
     this._drawNodes(ctx);
     this._drawWiringTargetHighlights(ctx);
+    this._drawParticles(ctx);
 
     ctx.restore();
 
@@ -808,6 +840,34 @@ export class WorkbenchCanvas {
     ctx.fillStyle = '#111a22';
     this._roundRect(ctx, 4, 4, BOARD_W - 8, this.boardH - 8, 12);
     ctx.fill();
+
+    // Subtle vintage PCB copper trace artwork + brass corner mounting rivets
+    ctx.strokeStyle = 'rgba(184, 138, 72, 0.07)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(124, 34);
+    ctx.lineTo(186, 34);
+    ctx.lineTo(206, 54);
+    ctx.moveTo(536, this.boardH - 34);
+    ctx.lineTo(464, this.boardH - 34);
+    ctx.lineTo(444, this.boardH - 54);
+    ctx.stroke();
+
+    const rivets = [
+      [14, 14],
+      [BOARD_W - 14, 14],
+      [14, this.boardH - 14],
+      [BOARD_W - 14, this.boardH - 14],
+    ];
+    for (const [rx, ry] of rivets) {
+      ctx.beginPath();
+      ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#2a3642';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(184, 138, 72, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
 
     // Subtle solder-dot grid
     ctx.fillStyle = 'rgba(130, 165, 195, 0.14)';
@@ -1241,6 +1301,20 @@ export class WorkbenchCanvas {
       ctx.strokeStyle = 'rgba(82, 227, 182, 0.85)';
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  _drawParticles(ctx) {
+    if (this.particles.length === 0) return;
+    ctx.save();
+    for (const p of this.particles) {
+      const a = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (0.5 + a * 0.6), 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }

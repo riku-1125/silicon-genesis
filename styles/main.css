@@ -2200,3 +2200,41 @@ button:disabled {
   font-weight: 900;
   vertical-align: middle;
 }
+
+
+/* ============================================================================
+   BGM INDICATOR & FORGED CHIP METALLIC SHEEN POLISH
+   ============================================================================ */
+.bgm-now-pill {
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: rgba(82, 227, 182, 0.09);
+  border: 1px solid rgba(82, 227, 182, 0.35);
+  color: var(--emerald);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.forged-chip {
+  position: relative;
+}
+.forged-chip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 65%;
+  height: 100%;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%);
+  animation: chipSheen 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes chipSheen {
+  0% { left: -120%; }
+  45%, 100% { left: 160%; }
+}

@@ -22,6 +22,14 @@ export class SceneCanvas {
     this.waveHistory = new Array(48).fill(0);
     this.waveAccum = 0;
     this._raf = null;
+    this.motes = Array.from({ length: 18 }, (_, i) => ({
+      x: ((i * 73) % 100) / 100,
+      y: ((i * 41) % 100) / 100,
+      vy: 0.03 + (i % 5) * 0.012,
+      vx: ((i % 3) - 1) * 0.012,
+      r: 1 + (i % 2) * 0.8,
+      phase: i * 1.3,
+    }));
 
     // Preload pixel art scene backdrops
     for (const [key, def] of Object.entries(SCENES)) {
@@ -110,7 +118,30 @@ export class SceneCanvas {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Live Reactive Machinery Telemetry Widget (top-right corner HUD)
+    // 2. Drifting atmospheric dust motes / surface embers
+    const isSurface = sceneKey === 'surface_rover';
+    for (const m of this.motes) {
+      const mx = ((m.x + this.time * m.vx) % 1 + 1) % 1 * w;
+      const my = ((m.y - this.time * m.vy) % 1 + 1) % 1 * h;
+      const alpha = 0.25 + 0.25 * Math.sin(this.time * 2.4 + m.phase);
+      ctx.fillStyle = this.cleared
+        ? `rgba(82, 227, 182, ${alpha})`
+        : isSurface
+          ? `rgba(255, 168, 76, ${alpha * 1.3})`
+          : `rgba(255, 210, 140, ${alpha})`;
+      ctx.fillRect(mx, my, m.r * 1.6, m.r * 1.6);
+    }
+
+    // Subtle CRT phosphor beam refresh sweep
+    const sweepY = ((this.time * 26) % (h + 24)) - 12;
+    const sweepGrad = ctx.createLinearGradient(0, sweepY - 10, 0, sweepY + 10);
+    sweepGrad.addColorStop(0, 'rgba(82, 227, 182, 0)');
+    sweepGrad.addColorStop(0.5, this.cleared ? 'rgba(82, 227, 182, 0.07)' : 'rgba(255, 195, 110, 0.05)');
+    sweepGrad.addColorStop(1, 'rgba(82, 227, 182, 0)');
+    ctx.fillStyle = sweepGrad;
+    ctx.fillRect(0, sweepY - 10, w, 20);
+
+    // 3. Live Reactive Machinery Telemetry Widget (top-right corner HUD)
     this._drawWidget(ctx, w, h);
 
     // 3. Subtle CRT scanlines

@@ -23,6 +23,8 @@ export function createDefaultSave() {
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
     soundEnabled: true,
     soundVolume: 0.8,
+    bgmEnabled: true,
+    bgmVolume: 0.55,
     droneEnabled: false,
     sceneCollapsed: false,
   };

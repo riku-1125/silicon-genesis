@@ -622,17 +622,46 @@ export class ModalManager {
   openSettings(
     save,
     audioStatusText,
-    { onChangeSoundEnabled, onChangeVolume, onChangeDrone, onTestSound, onReturnTitle, onReplayPrologue, onResetSave }
+    bgmTrackName,
+    {
+      onChangeBgmEnabled,
+      onChangeBgmVolume,
+      onChangeSoundEnabled,
+      onChangeVolume,
+      onChangeDrone,
+      onTestSound,
+      onReturnTitle,
+      onReplayPrologue,
+      onResetSave,
+    }
   ) {
     const volPct = Math.round((save.soundVolume ?? 0.8) * 100);
+    const bgmPct = Math.round((save.bgmVolume ?? 0.55) * 100);
     const clearedCount = save.clearedStages?.length || 0;
     const chipCount = Object.keys(save.customChips || {}).length;
 
     this.open({
-      title: '⚙ システム設定（音量・セーブ管理）',
+      title: '⚙ システム設定（BGM・音量・セーブ）',
       bodyHtml: `
         <div class="settings-section">
-          <div class="settings-heading">サウンド設定</div>
+          <div class="settings-heading">BGM・サウンド設定</div>
+          <div id="set-bgm-now" class="bgm-now-pill">♪ BGM: ${esc(bgmTrackName || '待機中')}</div>
+
+          <label class="setting-row">
+            <span class="setting-info">
+              <span class="setting-label">BGM（シンセ音楽）</span>
+              <span class="setting-sub">場面に合わせて切り替わる専用サウンドトラック</span>
+            </span>
+            <input type="checkbox" id="set-bgm-enabled" class="setting-toggle" ${save.bgmEnabled !== false ? 'checked' : ''} />
+          </label>
+
+          <div class="setting-row setting-slider-row">
+            <div class="setting-slider-head">
+              <span class="setting-label">BGM 音量</span>
+              <span id="set-bgm-vol-val" class="mono emerald bold">${bgmPct}%</span>
+            </div>
+            <input type="range" id="set-bgm-vol-range" class="setting-range" min="0" max="100" step="5" value="${bgmPct}" />
+          </div>
 
           <label class="setting-row">
             <span class="setting-info">
@@ -644,7 +673,7 @@ export class ModalManager {
 
           <div class="setting-row setting-slider-row">
             <div class="setting-slider-head">
-              <span class="setting-label">マスター音量</span>
+              <span class="setting-label">効果音 音量</span>
               <span id="set-volume-val" class="mono amber bold">${volPct}%</span>
             </div>
             <input type="range" id="set-volume-range" class="setting-range" min="0" max="100" step="5" value="${volPct}" />
@@ -684,11 +713,26 @@ export class ModalManager {
       footerHtml: `<button class="btn btn-primary" data-close-modal>閉じる</button>`,
     });
 
+    const chkBgm = this.bodyEl.querySelector('#set-bgm-enabled');
+    const sliderBgm = this.bodyEl.querySelector('#set-bgm-vol-range');
+    const lblBgm = this.bodyEl.querySelector('#set-bgm-vol-val');
+    const bgmNowEl = this.bodyEl.querySelector('#set-bgm-now');
     const chkSound = this.bodyEl.querySelector('#set-sound-enabled');
     const sliderVol = this.bodyEl.querySelector('#set-volume-range');
     const lblVol = this.bodyEl.querySelector('#set-volume-val');
     const chkDrone = this.bodyEl.querySelector('#set-drone-enabled');
     const statusEl = this.bodyEl.querySelector('#set-audio-status');
+
+    chkBgm?.addEventListener('change', () => {
+      const name = onChangeBgmEnabled?.(chkBgm.checked);
+      if (name && bgmNowEl) bgmNowEl.textContent = `♪ BGM: ${name}`;
+    });
+
+    sliderBgm?.addEventListener('input', () => {
+      const pct = Number(sliderBgm.value);
+      lblBgm.textContent = `${pct}%`;
+      onChangeBgmVolume?.(pct / 100);
+    });
 
     chkSound?.addEventListener('change', () => {
       onChangeSoundEnabled?.(chkSound.checked);
@@ -700,7 +744,6 @@ export class ModalManager {
       onChangeVolume?.(pct / 100);
     });
     sliderVol?.addEventListener('change', () => {
-      // Give tactile audio preview right when releasing the volume slider
       const status = onTestSound?.();
       if (status && statusEl) statusEl.textContent = `音声エンジン: ${status}`;
     });
