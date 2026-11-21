@@ -164,7 +164,34 @@ export class SceneCanvas {
     ctx.fillStyle = this.cleared ? '#52e3b6' : '#f0b159';
     ctx.fillText(tagText, 14, 19);
 
+    // 5. Ambient Repaired Facility Log Ticker (shows previously repaired equipment still working!)
+    const ambientLog = this._getAmbientFacilityLog();
+    if (ambientLog && h >= 68) {
+      ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, monospace';
+      const logW = Math.min(w - 130, ctx.measureText(ambientLog).width + 14);
+      const lx = w - logW - 8;
+      const ly = h - 21;
+      ctx.fillStyle = 'rgba(10, 18, 25, 0.82)';
+      ctx.fillRect(lx, ly, logW, 16);
+      ctx.strokeStyle = 'rgba(82, 227, 182, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(lx + 0.5, ly + 0.5, logW - 1, 15);
+      ctx.fillStyle = '#8fffdc';
+      ctx.fillText(ambientLog, lx + 7, ly + 11.5, logW - 12);
+    }
+
     ctx.restore();
+  }
+
+  _getAmbientFacilityLog() {
+    const n = this.stage?.number ?? 0;
+    if (n >= 18) return '✔ 施設ログ: 夜間の揺れ1件・点検済み / 配給・水耕正常';
+    if (n >= 12) return '✔ 施設ログ: 夜間の揺れ1件・記憶保持→朝点検済み';
+    if (n === 11) return '✔ 施設ログ: B2水耕散水(0〜3区)・配給集計 正常';
+    if (n >= 8) return '✔ 施設ログ: 中央配給ターミナル集計完了(誤差0)';
+    if (n >= 5) return '✔ 施設ログ: B3酸素ファン・二重隔壁ロック正常';
+    if (n >= 2) return '✔ 施設ログ: B3酸素清浄ファン・冷却弁 正常稼働中';
+    return null;
   }
 
   _bitsToNum(arr, start = 0, len = 4) {

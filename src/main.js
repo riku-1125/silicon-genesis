@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=26';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=27';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -14,16 +14,17 @@ import {
   computeCircuitMetrics,
 } from './engine/circuit.js';
 import { compileCircuit } from './engine/simulator.js';
-import { evaluateStage } from './engine/evaluator.js';
+import { evaluateStage, reproduceDiagnosticState } from './engine/evaluator.js';
+import { provisionStandardChips } from './engine/blueprints.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=26';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=26';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=26';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=26';
-import { DialogueController } from './ui/dialogue.js?v=26';
-import { ModalManager } from './ui/modals.js?v=26';
-import { PrologueOverlay } from './ui/prologue.js?v=26';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=26';
+import { sound } from './audio/sound.js?v=27';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=27';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=27';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=27';
+import { DialogueController } from './ui/dialogue.js?v=27';
+import { ModalManager } from './ui/modals.js?v=27';
+import { PrologueOverlay } from './ui/prologue.js?v=27';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=27';
 
 class SiliconGenesisApp {
   constructor() {
@@ -44,6 +45,8 @@ class SiliconGenesisApp {
     this.hintLevel = 1;
     this.isRunningTest = false;
     this._testRunToken = 0;
+    this.lastEvalResult = null;
+    this._pendingFinalClockResolve = null;
     this.selection = { nodeId: null, wireId: null, pendingPin: null, armedChipType: null };
 
     this._cacheDom();
@@ -87,6 +90,13 @@ class SiliconGenesisApp {
       onPartPlaced: () => sound.playChipPlace(),
       onPartRemoved: () => sound.playDelete(),
       onToggleControl: (val) => sound.playSwitch(Boolean(val)),
+      onFinalClockTriggered: () => {
+        if (this._pendingFinalClockResolve) {
+          const resolve = this._pendingFinalClockResolve;
+          this._pendingFinalClockResolve = null;
+          resolve();
+        }
+      },
       onLiveState: ({ inputs, outputs, unstable }) => {
         this.inputBits = inputs;
         if (unstable) sound.playAlarm();
@@ -330,6 +340,12 @@ class SiliconGenesisApp {
     });
 
     this.dom.btnRunTest.addEventListener('click', () => {
+      if (this._pendingFinalClockResolve) {
+        const resolve = this._pendingFinalClockResolve;
+        this._pendingFinalClockResolve = null;
+        resolve();
+        return;
+      }
       if (this.stage.isSandbox) {
         this.pulseClock();
         return;
@@ -379,14 +395,16 @@ class SiliconGenesisApp {
   // ===========================================================================
   loadStage(stageId, { autoIntro = false } = {}) {
     this._testRunToken++;
+    this._pendingFinalClockResolve = null;
     this.isRunningTest = false;
+    this.lastEvalResult = null;
     this.stage = getStageById(stageId);
     this.save.currentStageId = this.stage.id;
     this.hintLevel = 1;
     this.undoStack = [];
     this.redoStack = [];
 
-    // Restore saved draft or start clean
+    // Restore saved draft, stage initialCircuit (e.g. Stage 11 direct-wire demo), or start clean
     const savedDraft = this.save.drafts[this.stage.id];
     if (
       savedDraft &&
@@ -396,6 +414,8 @@ class SiliconGenesisApp {
       savedDraft.outputs.length === this.stage.outputs.length
     ) {
       this.circuit = cloneCircuit(savedDraft);
+    } else if (this.stage.initialCircuit) {
+      this.circuit = cloneCircuit(this.stage.initialCircuit);
     } else {
       this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs);
     }
@@ -415,8 +435,9 @@ class SiliconGenesisApp {
     this.dom.btnClockPulse.classList.toggle('hidden', !hasClk);
     this._syncNextStageQuickBtn();
 
-    // Test button label
-    this.dom.btnRunTest.textContent = this.stage.isSandbox ? '⚡ CLK脈動' : '▶ テスト実行';
+    // Test button label (reflects Chief Engineer promotion in Chapter 2!)
+    this.dom.btnRunTest.disabled = false;
+    this.dom.btnRunTest.textContent = this._getDefaultRunBtnLabel();
     this.dom.testProgressBar.classList.add('hidden');
 
     // Dialogue: guarantee full-screen Story Theater opens at least once per stage!
@@ -460,7 +481,11 @@ class SiliconGenesisApp {
 
     if (isPhysics) {
       this.simulator = null;
-      this.physicsLab.setStage(this.stage, this.save.physicsDrafts?.[this.stage.id] || null);
+      this.physicsLab.setStage(
+        this.stage,
+        this.save.physicsDrafts?.[this.stage.id] || null,
+        this.save.customChips
+      );
       requestAnimationFrame(() => this.physicsLab.fitToView());
     } else {
       this._rebuildSimulator({ reset: true });
@@ -484,6 +509,12 @@ class SiliconGenesisApp {
 
     this._syncUndoBtn();
     persistSaveData(this.save);
+  }
+
+  _getDefaultRunBtnLabel() {
+    if (this.stage?.isSandbox) return '⚡ CLK脈動';
+    if (this.stage?.chapter === 2) return '▶ 主任決裁・テスト実行';
+    return '▶ テスト実行';
   }
 
   _getStageStoryBgm(stage) {
@@ -584,6 +615,7 @@ class SiliconGenesisApp {
       const def = getChipDef(id, this.save.customChips);
       if (!def) continue;
 
+      const isProv = Boolean(def.provisioned);
       const metaLabel =
         id === 'NAND'
           ? '基本'
@@ -595,7 +627,9 @@ class SiliconGenesisApp {
                 ? 'いつも1'
                 : id === 'CONST_0'
                   ? 'いつも0'
-                  : `${def.nandCount}N`;
+                  : isProv
+                    ? `${def.nandCount}N·支給`
+                    : `${def.nandCount}N`;
 
       const wrap = document.createElement('div');
       wrap.className = 'palette-chip-wrap';
@@ -773,7 +807,13 @@ class SiliconGenesisApp {
       bar.querySelector('#sel-dup').addEventListener('click', () => this.duplicateSelectedNode());
       bar.querySelector('#sel-inspect').addEventListener('click', () => {
         sound.playSwitch(true);
-        this.modals.openChipInspector(node.type, this.save.customChips);
+        const liveNodeInputs = this.simulator
+          ? this.simulator.getNodePinValues(node.id)?.inputs || null
+          : null;
+        this.modals.openChipInspector(node.type, this.save.customChips, {
+          liveInputs: liveNodeInputs,
+          backLabel: '◀ 調査中の盤面へ戻る',
+        });
       });
       bar.querySelector('#sel-del').addEventListener('click', () => this.deleteSelectedNode());
     } else if (this.selection.wireId) {
@@ -866,6 +906,7 @@ class SiliconGenesisApp {
     }
 
     const evalResult = evaluateStage(this.stage, this.circuit, this.save.customChips);
+    this.lastEvalResult = evalResult;
 
     if (evalResult.results.length === 0) {
       this.modals.openTestDiagnostics(this.stage, evalResult, () => {});
@@ -880,6 +921,11 @@ class SiliconGenesisApp {
     // Replay each test step visually on the live workbench!
     this.simulator = compileCircuit(this.circuit, this.save.customChips);
     this.simulator.reset();
+    if (this.stage.mode === 'sequential' && Array.isArray(this.stage.initSteps)) {
+      for (const initInput of this.stage.initSteps) {
+        this.simulator.evaluate(initInput);
+      }
+    }
 
     const stepDelay = evalResult.results.length > 7 ? 260 : 360;
 
@@ -926,8 +972,9 @@ class SiliconGenesisApp {
     }
   }
 
-  async _runPhysicsTestSuite() {
+  async _runPhysicsTestSuite({ skipFinalClockPause = false } = {}) {
     const evalResult = this.physicsLab.evaluatePhysics();
+    this.lastEvalResult = evalResult;
     if (!evalResult.results || evalResult.results.length === 0) {
       sound.playTestStep(0, false);
       this.modals.openTestDiagnostics(this.stage, evalResult, () => {});
@@ -940,10 +987,23 @@ class SiliconGenesisApp {
     this.dom.testProgressBar.classList.remove('hidden');
 
     const isAsm = this.stage.kind === 'assembly_program';
-    const prefix = isAsm ? 'プログラム実行' : '物理検証';
-    const stepDelay = evalResult.results.length > 5 ? 300 : 520;
+    const prefix = isAsm ? '実機CPU実行' : '物理検証';
+    const stepDelay = evalResult.results.length > 5 ? 280 : 520;
 
-    for (let i = 0; i < evalResult.results.length; i++) {
+    // On Stage 24 (Grand Finale II), pause right before the final hatch-opening command (4番地: LDI 15)
+    // on a first-time clear so the player personally delivers the final clock pulse!
+    const shouldPauseBeforeFinalOpen =
+      this.stage.isChapter2Finale &&
+      evalResult.passed &&
+      evalResult.results.length >= 2 &&
+      !skipFinalClockPause &&
+      !this.save.clearedStages.includes(this.stage.id);
+
+    const preLoopEnd = shouldPauseBeforeFinalOpen
+      ? evalResult.results.length - 1
+      : evalResult.results.length;
+
+    for (let i = 0; i < preLoopEnd; i++) {
       if (token !== this._testRunToken) return;
       const step = evalResult.results[i];
       this.dom.testProgressLabel.textContent = `${prefix} ${i + 1}/${evalResult.results.length}: ${step.label}`;
@@ -953,8 +1013,34 @@ class SiliconGenesisApp {
     }
 
     if (token !== this._testRunToken) return;
+
+    if (shouldPauseBeforeFinalOpen) {
+      const finalIdx = evalResult.results.length - 1;
+      const finalStep = evalResult.results[finalIdx];
+      this.physicsLab.setAwaitingFinalClock(true);
+      this.dom.testProgressLabel.textContent =
+        '⚡ カウント0達成・4番地到達！ 最終開門クロックを入力せよ！';
+      this.dom.btnRunTest.disabled = false;
+      this.dom.btnRunTest.textContent = '⚡ 主任決裁・最終開門クロック送出 (1111)！';
+
+      await new Promise((resolve) => {
+        this._pendingFinalClockResolve = resolve;
+      });
+      if (token !== this._testRunToken) return;
+
+      this.physicsLab.setAwaitingFinalClock(false);
+      this.dom.btnRunTest.disabled = true;
+      this.dom.testProgressLabel.textContent = `⚡ 最終開門クロック実行: ${finalStep.label}`;
+      this.physicsLab.setControlBit(finalStep.input[0]);
+      sound.playClockPulse();
+      sound.playTestStep(finalIdx, true);
+      await new Promise((r) => setTimeout(r, 420));
+    }
+
+    if (token !== this._testRunToken) return;
     this.isRunningTest = false;
     this.dom.btnRunTest.disabled = false;
+    this.dom.btnRunTest.textContent = this._getDefaultRunBtnLabel();
     this.dom.testProgressBar.classList.add('hidden');
 
     if (evalResult.passed) {
@@ -968,35 +1054,22 @@ class SiliconGenesisApp {
   }
 
   _loadDiagnosticCase(caseIdx) {
-    this.simulator = compileCircuit(this.circuit, this.save.customChips);
-    this.simulator.reset();
-
-    if (this.stage.mode === 'sequential') {
-      // Replay from step 0 up to caseIdx so memory state matches exact failure moment!
-      for (let i = 0; i <= caseIdx; i++) {
-        const t = this.stage.tests[i];
-        if (Array.isArray(t.phases)) {
-          for (const ph of t.phases) {
-            this.inputBits = [...ph];
-            this.simulator.evaluate(this.inputBits);
-          }
-        } else {
-          this.inputBits = [...t.input];
-          this.simulator.evaluate(this.inputBits);
-        }
-      }
-    } else {
-      const t = this.stage.tests[caseIdx];
-      this.inputBits = [...t.input];
-      this.simulator.evaluate(this.inputBits);
-    }
+    const diag = reproduceDiagnosticState(
+      this.stage,
+      this.circuit,
+      this.save.customChips,
+      this.lastEvalResult,
+      caseIdx
+    );
+    this.simulator = diag.simulator;
+    this.inputBits = diag.inputBits;
 
     this.workbench.setContext({
       simulator: this.simulator,
       inputBits: this.inputBits,
     });
     this._syncSceneCanvas();
-    this.showToast(`ケース #${caseIdx + 1} の入力状態を回路に再現しました`);
+    this.showToast(`ケース #${caseIdx + 1} の入力と記憶状態を盤面に再現しました`);
   }
 
   _handleStageClear(metrics) {
@@ -1006,7 +1079,7 @@ class SiliconGenesisApp {
       this.workbench.spawnBurst(330, 180, '#ffd166', 16);
     }
 
-    // 1. Forge & permanently save custom chip with player's actual circuit!
+    // 1. Forge & permanently save custom chip with player's actual circuit (provisioned: false = 自作済み!)
     const reward = this.stage.rewardChip;
     const chipDef = {
       ...reward,
@@ -1016,6 +1089,7 @@ class SiliconGenesisApp {
       nandCount: metrics.nandCount,
       depth: metrics.depth,
       stageId: this.stage.id,
+      provisioned: false,
       createdAt: Date.now(),
     };
     if (!reward.isLabReward) {
@@ -1102,348 +1176,21 @@ class SiliconGenesisApp {
   }
 
   _ensureChapter1ChipsForChapter2() {
-    const inp = (pin) => ({ kind: 'input', pin });
-    const out = (pin) => ({ kind: 'output', pin });
-    const np = (nodeId, pin) => ({ kind: 'node', nodeId, pin });
-
-    const buildStandard = (stage, nodes, wireSpecs) => {
-      let c = createEmptyCircuit(stage.inputs, stage.outputs);
-      c.nodes = nodes.map((n, idx) => ({
-        id: n.id,
-        type: n.type,
-        x: n.x ?? 180 + (idx % 3) * 145,
-        y: n.y ?? 90 + Math.floor(idx / 3) * 110,
-      }));
-      let wid = 1;
-      for (const [from, to] of wireSpecs) {
-        c = connectWire(c, from, to, () => `w${wid++}`);
-      }
-      return c;
-    };
-
-    const ch1Blueprints = {
-      stage_00: [
-        [
-          { id: 'vcc', type: 'CONST_1' },
-          { id: 'sw1', type: 'SW' },
-          { id: 'sw2', type: 'SW' },
-          { id: 'pull', type: 'PULL' },
-        ],
-        [
-          [np('vcc', 0), np('sw1', 0)],
-          [inp(0), np('sw1', 1)],
-          [np('sw1', 0), np('sw2', 0)],
-          [inp(1), np('sw2', 1)],
-          [np('sw2', 0), np('pull', 0)],
-          [np('pull', 0), out(0)],
-        ],
-      ],
-      stage_01: [
-        [{ id: 'g1', type: 'NAND' }],
-        [
-          [inp(0), np('g1', 0)],
-          [inp(0), np('g1', 1)],
-          [np('g1', 0), out(0)],
-        ],
-      ],
-      stage_02: [
-        [
-          { id: 'n1', type: 'NAND' },
-          { id: 'i1', type: 'NOT' },
-        ],
-        [
-          [inp(0), np('n1', 0)],
-          [inp(1), np('n1', 1)],
-          [np('n1', 0), np('i1', 0)],
-          [np('i1', 0), out(0)],
-        ],
-      ],
-      stage_03: [
-        [
-          { id: 'na', type: 'NOT' },
-          { id: 'nb', type: 'NOT' },
-          { id: 'g', type: 'NAND' },
-        ],
-        [
-          [inp(0), np('na', 0)],
-          [inp(1), np('nb', 0)],
-          [np('na', 0), np('g', 0)],
-          [np('nb', 0), np('g', 1)],
-          [np('g', 0), out(0)],
-        ],
-      ],
-      stage_04: [
-        [
-          { id: 'o1', type: 'OR' },
-          { id: 'n1', type: 'NAND' },
-          { id: 'a1', type: 'AND' },
-        ],
-        [
-          [inp(0), np('o1', 0)],
-          [inp(1), np('o1', 1)],
-          [inp(0), np('n1', 0)],
-          [inp(1), np('n1', 1)],
-          [np('o1', 0), np('a1', 0)],
-          [np('n1', 0), np('a1', 1)],
-          [np('a1', 0), out(0)],
-        ],
-      ],
-      stage_05: [
-        [
-          { id: 'x1', type: 'XOR' },
-          { id: 'a1', type: 'AND' },
-        ],
-        [
-          [inp(0), np('x1', 0)],
-          [inp(1), np('x1', 1)],
-          [inp(0), np('a1', 0)],
-          [inp(1), np('a1', 1)],
-          [np('x1', 0), out(0)],
-          [np('a1', 0), out(1)],
-        ],
-      ],
-      stage_06: [
-        [
-          { id: 'ha1', type: 'HALF_ADDER' },
-          { id: 'ha2', type: 'HALF_ADDER' },
-          { id: 'o1', type: 'OR' },
-        ],
-        [
-          [inp(0), np('ha1', 0)],
-          [inp(1), np('ha1', 1)],
-          [np('ha1', 0), np('ha2', 0)],
-          [inp(2), np('ha2', 1)],
-          [np('ha2', 0), out(0)],
-          [np('ha1', 1), np('o1', 0)],
-          [np('ha2', 1), np('o1', 1)],
-          [np('o1', 0), out(1)],
-        ],
-      ],
-      stage_07: [
-        [
-          { id: 'fa0', type: 'FULL_ADDER' },
-          { id: 'fa1', type: 'FULL_ADDER' },
-          { id: 'fa2', type: 'FULL_ADDER' },
-          { id: 'fa3', type: 'FULL_ADDER' },
-        ],
-        [
-          [inp(0), np('fa0', 0)], [inp(4), np('fa0', 1)], [inp(8), np('fa0', 2)], [np('fa0', 0), out(0)],
-          [inp(1), np('fa1', 0)], [inp(5), np('fa1', 1)], [np('fa0', 1), np('fa1', 2)], [np('fa1', 0), out(1)],
-          [inp(2), np('fa2', 0)], [inp(6), np('fa2', 1)], [np('fa1', 1), np('fa2', 2)], [np('fa2', 0), out(2)],
-          [inp(3), np('fa3', 0)], [inp(7), np('fa3', 1)], [np('fa2', 1), np('fa3', 2)], [np('fa3', 0), out(3)],
-          [np('fa3', 1), out(4)],
-        ],
-      ],
-      stage_08: [
-        [
-          { id: 'ns', type: 'NOT' },
-          { id: 'a0', type: 'AND' },
-          { id: 'a1', type: 'AND' },
-          { id: 'o1', type: 'OR' },
-        ],
-        [
-          [inp(2), np('ns', 0)],
-          [inp(0), np('a0', 0)], [np('ns', 0), np('a0', 1)],
-          [inp(1), np('a1', 0)], [inp(2), np('a1', 1)],
-          [np('a0', 0), np('o1', 0)], [np('a1', 0), np('o1', 1)],
-          [np('o1', 0), out(0)],
-        ],
-      ],
-      stage_09: [
-        [
-          { id: 'm0', type: 'MUX' },
-          { id: 'm1', type: 'MUX' },
-          { id: 'm2', type: 'MUX' },
-          { id: 'm3', type: 'MUX' },
-        ],
-        [
-          [inp(0), np('m0', 0)], [inp(4), np('m0', 1)], [inp(8), np('m0', 2)], [np('m0', 0), out(0)],
-          [inp(1), np('m1', 0)], [inp(5), np('m1', 1)], [inp(8), np('m1', 2)], [np('m1', 0), out(1)],
-          [inp(2), np('m2', 0)], [inp(6), np('m2', 1)], [inp(8), np('m2', 2)], [np('m2', 0), out(2)],
-          [inp(3), np('m3', 0)], [inp(7), np('m3', 1)], [inp(8), np('m3', 2)], [np('m3', 0), out(3)],
-        ],
-      ],
-      stage_10: [
-        [
-          { id: 'n0', type: 'NOT' },
-          { id: 'n1', type: 'NOT' },
-          { id: 'y0', type: 'AND' },
-          { id: 'y1', type: 'AND' },
-          { id: 'y2', type: 'AND' },
-          { id: 'y3', type: 'AND' },
-        ],
-        [
-          [inp(0), np('n0', 0)],
-          [inp(1), np('n1', 0)],
-          [np('n0', 0), np('y0', 0)], [np('n1', 0), np('y0', 1)], [np('y0', 0), out(0)],
-          [inp(0), np('y1', 0)], [np('n1', 0), np('y1', 1)], [np('y1', 0), out(1)],
-          [np('n0', 0), np('y2', 0)], [inp(1), np('y2', 1)], [np('y2', 0), out(2)],
-          [inp(0), np('y3', 0)], [inp(1), np('y3', 1)], [np('y3', 0), out(3)],
-        ],
-      ],
-      stage_11: [
-        [
-          { id: 'ns', type: 'NOT' },
-          { id: 'nr', type: 'NOT' },
-          { id: 'q', type: 'NAND' },
-          { id: 'qn', type: 'NAND' },
-        ],
-        [
-          [inp(0), np('ns', 0)],
-          [inp(1), np('nr', 0)],
-          [np('ns', 0), np('q', 0)],
-          [np('qn', 0), np('q', 1)],
-          [np('nr', 0), np('qn', 0)],
-          [np('q', 0), np('qn', 1)],
-          [np('q', 0), out(0)],
-          [np('qn', 0), out(1)],
-        ],
-      ],
-      stage_12: [
-        [
-          { id: 'nd', type: 'NOT' },
-          { id: 'as', type: 'AND' },
-          { id: 'ar', type: 'AND' },
-          { id: 'sr', type: 'SR_LATCH' },
-        ],
-        [
-          [inp(0), np('nd', 0)],
-          [inp(0), np('as', 0)], [inp(1), np('as', 1)],
-          [np('nd', 0), np('ar', 0)], [inp(1), np('ar', 1)],
-          [np('as', 0), np('sr', 0)],
-          [np('ar', 0), np('sr', 1)],
-          [np('sr', 0), out(0)],
-        ],
-      ],
-      stage_13: [
-        [
-          { id: 'nc', type: 'NOT' },
-          { id: 'm', type: 'D_LATCH' },
-          { id: 's', type: 'D_LATCH' },
-        ],
-        [
-          [inp(1), np('nc', 0)],
-          [inp(0), np('m', 0)], [np('nc', 0), np('m', 1)],
-          [np('m', 0), np('s', 0)], [inp(1), np('s', 1)],
-          [np('s', 0), out(0)],
-        ],
-      ],
-      stage_14: [
-        [
-          { id: 'mx', type: 'MUX_4BIT' },
-          { id: 'f0', type: 'D_FF' },
-          { id: 'f1', type: 'D_FF' },
-          { id: 'f2', type: 'D_FF' },
-          { id: 'f3', type: 'D_FF' },
-        ],
-        [
-          [np('f0', 0), np('mx', 0)],
-          [np('f1', 0), np('mx', 1)],
-          [np('f2', 0), np('mx', 2)],
-          [np('f3', 0), np('mx', 3)],
-          [inp(0), np('mx', 4)],
-          [inp(1), np('mx', 5)],
-          [inp(2), np('mx', 6)],
-          [inp(3), np('mx', 7)],
-          [inp(4), np('mx', 8)],
-          [np('mx', 0), np('f0', 0)], [inp(5), np('f0', 1)], [np('f0', 0), out(0)],
-          [np('mx', 1), np('f1', 0)], [inp(5), np('f1', 1)], [np('f1', 0), out(1)],
-          [np('mx', 2), np('f2', 0)], [inp(5), np('f2', 1)], [np('f2', 0), out(2)],
-          [np('mx', 3), np('f3', 0)], [inp(5), np('f3', 1)], [np('f3', 0), out(3)],
-        ],
-      ],
-      stage_15: [
-        [
-          { id: 'x0', type: 'XOR' },
-          { id: 'x1', type: 'XOR' },
-          { id: 'x2', type: 'XOR' },
-          { id: 'x3', type: 'XOR' },
-          { id: 'add', type: 'ADD_4BIT' },
-        ],
-        [
-          [inp(0), np('add', 0)], [inp(1), np('add', 1)], [inp(2), np('add', 2)], [inp(3), np('add', 3)],
-          [inp(4), np('x0', 0)], [inp(8), np('x0', 1)], [np('x0', 0), np('add', 4)],
-          [inp(5), np('x1', 0)], [inp(8), np('x1', 1)], [np('x1', 0), np('add', 5)],
-          [inp(6), np('x2', 0)], [inp(8), np('x2', 1)], [np('x2', 0), np('add', 6)],
-          [inp(7), np('x3', 0)], [inp(8), np('x3', 1)], [np('x3', 0), np('add', 7)],
-          [inp(8), np('add', 8)],
-          [np('add', 0), out(0)], [np('add', 1), out(1)], [np('add', 2), out(2)], [np('add', 3), out(3)],
-          [np('add', 4), out(4)],
-        ],
-      ],
-      stage_16: [
-        [
-          { id: 'c0', type: 'CONST_0' },
-          { id: 'c1', type: 'CONST_1' },
-          { id: 'add', type: 'ADD_4BIT' },
-          { id: 'mx', type: 'MUX_4BIT' },
-          { id: 'reg', type: 'REG_4BIT' },
-        ],
-        [
-          [np('reg', 0), np('add', 0)], [np('reg', 1), np('add', 1)], [np('reg', 2), np('add', 2)], [np('reg', 3), np('add', 3)],
-          [np('c0', 0), np('add', 4)], [np('c0', 0), np('add', 5)], [np('c0', 0), np('add', 6)], [np('c0', 0), np('add', 7)],
-          [np('c1', 0), np('add', 8)],
-          [np('add', 0), np('mx', 0)], [np('add', 1), np('mx', 1)], [np('add', 2), np('mx', 2)], [np('add', 3), np('mx', 3)],
-          [inp(0), np('mx', 4)], [inp(1), np('mx', 5)], [inp(2), np('mx', 6)], [inp(3), np('mx', 7)],
-          [inp(4), np('mx', 8)],
-          [np('mx', 0), np('reg', 0)], [np('mx', 1), np('reg', 1)], [np('mx', 2), np('reg', 2)], [np('mx', 3), np('reg', 3)],
-          [np('c1', 0), np('reg', 4)],
-          [inp(5), np('reg', 5)],
-          [np('reg', 0), out(0)], [np('reg', 1), out(1)], [np('reg', 2), out(2)], [np('reg', 3), out(3)],
-        ],
-      ],
-      stage_17: [
-        [
-          { id: 'alu', type: 'ALU_4BIT' },
-          { id: 'mx', type: 'MUX_4BIT' },
-          { id: 'reg', type: 'REG_4BIT' },
-        ],
-        [
-          [np('reg', 0), np('alu', 0)], [np('reg', 1), np('alu', 1)], [np('reg', 2), np('alu', 2)], [np('reg', 3), np('alu', 3)],
-          [inp(0), np('alu', 4)], [inp(1), np('alu', 5)], [inp(2), np('alu', 6)], [inp(3), np('alu', 7)],
-          [inp(4), np('alu', 8)],
-          [np('alu', 0), np('mx', 0)], [np('alu', 1), np('mx', 1)], [np('alu', 2), np('mx', 2)], [np('alu', 3), np('mx', 3)],
-          [inp(0), np('mx', 4)], [inp(1), np('mx', 5)], [inp(2), np('mx', 6)], [inp(3), np('mx', 7)],
-          [inp(5), np('mx', 8)],
-          [np('mx', 0), np('reg', 0)], [np('mx', 1), np('reg', 1)], [np('mx', 2), np('reg', 2)], [np('mx', 3), np('reg', 3)],
-          [inp(6), np('reg', 4)],
-          [inp(7), np('reg', 5)],
-          [np('reg', 0), out(0)], [np('reg', 1), out(1)], [np('reg', 2), out(2)], [np('reg', 3), out(3)],
-        ],
-      ],
-    };
-
     this.save.seenPrologue = true;
-    const ch1Stages = STAGES.filter((s) => s.chapter !== 2);
+    this.save.chapter2Unlocked = true;
 
+    // Provision standard working circuits for any Chapter 1 modules the player has not yet forged,
+    // marking them with `provisioned: true` while keeping Chapter 1 stages uncleared until solved!
+    provisionStandardChips(this.save.customChips, {
+      includeChapter2Hardware: false,
+      provisioned: true,
+    });
+
+    const ch1Stages = STAGES.filter((s) => s.chapter !== 2);
     for (const st of ch1Stages) {
-      if (!this.save.clearedStages.includes(st.id)) {
-        this.save.clearedStages.push(st.id);
-      }
       for (const cid of st.codexUnlock || []) {
         if (!this.save.unlockedCodex.includes(cid)) {
           this.save.unlockedCodex.push(cid);
-        }
-      }
-      const reward = st.rewardChip;
-      if (reward && !reward.isLabReward && !this.save.customChips[reward.id]) {
-        const bp = ch1Blueprints[st.id];
-        if (bp) {
-          const circuit = buildStandard(st, bp[0], bp[1]);
-          const metrics = computeCircuitMetrics(circuit, this.save.customChips);
-          this.save.customChips[reward.id] = {
-            ...reward,
-            inputs: reward.inputs ? [...reward.inputs] : [...st.inputs],
-            outputs: reward.outputs ? [...reward.outputs] : [...st.outputs],
-            circuit,
-            nandCount: metrics.nandCount,
-            depth: metrics.depth,
-            stageId: st.id,
-            createdAt: Date.now(),
-          };
-          if (this.save.bestNandCounts[st.id] === undefined) {
-            this.save.bestNandCounts[st.id] = metrics.nandCount;
-          }
         }
       }
     }
@@ -1471,7 +1218,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=26', { updateViaCache: 'none' })
+        .register('./sw.js?v=27', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

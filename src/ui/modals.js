@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=26';
-import { CODEX_ENTRIES } from '../data/codex.js?v=26';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=27';
+import { CODEX_ENTRIES } from '../data/codex.js?v=27';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=26';
+} from '../data/glossary.js?v=27';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=26';
-import { StoryDiagramGroup } from './storyDiagram.js?v=26';
-import { glossaryPopover } from './glossaryPopover.js?v=26';
+import { sound } from '../audio/sound.js?v=27';
+import { StoryDiagramGroup } from './storyDiagram.js?v=27';
+import { glossaryPopover } from './glossaryPopover.js?v=27';
 
 function esc(str) {
   return String(str ?? '')
@@ -33,6 +33,36 @@ function esc(str) {
 function formatBits(bits) {
   if (!bits) return '-';
   return bits.map((b) => (b === null || b === undefined ? '×' : String(b))).join('');
+}
+
+function formatComparedActualBits(actual, expected, outputNames = []) {
+  if (!actual) return '-';
+  return actual
+    .map((b, i) => {
+      const valStr = b === null || b === undefined ? '×' : String(b);
+      const exp = expected ? expected[i] : undefined;
+      const isDiff = exp !== null && exp !== undefined && b !== exp;
+      if (!isDiff) return `<span>${esc(valStr)}</span>`;
+      const pinLbl = outputNames[i] || `OUT${i}`;
+      return `<span class="bit-diff-badge" title="${esc(pinLbl)}: 期待=${exp} / 実測=${valStr}">${esc(valStr)}</span>`;
+    })
+    .join('');
+}
+
+function buildPinDiffSummary(actual, expected, outputNames = []) {
+  if (!actual || !expected) return '';
+  const diffs = [];
+  for (let i = 0; i < expected.length; i++) {
+    const exp = expected[i];
+    if (exp === null || exp === undefined) continue;
+    const act = actual[i];
+    if (act !== exp) {
+      const pinLbl = outputNames[i] || `OUT${i}`;
+      diffs.push(`<b>${esc(pinLbl)}</b> (期待<code>${exp}</code>≠実測<code class="bad">${act ?? '?'}</code>)`);
+    }
+  }
+  if (diffs.length === 0) return '';
+  return `<div class="diag-pin-diffs">不一致出力: ${diffs.join(' · ')}</div>`;
 }
 
 export class ModalManager {
@@ -99,9 +129,36 @@ export class ModalManager {
       })
       .join('');
 
+    const asmSpecCard =
+      stage.kind === 'assembly_program' && stage.asmProgramSpec
+        ? `
+      <div class="callout callout-emerald" style="margin-bottom:10px;">
+        <div class="callout-title">🎯 ミッション採点仕様（あなたの自作CPU [ARK4_SYS] で実機検証）</div>
+        <ul style="margin:4px 0 0;padding-left:16px;font-size:12px;line-height:1.6;">
+          <li><b>開始状態</b>：ハードウェア初期化（POR）により <code>PC=0番地, ACC=0 (0000)</code> からスタート</li>
+          <li><b>途中で守る条件</b>：${esc(
+            stage.id === 'stage_22'
+              ? '0番地で初期基準内圧「5」をセット（ACC=5）した上で、加圧(+7)と減圧(-4)を実行すること（加圧・減圧の順序はどちらが先でも合格！）'
+              : stage.id === 'stage_23'
+                ? '0〜2番地の足し算で「3×4＝12」（2番地完了時 ACC=12）を合成し、3番地で目標値12を引いて差を 0（Z=1）にすること（ADD 3 と ADD 6 の順序はどちらが先でも合格！）'
+                : '0番地で初期値「3」をセットし、1〜3番地の帰還ループで ACC を「3 → 2 → 1 → 0」と1ずつ減らし、0 (Z=1) の瞬間に2番地の JZ 4 で4番地へ脱出すること'
+          )}</li>
+          <li><b>成功条件</b>：${esc(
+            stage.id === 'stage_22'
+              ? '3命令完了時に最終気圧 ACC=8 (1000)、次PC=3番地に到達していること'
+              : stage.id === 'stage_23'
+                ? '4番地の JZ 6 が発火し、ACC=0 (Z=1) のまま次PC=6番地（開錠承認）へジャンプしていること'
+                : 'ループ脱出後に4番地で地上大ハッチ全開信号 ACC=15 (1111)、次PC=5番地を出力すること'
+          )}</li>
+        </ul>
+      </div>
+    `
+        : '';
+
     const physicsLabCard =
       stage.mode === 'physics' && Array.isArray(stage.physicsParts)
         ? `
+      ${asmSpecCard}
       <div class="callout callout-amber">
         <div class="callout-title">${stage.kind === 'assembly_program' ? '使うアセンブリ命令カード（ROM）' : '使う材料・物理部品'}</div>
         <ul style="margin:4px 0 0;padding-left:16px;font-size:12px;line-height:1.6;">
@@ -246,20 +303,28 @@ export class ModalManager {
   // 3. TEST FAILURE / DIAGNOSTIC DEBUGGER MODAL
   // ===========================================================================
   openTestDiagnostics(stage, evalResult, onLoadCase) {
+    const outNames = stage?.outputs || [];
     const rowsHtml = evalResult.results
       .map((r) => {
         const cls = r.passed ? 'row-pass' : 'row-fail';
         const status = r.unstable ? '⚠ 発振' : r.passed ? '✔ OK' : '✘ NG';
+        const pinDiffHtml = !r.passed && !r.unstable ? buildPinDiffSummary(r.actual, r.expected, outNames) : '';
+        const actualHtml = r.unstable
+          ? 'ERR'
+          : r.passed
+            ? formatBits(r.actual)
+            : formatComparedActualBits(r.actual, r.expected, outNames);
         return `
           <tr class="${cls}" data-case-idx="${r.index}">
             <td class="mono">${r.index + 1}</td>
             <td>
               <div>${esc(r.label)}</div>
-              ${!r.passed ? `<button class="mini-inspect-btn" data-load-idx="${r.index}">この入力を回路に再現 ▶</button>` : ''}
+              ${pinDiffHtml}
+              ${!r.passed ? `<button class="mini-inspect-btn" data-load-idx="${r.index}">🔍 この入力を盤面で調べる ▶</button>` : ''}
             </td>
             <td class="mono">${formatBits(r.input)}</td>
             <td class="mono emerald">${formatBits(r.expected)}</td>
-            <td class="mono ${r.passed ? 'emerald' : 'crimson'}">${r.unstable ? 'ERR' : formatBits(r.actual)}</td>
+            <td class="mono ${r.passed ? 'emerald' : 'crimson'}">${actualHtml}</td>
             <td class="mono bold">${status}</td>
           </tr>
         `;
@@ -272,10 +337,11 @@ export class ModalManager {
         ${
           evalResult.error
             ? `<div class="callout callout-crimson">⚠ ${esc(evalResult.error)}</div>`
-            : `<div class="callout callout-amber">
-                不合格の行にある <b>「この入力を回路に再現」</b> を押すと、その入力状態がそのまま回路にセットされます。光っている配線をたどって原因を探そう！
-              </div>`
+            : ''
         }
+        <div class="callout callout-amber">
+          不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、そのステップの入力と記憶状態がそのまま作業台に再現されます（赤枠の数字が期待値と異なる出力ビットです）。盤面上のチップを選んで <b>「📖 解説・内部」</b> を開けば、内部配線もそのまま調べられます！
+        </div>
         <div class="table-wrap">
           <table class="crt-table">
             <thead>
@@ -283,8 +349,8 @@ export class ModalManager {
                 <th>#</th>
                 <th>テストケース</th>
                 <th>入力</th>
-                <th>期待</th>
-                <th>結果</th>
+                <th>期待値</th>
+                <th>実測値</th>
                 <th>判定</th>
               </tr>
             </thead>
@@ -439,9 +505,11 @@ export class ModalManager {
           const cleared = save.clearedStages.includes(st.id);
           const active = st.id === currentStageId;
           const nandBest = save.bestNandCounts[st.id];
+          const chipObj = st.rewardChip?.id ? save.customChips?.[st.rewardChip.id] : null;
+          const isProvisioned = Boolean(!cleared && chipObj?.provisioned);
           return `
             <button
-              class="map-stage-btn ${cleared ? 'cleared' : ''} ${active ? 'active' : ''} ${!unlocked ? 'locked' : ''}"
+              class="map-stage-btn ${cleared ? 'cleared' : isProvisioned ? 'provisioned' : ''} ${active ? 'active' : ''} ${!unlocked ? 'locked' : ''}"
               data-stage-id="${st.id}"
               ${!unlocked ? 'disabled' : ''}
             >
@@ -452,17 +520,19 @@ export class ModalManager {
                   ${
                     cleared
                       ? st.id === 'stage_00a'
-                        ? `✔ 構造体得 [じゃぐち / MOSFET]`
+                        ? `✔ 自作クリア済 [じゃぐち / MOSFET]`
                         : st.id === 'stage_00b'
-                          ? `✔ 構造体得 [はいすい / プルアップ抵抗]`
+                          ? `✔ 自作クリア済 [はいすい / プルアップ抵抗]`
                           : st.id === 'stage_00'
-                            ? `✔ 原板登録済 [NAND] · 物理スイッチ`
+                            ? `✔ 自作原板登録済 [NAND] · 物理スイッチ`
                             : st.kind === 'assembly_program'
                               ? `✔ プログラム稼働済 [${st.rewardChip?.name || 'ASM'}] · ROM制御`
-                              : `✔ チップ登録済 [${st.rewardChip?.name || st.code}] · ${nandBest ?? '?'} NAND`
-                      : unlocked
-                        ? '挑戦可能'
-                        : '🔒 前のステージをクリアで解放'
+                              : `✔ 自作チップ登録済 [${st.rewardChip?.name || st.code}] · ${nandBest ?? chipObj?.nandCount ?? '?'} NAND`
+                      : isProvisioned
+                        ? `📦 支給品 [${st.rewardChip?.name}] で稼働中 · 利用可能（自作に挑戦できます）`
+                        : unlocked
+                          ? '▶ 利用可能（挑戦可能）'
+                          : '🔒 前のステージをクリアで解放'
                   }
                 </span>
               </span>
@@ -654,11 +724,14 @@ export class ModalManager {
             }
 
             const isModOpen = expandedModules.has(term.id);
-            const shortBadge = forged
-              ? `<span class="mod-status-badge forged">✔ チップ登録済</span>`
-              : cleared
-                ? `<span class="mod-status-badge cleared">✔ 習得済</span>`
-                : `<span class="mod-status-badge">📖 図解</span>`;
+            const isProvisionedOnly = Boolean(!cleared && (forged?.provisioned || save.chapter2Unlocked));
+            const shortBadge = isProvisionedOnly
+              ? `<span class="mod-status-badge provisioned">📦 支給品</span>`
+              : forged
+                ? `<span class="mod-status-badge forged">✔ 自作済</span>`
+                : cleared
+                  ? `<span class="mod-status-badge cleared">✔ 習得済</span>`
+                  : `<span class="mod-status-badge">📖 図解</span>`;
 
             if (!isModOpen) {
               return `
@@ -677,11 +750,13 @@ export class ModalManager {
               `;
             }
 
-            const detailBadge = forged
-              ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
-              : cleared
-                ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
-                : `<span class="mod-status-badge">📖 動的図解</span>`;
+            const detailBadge = isProvisionedOnly
+              ? `<span class="mod-status-badge provisioned">📦 標準支給品（未自作）${forged ? ` · 実効 ${forged.nandCount ?? 0} NAND` : ''}</span>`
+              : forged
+                ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
+                : cleared
+                  ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
+                  : `<span class="mod-status-badge">📖 動的図解</span>`;
 
             const pinsHtml = term.pins
               ? `
@@ -1271,7 +1346,16 @@ export class ModalManager {
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
   }
 
-  openChipInspector(chipType, customChips, { onBack = null } = {}) {
+  openChipInspector(
+    chipType,
+    customChips,
+    {
+      onBack = null,
+      backLabel = '◀ モジュール図鑑へ戻る',
+      liveInputs = null,
+      breadcrumb = [],
+    } = {}
+  ) {
     const def = getChipDef(chipType, customChips);
     if (!def) return;
 
@@ -1279,10 +1363,29 @@ export class ModalManager {
     const animKey = term?.anim || null;
     const customNandCircuit = chipType === 'NAND' ? customChips?.NAND?.circuit : null;
     const circuitToShow = customNandCircuit || def.circuit;
+    const isProvisioned = Boolean(
+      (chipType === 'NAND' ? customChips?.NAND?.provisioned : def.provisioned)
+    );
+
+    const trail = [...breadcrumb, def.name];
+    const breadcrumbHtml =
+      trail.length > 1
+        ? `<div class="inspector-breadcrumb">🔍 配線調査経路: ${trail.map((t) => `<span>${esc(t)}</span>`).join(' ▸ ')}</div>`
+        : '';
 
     const functionalSectionHtml = `
+      ${breadcrumbHtml}
       <div class="inspector-func-card">
-        <div class="inspector-section-tag">⚡ このモジュールができること（自動で動く図解）</div>
+        <div class="inspector-section-tag">
+          ⚡ このモジュールができること（自動で動く図解）
+          ${
+            isProvisioned
+              ? '<span class="mod-status-badge provisioned" style="margin-left:6px;">📦 支給品（標準回路）</span>'
+              : circuitToShow
+                ? '<span class="mod-status-badge forged" style="margin-left:6px;">✔ 自作回路</span>'
+                : ''
+          }
+        </div>
         ${
           animKey
             ? `
@@ -1314,10 +1417,45 @@ export class ModalManager {
 
     let schematicHtml = '';
     if (circuitToShow) {
-      const heading =
-        chipType === 'NAND'
+      const heading = isProvisioned
+        ? `📦 標準支給回路の内部配線（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`
+        : chipType === 'NAND'
           ? `🔧 あなたが物理スイッチから創り上げた NAND 原板（${circuitToShow.nodes.length}部品）`
           : `🔧 あなたが設計した内部回路（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`;
+
+      // Sub-chip drill-down buttons so player can trace signals deeper into sub-modules!
+      const drillableNodes = circuitToShow.nodes.filter((n) => {
+        if (n.type === 'NAND') return Boolean(customChips?.NAND?.circuit);
+        const subDef = getChipDef(n.type, customChips);
+        return Boolean(subDef?.circuit);
+      });
+
+      const drillDownHtml =
+        drillableNodes.length > 0
+          ? `
+            <div class="inspector-drilldown-box">
+              <div class="codex-crosslink-lbl">🔍 内部で使われている下位チップの配線をさらに調べる（現在の信号状態を引き継ぎます）：</div>
+              <div class="codex-crosslink-list">
+                ${drillableNodes
+                  .map((n, idx) => {
+                    const subDef = getChipDef(n.type, customChips);
+                    return `
+                      <button
+                        type="button"
+                        class="codex-crosslink-btn to-module"
+                        data-drill-node-id="${esc(n.id)}"
+                        data-drill-chip-type="${esc(n.type)}"
+                      >
+                        🔧 ${esc(subDef?.name || n.type)} #${idx + 1} の内部配線を調べる ▶
+                      </button>
+                    `;
+                  })
+                  .join('')}
+              </div>
+            </div>
+          `
+          : '';
+
       schematicHtml = `
         <div class="inspector-schematic-card">
           <div class="inspector-schematic-head">
@@ -1325,6 +1463,7 @@ export class ModalManager {
             <div id="inspector-live-step-badge" class="inspector-live-step-badge">⚡ 自動稼働デモ中...</div>
           </div>
           ${this._renderMiniSchematicSvg(circuitToShow, customChips)}
+          ${drillDownHtml}
         </div>
       `;
     } else if (def.isPrimitive) {
@@ -1337,24 +1476,54 @@ export class ModalManager {
     }
 
     this.open({
-      title: `モジュール解説 · ${def.name}（${def.titleJa || term?.title || def.id}）`,
+      title: `モジュール解説・内部配線 · ${def.name}（${def.titleJa || term?.title || def.id}）`,
       bodyHtml: `
         ${functionalSectionHtml}
         ${schematicHtml}
       `,
       footerHtml: `
-        ${onBack ? `<button class="btn btn-amber" id="btn-inspector-back">◀ モジュール図鑑へ戻る</button>` : ''}
-        <button class="btn btn-primary" data-close-modal>作業台へ戻る</button>
+        ${onBack ? `<button class="btn btn-amber" id="btn-inspector-back">${esc(backLabel)}</button>` : ''}
+        <button class="btn btn-primary" data-close-modal>作業台（調査状態）へ戻る</button>
       `,
     });
 
     // 1. Start the auto-playing functional diagram canvas at the top
     this.diagramGroup.mountAll(this.bodyEl);
 
-    // 2. Start the auto-playing live simulation on the player's own designed internal circuit!
+    // 2. Start the live simulation on the internal circuit (locking onto liveInputs if provided!)
+    let activeSim = null;
     if (circuitToShow) {
-      this._startMiniSchematicLoop(circuitToShow, customChips, chipType);
+      activeSim = this._startMiniSchematicLoop(circuitToShow, customChips, chipType, liveInputs);
     }
+
+    // 3. Wire sub-chip drill-down buttons with breadcrumb return!
+    this.bodyEl.querySelectorAll('[data-drill-chip-type]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const subChipType = btn.dataset.drillChipType;
+        const subNodeId = btn.dataset.drillNodeId;
+        let subInputs = null;
+        if (activeSim && subNodeId) {
+          const pinVals = activeSim.getNodePinValues(subNodeId);
+          if (Array.isArray(pinVals?.inputs) && pinVals.inputs.length > 0) {
+            subInputs = [...pinVals.inputs];
+          }
+        }
+        sound.playSwitch(true);
+        this.openChipInspector(subChipType, customChips, {
+          liveInputs: subInputs,
+          breadcrumb: trail,
+          backLabel: `◀ ${def.name} の内部配線へ戻る`,
+          onBack: () => {
+            this.openChipInspector(chipType, customChips, {
+              onBack,
+              backLabel,
+              liveInputs,
+              breadcrumb,
+            });
+          },
+        });
+      });
+    });
 
     this.footerEl.querySelector('#btn-inspector-back')?.addEventListener('click', () => {
       sound.playSwitch(false);
@@ -1626,13 +1795,13 @@ export class ModalManager {
     `;
   }
 
-  _startMiniSchematicLoop(circuit, customChips, chipType) {
+  _startMiniSchematicLoop(circuit, customChips, chipType, liveInputs = null) {
     this._stopMiniSchematicLoop();
     let sim;
     try {
       sim = compileCircuit(circuit, customChips);
     } catch {
-      return;
+      return null;
     }
 
     const stage =
@@ -1640,8 +1809,21 @@ export class ModalManager {
         ? STAGES.find((s) => s.id === 'stage_00')
         : STAGES.find((s) => s.rewardChip?.id === chipType);
 
-    let steps = Array.isArray(stage?.tests) && stage.tests.length > 0 ? stage.tests : [];
-    if (steps.length === 0) {
+    const hasLiveInputs =
+      Array.isArray(liveInputs) && liveInputs.length === circuit.inputs.length;
+
+    let steps = [];
+    if (hasLiveInputs) {
+      steps = [
+        {
+          label: `🔍 現在の盤面からの入力 (${circuit.inputs.map((l, i) => `${l}=${liveInputs[i]}`).join(', ')})`,
+          input: [...liveInputs],
+          isLiveBoardStep: true,
+        },
+      ];
+    } else if (Array.isArray(stage?.tests) && stage.tests.length > 0) {
+      steps = stage.tests;
+    } else {
       const nIn = Math.min(3, circuit.inputs.length);
       const count = Math.max(1, 1 << nIn);
       steps = Array.from({ length: count }, (_, mask) => {
@@ -1677,7 +1859,9 @@ export class ModalManager {
 
       const badgeEl = this.bodyEl.querySelector('#inspector-live-step-badge');
       if (badgeEl) {
-        badgeEl.textContent = `⚡ 自動シミュレーション (${idx + 1}/${steps.length})：${step.label}`;
+        badgeEl.textContent = step.isLiveBoardStep
+          ? `${step.label}`
+          : `⚡ 自動シミュレーション (${idx + 1}/${steps.length})：${step.label}`;
       }
 
       // 1. Update Input Terminals
@@ -1751,5 +1935,6 @@ export class ModalManager {
         applyStep(stepIdx);
       }, 1600);
     }
+    return sim;
   }
 }

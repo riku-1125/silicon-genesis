@@ -117,14 +117,127 @@ export function evaluateStage(stage, circuit, customChips = {}) {
     }
   }
 
+  let counterexampleError = null;
+
+  // Stage 07 (4-Bit Ripple Carry Adder): show representative examples on screen,
+  // and verify ALL 512 combinations of A(0..15) x B(0..15) x CIN(0..1) before forging ADD_4B!
+  if ((stage.id === 'stage_07' || stage.exhaustiveCheck === 'add4_512') && !anyUnstable) {
+    let foundCounterexample = null;
+    for (let cin = 0; cin <= 1 && !foundCounterexample; cin++) {
+      for (let a = 0; a < 16 && !foundCounterexample; a++) {
+        for (let b = 0; b < 16 && !foundCounterexample; b++) {
+          const input = [
+            a & 1, (a >> 1) & 1, (a >> 2) & 1, (a >> 3) & 1,
+            b & 1, (b >> 1) & 1, (b >> 2) & 1, (b >> 3) & 1,
+            cin,
+          ];
+          const sum = a + b + cin;
+          const expected = [
+            sum & 1,
+            (sum >> 1) & 1,
+            (sum >> 2) & 1,
+            (sum >> 3) & 1,
+            (sum >> 4) & 1,
+          ];
+          sim.reset();
+          const res = sim.evaluate(input);
+          if (res.unstable) {
+            anyUnstable = true;
+            foundCounterexample = { a, b, cin, sum, input, expected, actual: res.outputs, unstable: true };
+          } else if (!outputsMatch(res.outputs, expected)) {
+            foundCounterexample = { a, b, cin, sum, input, expected, actual: res.outputs, unstable: false };
+          }
+        }
+      }
+    }
+
+    if (foundCounterexample) {
+      allPassed = false;
+      const { a, b, cin, sum, input, expected, actual, unstable } = foundCounterexample;
+      const alreadyInRep = results.some(
+        (r) => !r.passed && r.input && r.input.every((v, i) => v === input[i])
+      );
+      if (!alreadyInRep) {
+        results.push({
+          index: results.length,
+          label: `反例発見 (全512通り検証): A=${a} + B=${b} + CIN=${cin} (期待=${sum})`,
+          input,
+          expected,
+          actual,
+          passed: false,
+          unstable,
+          isCounterexample: true,
+        });
+      }
+      const actSum =
+        (actual[0] ? 1 : 0) +
+        (actual[1] ? 2 : 0) +
+        (actual[2] ? 4 : 0) +
+        (actual[3] ? 8 : 0) +
+        (actual[4] ? 16 : 0);
+      counterexampleError = `全512通り（A:0〜15 × B:0〜15 × CIN:0〜1）の網羅検査で反例が見つかりました：A=${a}, B=${b}, CIN=${cin} のとき 期待値=${sum} に対して 実測値=${actSum} が出力されています。`;
+    }
+  }
+
   return {
     passed: allPassed && !anyUnstable && results.length > 0,
     unstable: anyUnstable,
-    error: anyUnstable ? '回路内で発振（無限ループ）を検出しました。配線を見直してください。' : null,
+    error: anyUnstable
+      ? '回路内で発振（無限ループ）を検出しました。配線を見直してください。'
+      : counterexampleError,
     results,
     metrics: computeCircuitMetrics(circuit, customChips),
     passedCount: results.filter((r) => r.passed).length,
     totalCount: results.length,
+  };
+}
+
+/**
+ * Reconstructs the exact simulator state and workbench inputBits for any test
+ * case (including sequential history + clock phases, or an exhaustive counterexample).
+ */
+export function reproduceDiagnosticState(stage, circuit, customChips, evalResult, caseIdx) {
+  const sim = compileCircuit(circuit, customChips);
+  sim.reset();
+
+  const steps = evalResult?.results?.length ? evalResult.results : stage.tests || [];
+  const target = steps[caseIdx] || stage.tests?.[caseIdx];
+  if (!target) {
+    return { simulator: sim, inputBits: new Array(stage.inputs.length).fill(0), step: null };
+  }
+
+  let inputBits = new Array(stage.inputs.length).fill(0);
+
+  if (stage.mode === 'sequential') {
+    if (Array.isArray(stage.initSteps)) {
+      for (const initInput of stage.initSteps) {
+        inputBits = [...initInput];
+        sim.evaluate(inputBits);
+      }
+    }
+    for (let i = 0; i <= caseIdx && i < steps.length; i++) {
+      const st = steps[i];
+      const rawTest = stage.tests?.[i];
+      const phases = st.phases || rawTest?.phases;
+      if (Array.isArray(phases)) {
+        for (const ph of phases) {
+          inputBits = [...ph];
+          sim.evaluate(inputBits);
+        }
+      } else {
+        inputBits = [...(st.input || rawTest?.input || inputBits)];
+        sim.evaluate(inputBits);
+      }
+    }
+  } else {
+    inputBits = [...target.input];
+    sim.evaluate(inputBits);
+  }
+
+  return {
+    simulator: sim,
+    inputBits,
+    step: target,
   };
 }
 

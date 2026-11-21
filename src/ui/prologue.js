@@ -3,16 +3,16 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=26';
-import { STAGES } from '../data/stages.js?v=26';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=26';
-import { sound } from '../audio/sound.js?v=26';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=27';
+import { STAGES } from '../data/stages.js?v=27';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=27';
+import { sound } from '../audio/sound.js?v=27';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=26';
+} from './glossaryPopover.js?v=27';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue, onStartChapter2 }) {
@@ -118,10 +118,13 @@ export class PrologueOverlay {
   showTitle(save) {
     this._stopTimer();
     const hasProgress = Boolean(
-      save.seenPrologue || (save.clearedStages && save.clearedStages.length > 0)
+      save.seenPrologue || save.chapter2Unlocked || (save.clearedStages && save.clearedStages.length > 0)
     );
     const clearedCount = save.clearedStages?.length || 0;
     const curStage = STAGES.find((s) => s.id === save.currentStageId) || STAGES[0];
+    const allChips = Object.values(save.customChips || {});
+    const provisionedCount = allChips.filter((c) => c?.provisioned).length;
+    const forgedCount = allChips.length - provisionedCount;
 
     this.root.classList.remove('hidden');
     this.titleScreen.classList.remove('hidden');
@@ -133,7 +136,10 @@ export class PrologueOverlay {
       this.btnContinue.classList.remove('hidden');
       this.btnReplayPrologue.classList.remove('hidden');
       this.btnContinue.textContent = `▶ つづきから（STAGE ${curStage.code}）`;
-      this.titleProgressMeta.textContent = `復興進捗: ${clearedCount} / ${STAGES.length} 回路復元済 · カスタムチップ ${Object.keys(save.customChips || {}).length}種`;
+      this.titleProgressMeta.textContent =
+        provisionedCount > 0
+          ? `自作クリア: ${clearedCount} / ${STAGES.length} · チップ: 自作 ${forgedCount}種 / 支給品 ${provisionedCount}種`
+          : `復興進捗: ${clearedCount} / ${STAGES.length} 回路復元済 · 自作チップ ${forgedCount}種`;
       this.titleProgressMeta.classList.remove('hidden');
     } else {
       this.btnStartNew.classList.remove('hidden');

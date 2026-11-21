@@ -892,13 +892,22 @@ export const MODULE_ENCYCLOPEDIA_IDS = [
  * - Terms with `unlockReachedStage`: unlocked once that stage is reached/unlocked.
  * - Basic story vocabulary terms: unlocked when they appear in the dialogue line being read!
  */
+function isStageClearedOrProvisioned(stageId, term, save) {
+  if (!save) return true;
+  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
+  if (cleared.includes(stageId)) return true;
+  if (term?.chipId && save.customChips?.[term.chipId]) return true;
+  if (save.chapter2Unlocked && (stageId === 'stage_00a' || stageId === 'stage_00b')) return true;
+  return false;
+}
+
 export function isGlossaryTermLinkableInLine(termId, save = null) {
   const term = GLOSSARY_TERMS[termId];
   if (!term) return false;
   if (!save) return true;
   const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   if (term.unlockClearedStage) {
-    return cleared.includes(term.unlockClearedStage);
+    return isStageClearedOrProvisioned(term.unlockClearedStage, term, save);
   }
   if (term.unlockReachedStage) {
     return cleared.includes(term.unlockReachedStage) || isStageUnlocked(save, term.unlockReachedStage);
@@ -909,7 +918,7 @@ export function isGlossaryTermLinkableInLine(termId, save = null) {
 /**
  * Checks whether a glossary explanation is unlocked in Related Links / Popover Navigation.
  * - Stage-clear modules & post-clear solution concepts (`term.unlockClearedStage`) are
- *   STRICTLY LOCKED until the player clears that stage (so puzzle answers are never spoiled!).
+ *   STRICTLY LOCKED until the player clears that stage or receives it as a Chapter 2 provisioned chip.
  * - Story & background vocabulary terms for stages the player has already reached
  *   (`emp`, `relay`, `insulator`, `silicon`, `p_silicon`, `n_silicon`, etc.) are freely
  *   browsable via related links while reading the story!
@@ -926,25 +935,23 @@ export function isGlossaryDiagramUnlocked(termId, save = null) {
   if (!term || !term.anim) return false;
   if (!save) return true;
   if (!isGlossaryTermUnlocked(termId, save)) return false;
-  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   if (term.unlockClearedStageForDiagram) {
-    return cleared.includes(term.unlockClearedStageForDiagram);
+    return isStageClearedOrProvisioned(term.unlockClearedStageForDiagram, term, save);
   }
   return true;
 }
 
 /**
  * Checks whether a module card in the '⚡ モジュール図鑑' tab is unlocked.
- * In the Module Encyclopedia, every module requires its stage to be CLEARED!
+ * In the Module Encyclopedia, every module requires its stage to be CLEARED (or provisioned for Ch.2)!
  */
 export function isModuleEncyclopediaUnlocked(termId, save = null) {
   const term = GLOSSARY_TERMS[termId];
   if (!term) return false;
   if (!save) return true;
-  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   const reqStage = term.unlockClearedStage || term.unlockClearedStageForDiagram || term.stageId;
   if (reqStage) {
-    return cleared.includes(reqStage);
+    return isStageClearedOrProvisioned(reqStage, term, save);
   }
   return isGlossaryTermUnlocked(termId, save);
 }

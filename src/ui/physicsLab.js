@@ -10,6 +10,8 @@
  *     and watch the 5.0V <-> 0.0V voltage meter flip cleanly!
  */
 
+import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js';
+
 const W = 640;
 const H = 360;
 
@@ -20,9 +22,11 @@ export class PhysicsLabCanvas {
     this.cb = callbacks;
 
     this.stage = null;
+    this.customChips = {};
     this.slots = {};       // slotId -> partId | null
     this.armedPart = null; // partId | null
     this.controlBit = 0;   // 'ひねり' (00-A) or 'ぬけ' (00-B)
+    this.awaitingFinalClock = false;
     this.time = 0;
     this.scale = 1;
     this.offsetX = 0;
@@ -35,10 +39,12 @@ export class PhysicsLabCanvas {
     this._bindEvents();
   }
 
-  setStage(stage, savedSlots = null) {
+  setStage(stage, savedSlots = null, customChips = null) {
     this.stage = stage;
+    if (customChips) this.customChips = customChips;
     this.armedPart = null;
     this.controlBit = 0;
+    this.awaitingFinalClock = false;
     this.feedbackMsg = '';
 
     if (stage.kind === 'physics_transistor') {
@@ -69,20 +75,34 @@ export class PhysicsLabCanvas {
 
   _resetAsmState() {
     this.asmTrace = [];
+    this.awaitingFinalClock = false;
     this.asmState = {
       pc: 0,
+      pcNext: 0,
+      accBefore: 0,
       acc: 0,
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
+      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
       weFlag: 0,
       brFlag: 0,
       jmpFired: false,
+      unstable: false,
       stepIdx: -1,
     };
+  }
+
+  setAwaitingFinalClock(awaiting) {
+    this.awaitingFinalClock = Boolean(awaiting);
+    if (this.awaitingFinalClock) {
+      this.feedbackMsg =
+        '⚡ カウントダウン 0 達成・4番地到達！ 右上の「⚡最終開門クロック」または右下ボタンを押して大ハッチ全開信号 1111(15) を送出せよ！';
+      this.feedbackColor = '#ffd166';
+    }
   }
 
   setArmedPart(partId) {
@@ -1041,146 +1061,49 @@ export class PhysicsLabCanvas {
   // ASSEMBLY PROGRAM WORKBENCH (ACT VII — STAGES 22..24)
   // =========================================================================
   _buildAssemblyTrace() {
-    const spec = this.stage?.asmProgramSpec;
-    if (!spec) return { trace: [], finalAcc: 0, finalPc: 0 };
-    const rows = spec.rows || [];
-    const rowMap = new Map();
-    for (const r of rows) {
-      const part = r.locked
-        ? r.fixedPart
-        : (this.stage.physicsParts || []).find((p) => p.id === this.slots[r.slotId]) || null;
-      rowMap.set(r.addr, { row: r, part });
-    }
-
-    const trace = [];
-    let pc = 0;
-    let acc = 0;
-    let z = 1;
-    const maxCycles = 12;
-
-    for (let step = 0; step < maxCycles; step++) {
-      const entry = rowMap.get(pc);
-      if (!entry || !entry.part) break;
-      const part = entry.part;
-      const opFlag = part.op === 'SUB' ? 1 : 0;
-      const setFlag = part.op === 'LDI' ? 1 : 0;
-      const weFlag = part.op === 'JZ' || part.op === 'LOOP' ? 0 : 1;
-      const brFlag = part.op === 'JZ' ? 1 : 0;
-      let jmpFired = false;
-      let pcNext = pc + 1;
-
-      if (part.op === 'LDI') {
-        acc = part.val & 15;
-        z = acc === 0 ? 1 : 0;
-      } else if (part.op === 'ADD') {
-        acc = (acc + part.val) & 15;
-        z = acc === 0 ? 1 : 0;
-      } else if (part.op === 'SUB') {
-        acc = (acc - part.val + 16) & 15;
-        z = acc === 0 ? 1 : 0;
-      } else if (part.op === 'JZ') {
-        z = acc === 0 ? 1 : 0;
-        if (z === 1) {
-          jmpFired = true;
-          pcNext = part.val;
-        }
-      } else if (part.op === 'LOOP') {
-        jmpFired = true;
-        pcNext = part.val;
-      }
-
-      trace.push({
-        stepIdx: step,
-        pc,
-        pcNext,
-        acc,
-        z,
-        opName: part.name,
-        opcodeBits: part.opcodeBits || '00',
-        immBits: part.immBits || '0000',
-        setFlag,
-        opFlag,
-        weFlag,
-        brFlag,
-        jmpFired,
-        label: `${pc}番地 [${part.name}] → ACC=${acc} (Z=${z}), 次=${pcNext}番地`,
-      });
-
-      pc = pcNext;
-    }
-
-    return { trace, finalAcc: acc, finalPc: pc };
+    return runRomProgram(this.stage, this.slots, this.customChips, { maxCycles: 14 });
   }
 
   _stepAssemblyInteractive() {
-    const { trace } = this._buildAssemblyTrace();
+    if (this.awaitingFinalClock) {
+      this.cb.onFinalClockTriggered?.();
+      return;
+    }
+
+    const run = this._buildAssemblyTrace();
+    const { trace, unstable, hitMaxCycles, compileError } = run;
     this.asmTrace = trace;
+
+    if (compileError) {
+      this.feedbackMsg = `⚠ 自作CPUエラー: ${compileError}`;
+      this.feedbackColor = '#ff7b7b';
+      return;
+    }
     if (trace.length === 0) {
       this.feedbackMsg = 'まずは下のパレットから0番地に命令カードを配置しよう！';
       this.feedbackColor = '#ffd166';
       return;
     }
+
     const nextIdx = ((this.asmState?.stepIdx ?? -1) + 1) % trace.length;
     this.asmState = { ...trace[nextIdx] };
-    this.feedbackMsg = `⚡ 実行ステップ ${nextIdx + 1}/${trace.length}：${this.asmState.label}`;
-    this.feedbackColor = '#52e3b6';
+
+    if (this.asmState.unstable || (unstable && nextIdx === trace.length - 1)) {
+      this.feedbackMsg = `💥 ステップ ${nextIdx + 1}/${trace.length}：自作チップ内部で信号発振（無限ループ）を検出！`;
+      this.feedbackColor = '#ff7b7b';
+    } else if (hitMaxCycles && nextIdx === trace.length - 1) {
+      this.feedbackMsg = `⏱ ステップ ${nextIdx + 1}/${trace.length}（上限到達）：${this.asmState.label}`;
+      this.feedbackColor = '#ffd166';
+    } else {
+      this.feedbackMsg = `⚡ 実行ステップ ${nextIdx + 1}/${trace.length}：${this.asmState.label}`;
+      this.feedbackColor = '#52e3b6';
+    }
   }
 
   _evaluateAssemblyProgram() {
-    const spec = this.stage?.asmProgramSpec;
-    const rows = spec?.rows || [];
-    const editableRows = rows.filter((r) => !r.locked);
-    const missing = editableRows.find((r) => !this.slots[r.slotId]);
-    if (missing) {
-      return {
-        passed: false,
-        error: `まだ「${missing.label}」が空欄です！ 下の命令カードをすべての番地にセットしよう。`,
-        results: [],
-        passedCount: 0,
-        totalCount: editableRows.length,
-      };
-    }
-
-    const { trace, finalAcc, finalPc } = this._buildAssemblyTrace();
-    this.asmTrace = trace;
-
-    const wrongRow = editableRows.find((r) => this.slots[r.slotId] !== r.ideal);
-    const goalMet =
-      !wrongRow &&
-      finalAcc === spec.targetAcc &&
-      (spec.targetPc === undefined || finalPc === spec.targetPc);
-
-    const results = trace.map((t, idx) => {
-      const isLast = idx === trace.length - 1;
-      const stepPassed = isLast ? goalMet : true;
-      return {
-        index: idx,
-        label: t.label,
-        input: [idx],
-        expected: [isLast ? spec.targetAcc : t.acc],
-        actual: [t.acc],
-        passed: stepPassed,
-      };
-    });
-
-    let error = null;
-    if (!goalMet) {
-      if (wrongRow) {
-        const idealPart = (this.stage.physicsParts || []).find((p) => p.id === wrongRow.ideal);
-        error = `「${wrongRow.label}」の命令を見直してみよう！（ヒント：${idealPart ? idealPart.rule : '順序を確認'}）`;
-      } else {
-        error = `最終結果 ACC=${finalAcc} が目標値 (${spec.targetAcc}) と一致しませんでした。命令の順番を確認しよう！`;
-      }
-    }
-
-    return {
-      passed: goalMet,
-      error,
-      results,
-      passedCount: results.filter((r) => r.passed).length,
-      totalCount: results.length,
-      metrics: { nandCount: 284, nodeCount: rows.length, wireCount: 0, depth: 8 },
-    };
+    const res = evaluateRomStage(this.stage, this.slots, this.customChips);
+    this.asmTrace = res.trace || [];
+    return res;
   }
 
   _renderAssemblyLab(ctx) {
@@ -1188,10 +1111,13 @@ export class PhysicsLabCanvas {
     const rows = spec?.rows || [];
     const st = this.asmState || {
       pc: 0,
+      pcNext: 0,
+      accBefore: 0,
       acc: 0,
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
+      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
@@ -1207,28 +1133,38 @@ export class PhysicsLabCanvas {
     ctx.fillStyle = '#0b1219';
     this._roundRect(ctx, 14, 12, W - 28, 126, 9);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(86, 204, 242, 0.38)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = this.awaitingFinalClock ? '#ffd166' : 'rgba(86, 204, 242, 0.38)';
+    ctx.lineWidth = this.awaitingFinalClock ? 2.2 : 1.5;
     ctx.stroke();
 
     ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = '#8ee5ff';
+    ctx.fillStyle = this.awaitingFinalClock ? '#ffd166' : '#8ee5ff';
     ctx.textAlign = 'left';
-    ctx.fillText('🖥 あなたの自作ノイマン型計算機 [ARK4_SYS] ライブ稼働モニタ', 24, 28);
+    ctx.fillText(
+      this.awaitingFinalClock
+        ? '⚡ [ARK4_SYS] 4番地・最終開門クロック待機中！（右上のボタンで全開信号送出）'
+        : '🖥 あなたの自作ノイマン型計算機 [ARK4_SYS] ライブ稼働モニタ',
+      24,
+      28
+    );
 
     // Interactive Step Button (top-right inside monitor)
     const btn = this._getControlBtnRect();
-    ctx.fillStyle = '#183446';
+    ctx.fillStyle = this.awaitingFinalClock ? '#8f5812' : '#183446';
     this._roundRect(ctx, btn.x, btn.y, btn.w, btn.h, 7);
     ctx.fill();
-    ctx.strokeStyle = '#56ccf2';
-    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = this.awaitingFinalClock ? '#ffd166' : '#56ccf2';
+    ctx.lineWidth = this.awaitingFinalClock ? 2.2 : 1.6;
     ctx.stroke();
-    ctx.font = 'bold 11.5px -apple-system, sans-serif';
-    ctx.fillStyle = '#e6f9ff';
+    ctx.font = 'bold 11px -apple-system, sans-serif';
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('⚡ 1行実行 (CLK)', btn.x + btn.w / 2, btn.y + btn.h / 2);
+    ctx.fillText(
+      this.awaitingFinalClock ? '⚡ 最終クロック(開門)' : '⚡ 1行実行 (CLK)',
+      btn.x + btn.w / 2,
+      btn.y + btn.h / 2
+    );
 
     // Module 1: COND_PC (x=24, y=44, w=120, h=82)
     ctx.fillStyle = st.jmpFired ? '#14382c' : '#141f2c';
@@ -1237,15 +1173,27 @@ export class PhysicsLabCanvas {
     ctx.strokeStyle = st.jmpFired ? '#52e3b6' : '#56ccf2';
     ctx.lineWidth = 1.8;
     ctx.stroke();
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 10.5px monospace';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('COND_PC (司令塔)', 84, 60);
-    ctx.font = 'bold 14px monospace';
+    ctx.fillText('COND_PC (司令塔)', 84, 58);
+    ctx.font = 'bold 12.5px monospace';
     ctx.fillStyle = '#ffd166';
-    ctx.fillText(`PC = ${st.pc}番地`, 84, 84);
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillStyle = st.jmpFired ? '#72f2c8' : '#9bb0c4';
-    ctx.fillText(st.jmpFired ? '⚡ JZジャンプ発火!' : '通常 +1 進行', 84, 108);
+    ctx.fillText(
+      st.stepIdx >= 0 ? `PC:${st.pc} → 次:${st.pcNext}番` : `PC = ${st.pc}番地`,
+      84,
+      82
+    );
+    ctx.font = 'bold 9.5px sans-serif';
+    ctx.fillStyle = st.retBit ? '#ffbe76' : st.jmpFired ? '#72f2c8' : '#9bb0c4';
+    ctx.fillText(
+      st.retBit
+        ? '🔄 外部帰還(RET=1)'
+        : st.jmpFired
+          ? '⚡ JZジャンプ発火!'
+          : '通常 +1 進行',
+      84,
+      108
+    );
 
     // Arrow COND_PC -> INST_DEC
     ctx.strokeStyle = '#ffd166';
@@ -1262,12 +1210,16 @@ export class PhysicsLabCanvas {
     ctx.strokeStyle = '#56ccf2';
     ctx.lineWidth = 1.8;
     ctx.stroke();
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 10.5px monospace';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('INST_DEC (翻訳)', 237, 60);
+    ctx.fillText('INST_DEC (翻訳)', 237, 58);
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#ffd166';
-    ctx.fillText(`機械語 ${st.opcodeBits}:${st.immBits}`, 237, 81);
+    ctx.fillText(
+      `機械語 ${st.opcodeBits}:${st.immBits}${st.retBit ? '+RET' : ''}`,
+      237,
+      81
+    );
     ctx.font = 'bold 9.5px monospace';
     ctx.fillStyle = '#8ee5ff';
     ctx.fillText(`OP=${st.opFlag} SET=${st.setFlag} WE=${st.weFlag} BR=${st.brFlag}`, 237, 106);
@@ -1288,15 +1240,21 @@ export class PhysicsLabCanvas {
     ctx.strokeStyle = '#ffbe76';
     ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 10.5px monospace';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('ARK4_CPU (演算・記憶)', 406, 60);
-    ctx.font = 'bold 16px monospace';
+    ctx.fillText('ARK4_CPU (演算・記憶)', 406, 58);
+    ctx.font = 'bold 13.5px monospace';
     ctx.fillStyle = '#ffd166';
-    ctx.fillText(`ACC = ${st.acc} (${accBits})`, 406, 86);
+    ctx.fillText(
+      st.stepIdx >= 0
+        ? `ACC:${st.accBefore ?? 0}→${st.acc} (${accBits})`
+        : `ACC = ${st.acc} (${accBits})`,
+      406,
+      84
+    );
     ctx.font = 'bold 10px monospace';
     ctx.fillStyle = '#ffbe76';
-    ctx.fillText(`実行: ${st.opName}`, 406, 109);
+    ctx.fillText(`実行: ${st.opName}`, 406, 108);
 
     // Arrow ARK4_CPU -> ZERO_4B
     ctx.strokeStyle = st.z ? '#52e3b6' : '#4a6075';
@@ -1313,15 +1271,15 @@ export class PhysicsLabCanvas {
     ctx.strokeStyle = st.z ? '#52e3b6' : '#455a70';
     ctx.lineWidth = st.z ? 2.2 : 1.5;
     ctx.stroke();
-    ctx.font = 'bold 11px monospace';
+    ctx.font = 'bold 10.5px monospace';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('ZERO_4B (目)', 558, 70);
-    ctx.font = 'bold 15px monospace';
+    ctx.fillText('ZERO_4B (目)', 558, 69);
+    ctx.font = 'bold 14.5px monospace';
     ctx.fillStyle = st.z ? '#72f2c8' : '#7c92a8';
-    ctx.fillText(`Z = ${st.z}`, 558, 94);
+    ctx.fillText(`Z = ${st.z}`, 558, 92);
     ctx.font = 'bold 9.5px sans-serif';
     ctx.fillStyle = st.z ? '#a8ffe2' : '#7c92a8';
-    ctx.fillText(st.z ? '✔ ゼロ検知!' : '非ゼロ', 558, 113);
+    ctx.fillText(st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ', 558, 112);
 
     // -------------------------------------------------------------------------
     // 2. LOWER HALF: ROM ASSEMBLY PROGRAM TABLE (y = 144..348)
@@ -1338,25 +1296,26 @@ export class PhysicsLabCanvas {
 
     rows.forEach((r, idx) => {
       const ry = startY + idx * (rowH + gap);
-      const isCurrentPc = st.stepIdx >= 0 && st.pc === r.addr;
+      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === 4;
+      const isCurrentPc = isAwaitingOpenRow || (st.stepIdx >= 0 && st.pc === r.addr);
 
       // Left Address Pill
-      ctx.fillStyle = isCurrentPc ? '#163d2f' : '#131d28';
+      ctx.fillStyle = isAwaitingOpenRow ? '#4d330b' : isCurrentPc ? '#163d2f' : '#131d28';
       this._roundRect(ctx, 16, ry, 152, rowH, 7);
       ctx.fill();
-      ctx.strokeStyle = isCurrentPc ? '#52e3b6' : '#2d4054';
-      ctx.lineWidth = isCurrentPc ? 2 : 1.2;
+      ctx.strokeStyle = isAwaitingOpenRow ? '#ffd166' : isCurrentPc ? '#52e3b6' : '#2d4054';
+      ctx.lineWidth = isCurrentPc ? 2.2 : 1.2;
       ctx.stroke();
 
       ctx.font = 'bold 11px monospace';
-      ctx.fillStyle = isCurrentPc ? '#72f2c8' : '#ffd166';
+      ctx.fillStyle = isAwaitingOpenRow ? '#ffe599' : isCurrentPc ? '#72f2c8' : '#ffd166';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${isCurrentPc ? '▶' : ' '} [${r.addr}番地]`, 22, ry + rowH * 0.34);
 
       ctx.font = '9.5px -apple-system, sans-serif';
       ctx.fillStyle = '#b4c7da';
-      ctx.fillText(r.label || (r.locked ? '固定回路' : ''), 24, ry + rowH * 0.72, 138);
+      ctx.fillText(r.label || (r.locked ? '外部帰還回路' : ''), 24, ry + rowH * 0.72, 138);
 
       // Right Instruction Slot
       const sx = 176;

@@ -20,6 +20,7 @@ export function createDefaultSave() {
     unlockedCodex: [],
     discoveredTerms: [],      // glossary term IDs actually encountered in dialogue so far
     seenPrologue: false,
+    chapter2Unlocked: false,  // true when player launched Chapter 2 directly from Home screen
     seenIntroStages: [],      // legacy
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
     soundEnabled: true,
@@ -83,11 +84,17 @@ export function resetSaveData() {
  * Stage 00 is always unlocked; stage N unlocks once stage N-1 is cleared.
  */
 export function isStageUnlocked(save, stageId) {
-  if (stageId === 'sandbox') return save.clearedStages.length > 0;
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  if (stageId === 'sandbox') return cleared.length > 0 || Boolean(save?.chapter2Unlocked);
   const idx = STAGES.findIndex((s) => s.id === stageId);
   if (idx <= 0) return true;
+  const stage = STAGES[idx];
+  // When Chapter 2 was launched directly, Stage 18 is unlocked and all Chapter 1 stages are available to play!
+  if (save?.chapter2Unlocked) {
+    if (stage.chapter !== 2 || stageId === 'stage_18') return true;
+  }
   // Backwards-compatible: existing saves with prior clears keep stage_00 / stage_01 accessible
-  if ((stageId === 'stage_00' || stageId === 'stage_01') && save.clearedStages.length > 0) return true;
+  if ((stageId === 'stage_00' || stageId === 'stage_01') && cleared.length > 0) return true;
   const prevStage = STAGES[idx - 1];
-  return save.clearedStages.includes(prevStage.id) || save.clearedStages.includes(stageId);
+  return cleared.includes(prevStage.id) || cleared.includes(stageId);
 }

@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=26';
+import { sound } from '../audio/sound.js?v=27';
 
 const W = 340;
 const H = 126;
