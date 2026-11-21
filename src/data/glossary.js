@@ -118,6 +118,7 @@ export const GLOSSARY_TERMS = {
     act: 0,
     unlockClearedStage: 'stage_00b',
     unlockLabel: 'STAGE 00-B クリア',
+    codexIds: ['pullup_resistor'],
     anim: 'short_spark',
     summary:
       '電池のプラス（高い電圧）と地面アース（0V）が、抵抗なしで太い線どうし直結してしまう事故。ブレーキのない大電流が一気に流れ、火花が散って部品が焼け切れてしまいます。',
@@ -169,6 +170,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_00a',
     unlockClearedStage: 'stage_00a',
     unlockLabel: 'STAGE 00-A クリア',
+    codexIds: ['mosfet_physics', 'transistor_nand'],
     chipId: 'SW',
     pins: { inputs: ['いり', 'ひねり(Gate)'], outputs: ['でぐち'] },
     anim: 'mosfet_bridge',
@@ -186,6 +188,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_00b',
     unlockClearedStage: 'stage_00b',
     unlockLabel: 'STAGE 00-B クリア',
+    codexIds: ['pullup_resistor', 'transistor_nand'],
     chipId: 'PULL',
     pins: { inputs: ['ぬけ(Drain)'], outputs: ['でぐち'] },
     anim: 'pullup_drain',
@@ -204,6 +207,7 @@ export const GLOSSARY_TERMS = {
     // Word meaning is readable from Prologue, but full module diagram unlocks on Stage 00-C clear!
     unlockClearedStageForDiagram: 'stage_00',
     unlockLabel: 'STAGE 00-C クリア',
+    codexIds: ['transistor_nand', 'nand_origin'],
     chipId: 'NAND',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'nand_series',
@@ -227,6 +231,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_01',
     unlockClearedStage: 'stage_01',
     unlockLabel: 'STAGE 01 クリア',
+    codexIds: ['not_gate', 'nand_origin'],
     chipId: 'NOT',
     pins: { inputs: ['IN'], outputs: ['OUT'] },
     anim: 'not_branch',
@@ -256,6 +261,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_02',
     unlockClearedStage: 'stage_02',
     unlockLabel: 'STAGE 02 クリア',
+    codexIds: ['and_gate'],
     chipId: 'AND',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'and_invert',
@@ -285,6 +291,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_03',
     unlockClearedStage: 'stage_03',
     unlockLabel: 'STAGE 03 クリア',
+    codexIds: ['or_demorgan'],
     chipId: 'OR',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'or_demorgan',
@@ -315,6 +322,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_04',
     unlockClearedStage: 'stage_04',
     unlockLabel: 'STAGE 04 クリア',
+    codexIds: ['xor_gate'],
     chipId: 'XOR',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'xor_diff',
@@ -348,6 +356,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_05',
     unlockClearedStage: 'stage_05',
     unlockLabel: 'STAGE 05 クリア',
+    codexIds: ['half_adder_binary'],
     chipId: 'HALF_ADDER',
     pins: { inputs: ['A', 'B'], outputs: ['SUM', 'CARRY'] },
     anim: 'half_adder',
@@ -365,6 +374,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_06',
     unlockClearedStage: 'stage_06',
     unlockLabel: 'STAGE 06 クリア',
+    codexIds: ['full_adder'],
     chipId: 'FULL_ADDER',
     pins: { inputs: ['A', 'B', 'CIN'], outputs: ['SUM', 'COUT'] },
     anim: 'full_adder',
@@ -382,6 +392,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_07',
     unlockClearedStage: 'stage_07',
     unlockLabel: 'STAGE 07 クリア',
+    codexIds: ['ripple_adder'],
     chipId: 'ADD_4BIT',
     pins: { inputs: ['A0..3', 'B0..3', 'CIN'], outputs: ['S0..3', 'COUT'] },
     anim: 'ripple_4bit',
@@ -415,6 +426,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_08',
     unlockClearedStage: 'stage_08',
     unlockLabel: 'STAGE 08 クリア',
+    codexIds: ['mux_selector'],
     chipId: 'MUX',
     pins: { inputs: ['D0', 'D1', 'SEL'], outputs: ['OUT'] },
     anim: 'mux_rail',
@@ -468,6 +480,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_09',
     unlockClearedStage: 'stage_09',
     unlockLabel: 'STAGE 09 クリア',
+    codexIds: ['data_bus'],
     chipId: 'MUX_4BIT',
     pins: { inputs: ['A0..3', 'B0..3', 'SEL'], outputs: ['Y0..3'] },
     anim: 'data_bus_4bit',
@@ -485,6 +498,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_10',
     unlockClearedStage: 'stage_10',
     unlockLabel: 'STAGE 10 クリア',
+    codexIds: ['decoder'],
     chipId: 'DEC_2TO4',
     pins: { inputs: ['A0', 'A1'], outputs: ['Y0', 'Y1', 'Y2', 'Y3'] },
     anim: 'decoder_2to4',
@@ -518,6 +532,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_11',
     unlockClearedStage: 'stage_11',
     unlockLabel: 'STAGE 11 クリア',
+    codexIds: ['sr_latch'],
     chipId: 'SR_LATCH',
     pins: { inputs: ['S (セット)', 'R (リセット)'], outputs: ['Q', 'QN'] },
     anim: 'sr_latch_loop',
@@ -535,6 +550,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_12',
     unlockClearedStage: 'stage_12',
     unlockLabel: 'STAGE 12 クリア',
+    codexIds: ['d_latch'],
     chipId: 'D_LATCH',
     pins: { inputs: ['D (データ)', 'WE (書込許可)'], outputs: ['Q'] },
     anim: 'd_latch_vault',
@@ -576,6 +592,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_13',
     unlockClearedStage: 'stage_13',
     unlockLabel: 'STAGE 13 クリア',
+    codexIds: ['d_ff_clock'],
     chipId: 'D_FF',
     pins: { inputs: ['D', 'CLK'], outputs: ['Q'] },
     anim: 'dff_airlock',
@@ -605,6 +622,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_14',
     unlockClearedStage: 'stage_14',
     unlockLabel: 'STAGE 14 クリア',
+    codexIds: ['register_4bit'],
     chipId: 'REG_4BIT',
     pins: { inputs: ['D0..3', 'LOAD', 'CLK'], outputs: ['Q0..3'] },
     anim: 'reg_4bit',
@@ -638,6 +656,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_15',
     unlockClearedStage: 'stage_15',
     unlockLabel: 'STAGE 15 クリア',
+    codexIds: ['alu_twos_comp'],
     chipId: 'ALU_4BIT',
     pins: { inputs: ['A0..3', 'B0..3', 'SUB'], outputs: ['Y0..3', 'COUT'] },
     anim: 'alu_twos_comp',
@@ -667,6 +686,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_16',
     unlockClearedStage: 'stage_16',
     unlockLabel: 'STAGE 16 クリア',
+    codexIds: ['program_counter'],
     chipId: 'PC_4BIT',
     pins: { inputs: ['J0..3', 'JMP', 'CLK'], outputs: ['Q0..3'] },
     anim: 'pc_loop',
@@ -684,6 +704,7 @@ export const GLOSSARY_TERMS = {
     stageId: 'stage_17',
     unlockClearedStage: 'stage_17',
     unlockLabel: 'STAGE 17 クリア',
+    codexIds: ['ark4_cpu'],
     chipId: 'ARK4_CORE',
     pins: { inputs: ['IMM0..3', 'OP', 'SET', 'WE', 'CLK'], outputs: ['ACC0..3'] },
     anim: 'ark4_cpu',
@@ -964,6 +985,16 @@ export function tokenizeGlossaryText(text, excludeTermId = null, save = null) {
 
 export function getGlossaryTerm(termId) {
   return GLOSSARY_TERMS[termId] || null;
+}
+
+/**
+ * Returns all module terms in MODULE_ENCYCLOPEDIA_IDS that link to a given CS History codexId.
+ */
+export function getModulesForCodexId(codexId) {
+  if (!codexId) return [];
+  return MODULE_ENCYCLOPEDIA_IDS.map((id) => GLOSSARY_TERMS[id]).filter(
+    (term) => term && Array.isArray(term.codexIds) && term.codexIds.includes(codexId)
+  );
 }
 
 export function hasGlossaryTerms(tokens) {

@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=20';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=22';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,14 +16,14 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=20';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=20';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=20';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=20';
-import { DialogueController } from './ui/dialogue.js?v=20';
-import { ModalManager } from './ui/modals.js?v=20';
-import { PrologueOverlay } from './ui/prologue.js?v=20';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=20';
+import { sound } from './audio/sound.js?v=22';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=22';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=22';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=22';
+import { DialogueController } from './ui/dialogue.js?v=22';
+import { ModalManager } from './ui/modals.js?v=22';
+import { PrologueOverlay } from './ui/prologue.js?v=22';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=22';
 
 class SiliconGenesisApp {
   constructor() {
@@ -1058,7 +1058,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=20', { updateViaCache: 'none' })
+        .register('./sw.js?v=22', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

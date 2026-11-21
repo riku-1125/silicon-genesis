@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STAGES, getStageById } from '../src/data/stages.js';
+import { CODEX_ENTRIES } from '../src/data/codex.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   tokenizeGlossaryText,
   getGlossaryTerm,
+  getModulesForCodexId,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
   isModuleEncyclopediaUnlocked,
@@ -684,10 +686,22 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.equal(isModuleEncyclopediaUnlocked('and_gate', midSave), false); // Current stage target still locked!
   assert.equal(isGlossaryTermUnlocked('and_gate', midSave), false);
 
-  // 7. Every related term link resolves cleanly
+  // 7. Every related term link resolves cleanly, and bidirectional Module <-> CS History links are complete
   for (const term of Object.values(GLOSSARY_TERMS)) {
     for (const relId of term.related || []) {
       assert.ok(getGlossaryTerm(relId), `Missing related glossary term '${relId}' in '${term.id}'`);
     }
+  }
+  for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
+    const mod = getGlossaryTerm(modId);
+    assert.ok(typeof mod.act === 'number', `Module '${modId}' missing numeric act`);
+    assert.ok(Array.isArray(mod.codexIds) && mod.codexIds.length > 0, `Module '${modId}' missing codexIds`);
+    for (const cid of mod.codexIds) {
+      assert.ok(CODEX_ENTRIES[cid], `Module '${modId}' references unknown codexId '${cid}'`);
+    }
+  }
+  for (const codexId of Object.keys(CODEX_ENTRIES)) {
+    const linkedMods = getModulesForCodexId(codexId);
+    assert.ok(linkedMods.length > 0, `CS History Codex entry '${codexId}' has no linked modules`);
   }
 });

@@ -4,20 +4,21 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=20';
-import { CODEX_ENTRIES } from '../data/codex.js?v=20';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=22';
+import { CODEX_ENTRIES } from '../data/codex.js?v=22';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   getGlossaryTerm,
+  getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=20';
+} from '../data/glossary.js?v=22';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=20';
-import { StoryDiagramGroup } from './storyDiagram.js?v=20';
-import { glossaryPopover } from './glossaryPopover.js?v=20';
+import { sound } from '../audio/sound.js?v=22';
+import { StoryDiagramGroup } from './storyDiagram.js?v=22';
+import { glossaryPopover } from './glossaryPopover.js?v=22';
 
 function esc(str) {
   return String(str ?? '')
@@ -498,14 +499,15 @@ export class ModalManager {
   }
 
   // ===========================================================================
-  // 6. 2-TAB ENCYCLOPEDIA: MODULE ENCYCLOPEDIA (LIVE DIAGRAMS) & CS HISTORY CODEX
+  // 6. 2-TAB ENCYCLOPEDIA: HIERARCHICAL MODULE PULL-DOWNS & CS HISTORY CODEX
   // ===========================================================================
   openCodex(
     saveOrUnlockedIds = [],
     {
       highlightIds = [],
       initialTab = null,
-      showAllModules = false,
+      initialModuleId = null,
+      initialCodexId = null,
       onNextStage = null,
       nextStageLabel = '次のミッションへ進む ▶',
       onBackToVictory = null,
@@ -526,156 +528,350 @@ export class ModalManager {
     const highlightSet = new Set(highlightIds);
 
     const allHistoryEntries = Object.values(CODEX_ENTRIES);
-    const unlockedHistoryCount = allHistoryEntries.filter((e) => unlockedSet.has(e.id)).length;
+    const unlockedHistoryEntries = allHistoryEntries.filter((e) => unlockedSet.has(e.id));
+    const unlockedHistoryCount = unlockedHistoryEntries.length;
 
     const moduleEntries = MODULE_ENCYCLOPEDIA_IDS.map((id) => getGlossaryTerm(id)).filter(Boolean);
     const isModuleUnlocked = (term) => isModuleEncyclopediaUnlocked(term.id, isSaveObj ? save : null);
-    const unlockedModuleCount = moduleEntries.filter((m) => isModuleUnlocked(m)).length;
+    const unlockedModules = moduleEntries.filter((m) => isModuleUnlocked(m));
+    const unlockedModuleCount = unlockedModules.length;
 
-    let activeTab = initialTab || (highlightIds.length > 0 ? 'history' : 'modules');
-    const moduleHistory = []; // Stack of module termIds for "◀ ひとつ戻る" navigation
+    let activeTab = initialTab || (highlightIds.length > 0 || initialCodexId ? 'history' : 'modules');
 
-    const renderModalContent = (scrollTargetModuleId = null) => {
-      // 1. Build Module Encyclopedia HTML (strictly locked until each stage is cleared!)
-      const moduleCardsHtml = moduleEntries
-        .map((term) => {
-          const unlocked = isModuleUnlocked(term);
-          const cleared = term.stageId ? clearedSet.has(term.stageId) : unlocked;
-          const forged = term.chipId ? customChips[term.chipId] : null;
+    // Unified cross-tab navigation history stack: Array<{ tab: 'modules'|'history', id: string, label: string }>
+    const navHistory = [];
 
-          if (!unlocked) {
-            return `
-              <div class="codex-entry locked" data-module-id="${esc(term.id)}">
-                <div class="codex-entry-head">
-                  <span class="codex-act">${esc(term.category)}</span>
-                  <span class="codex-title">🔒 未取得モジュール（${esc(term.unlockLabel || 'クリアで解放')}）</span>
+    // Hierarchical pull-down expansion state for Module Encyclopedia (Level 1: Acts, Level 2: Modules)
+    const expandedActs = new Set();
+    const expandedModules = new Set();
+
+    if (initialModuleId) {
+      const initMod = getGlossaryTerm(initialModuleId);
+      if (initMod && isModuleUnlocked(initMod)) {
+        expandedActs.add(initMod.act ?? 0);
+        expandedModules.add(initMod.id);
+      }
+    }
+    if (expandedActs.size === 0) {
+      if (unlockedModules.length > 0) {
+        const latestMod = unlockedModules[unlockedModules.length - 1];
+        expandedActs.add(latestMod.act ?? 0);
+        expandedModules.add(latestMod.id);
+      } else {
+        expandedActs.add(0);
+      }
+    }
+
+    // Pull-down expansion state for CS History Codex
+    const expandedCodexIds = new Set();
+    if (initialCodexId && unlockedSet.has(initialCodexId)) {
+      expandedCodexIds.add(initialCodexId);
+    }
+    for (const hid of highlightIds) {
+      if (unlockedSet.has(hid)) expandedCodexIds.add(hid);
+    }
+    if (expandedCodexIds.size === 0 && unlockedHistoryEntries.length > 0) {
+      expandedCodexIds.add(unlockedHistoryEntries[unlockedHistoryEntries.length - 1].id);
+    }
+
+    const renderModalContent = (scrollTargetId = null) => {
+      // -----------------------------------------------------------------------
+      // 1. Build Hierarchical Module Encyclopedia HTML (Act Pull-Down -> Module Pull-Down)
+      // -----------------------------------------------------------------------
+      const moduleActGroupsHtml = ACTS.map((act) => {
+        const modsInAct = moduleEntries.filter((m) => (m.act ?? 0) === act.id);
+        if (modsInAct.length === 0) return '';
+        const unlockedInAct = modsInAct.filter((m) => isModuleUnlocked(m));
+        const isActOpen = expandedActs.has(act.id);
+
+        const modItemsHtml = modsInAct
+          .map((term) => {
+            const unlocked = isModuleUnlocked(term);
+            const cleared = term.stageId ? clearedSet.has(term.stageId) : unlocked;
+            const forged = term.chipId ? customChips[term.chipId] : null;
+
+            if (!unlocked) {
+              return `
+                <div class="codex-item-locked-row" data-module-id="${esc(term.id)}">
+                  <span class="codex-locked-icon">🔒</span>
+                  <span class="codex-locked-text">未取得モジュール（${esc(term.unlockLabel || 'クリアで解放')}）</span>
                 </div>
-                <p class="dim">対応するステージを自力でクリアすると、モジュールの解説と動的図解が登録されます。</p>
-              </div>
-            `;
-          }
+              `;
+            }
 
-          const statusBadge = forged
-            ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
-            : cleared
-              ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
-              : `<span class="mod-status-badge">📖 動的図解</span>`;
+            const isModOpen = expandedModules.has(term.id);
+            const shortBadge = forged
+              ? `<span class="mod-status-badge forged">✔ チップ登録済</span>`
+              : cleared
+                ? `<span class="mod-status-badge cleared">✔ 習得済</span>`
+                : `<span class="mod-status-badge">📖 図解</span>`;
 
-          const pinsHtml = term.pins
-            ? `
-              <div class="gp-pins-wrap">
-                <span class="gp-pin-pill in">入力: <b>${esc((term.pins.inputs || []).join(', '))}</b></span>
-                <span class="gp-pin-pill out">出力: <b>${esc((term.pins.outputs || []).join(', '))}</b></span>
-              </div>
-            `
-            : '';
-
-          const diagramHtml = term.anim
-            ? `
-              <div class="vc-live-wrap codex-diagram-wrap">
-                <canvas class="vc-live-canvas codex-live-canvas" data-anim="${esc(term.anim)}" aria-label="${esc(term.title)} 動く図解"></canvas>
-              </div>
-            `
-            : '';
-
-          const relatedTerms = (term.related || [])
-            .map((rid) => getGlossaryTerm(rid))
-            .filter(Boolean);
-
-          const relatedHtml =
-            relatedTerms.length > 0
-              ? `
-                <div class="codex-related-row">
-                  <span class="codex-related-lbl">関連解説：</span>
-                  ${relatedTerms
-                    .map((rel) => {
-                      const isMod = MODULE_ENCYCLOPEDIA_IDS.includes(rel.id);
-                      const relOpen = isMod
-                        ? isModuleUnlocked(rel)
-                        : isGlossaryTermUnlocked(rel.id, isSaveObj ? save : null);
-                      if (!relOpen) {
-                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(rel.unlockLabel || '進行で解放')}）</span>`;
-                      }
-                      return `
-                        <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">
-                          ${isMod ? '⚡ ' : '📖 '}${esc(rel.title.split('（')[0])}
-                        </button>
-                      `;
-                    })
-                    .join('')}
-                </div>
-              `
-              : '';
-
-          const inspectBtnHtml =
-            forged && term.chipId
-              ? `
-                <div class="codex-inspect-row">
-                  <button type="button" class="mini-inspect-btn" data-inspect-chip="${esc(term.chipId)}">
-                    🔍 あなたが設計した [${esc(forged.name || term.chipId)}] の内部回路を見る ▶
+            if (!isModOpen) {
+              return `
+                <div class="codex-item-accordion collapsed" data-module-id="${esc(term.id)}">
+                  <button type="button" class="codex-item-pull-btn" data-toggle-module="${esc(term.id)}" aria-expanded="false">
+                    <span class="codex-item-pull-left">
+                      <span class="codex-item-icon">⚡</span>
+                      <span class="codex-item-title">${esc(term.title)}</span>
+                    </span>
+                    <span class="codex-item-pull-right">
+                      ${shortBadge}
+                      <span class="codex-pull-caret">▸</span>
+                    </span>
                   </button>
                 </div>
+              `;
+            }
+
+            const detailBadge = forged
+              ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
+              : cleared
+                ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
+                : `<span class="mod-status-badge">📖 動的図解</span>`;
+
+            const pinsHtml = term.pins
+              ? `
+                <div class="gp-pins-wrap">
+                  <span class="gp-pin-pill in">入力: <b>${esc((term.pins.inputs || []).join(', '))}</b></span>
+                  <span class="gp-pin-pill out">出力: <b>${esc((term.pins.outputs || []).join(', '))}</b></span>
+                </div>
               `
               : '';
 
-          return `
-            <div class="codex-entry module-codex-card" data-module-id="${esc(term.id)}">
-              <div class="codex-entry-head">
-                <span class="codex-act">${esc(term.category)}</span>
-                ${statusBadge}
-              </div>
-              <div class="codex-title" style="margin-bottom:2px;">${esc(term.title)}</div>
-              <div class="codex-subtitle">${esc(term.reading || '')}</div>
-              ${pinsHtml}
-              ${diagramHtml}
-              <p>${esc(term.summary)}</p>
-              ${
-                term.analogy
-                  ? `<div class="gp-analogy-wrap" style="margin-top:8px;">
-                      <div class="gp-analogy-lbl">💡 たとえるなら</div>
-                      <div class="gp-analogy">${esc(term.analogy)}</div>
-                    </div>`
-                  : ''
-              }
-              ${inspectBtnHtml}
-              ${relatedHtml}
-            </div>
-          `;
-        })
-        .join('');
+            const diagramHtml = term.anim
+              ? `
+                <div class="vc-live-wrap codex-diagram-wrap">
+                  <canvas class="vc-live-canvas codex-live-canvas" data-anim="${esc(term.anim)}" aria-label="${esc(term.title)} 動く図解"></canvas>
+                </div>
+              `
+              : '';
 
-      // 2. Build CS History Archive HTML
+            // Cross-links to CS History Codex
+            const linkedCodexEntries = (term.codexIds || [])
+              .map((cid) => CODEX_ENTRIES[cid])
+              .filter(Boolean);
+
+            const codexCrossLinkHtml =
+              linkedCodexEntries.length > 0
+                ? `
+                  <div class="codex-crosslink-box">
+                    <div class="codex-crosslink-lbl">📜 CS歴史図鑑（歴史・物理アーカイブ）：</div>
+                    <div class="codex-crosslink-list">
+                      ${linkedCodexEntries
+                        .map((entry) => {
+                          const isHistoryOpen = unlockedSet.has(entry.id);
+                          if (!isHistoryOpen) {
+                            return `<span class="gp-related-chip locked">🔒 CS歴史：未解読アーカイブ</span>`;
+                          }
+                          return `
+                            <button
+                              type="button"
+                              class="codex-crosslink-btn to-history"
+                              data-jump-codex="${esc(entry.id)}"
+                              data-from-module="${esc(term.id)}"
+                            >
+                              📜 ${esc(entry.term)} (${esc(entry.year)}) を読む ▶
+                            </button>
+                          `;
+                        })
+                        .join('')}
+                    </div>
+                  </div>
+                `
+                : '';
+
+            const relatedTerms = (term.related || [])
+              .map((rid) => getGlossaryTerm(rid))
+              .filter(Boolean);
+
+            const relatedHtml =
+              relatedTerms.length > 0
+                ? `
+                  <div class="codex-related-row">
+                    <span class="codex-related-lbl">関連解説：</span>
+                    ${relatedTerms
+                      .map((rel) => {
+                        const isMod = MODULE_ENCYCLOPEDIA_IDS.includes(rel.id);
+                        const relOpen = isMod
+                          ? isModuleUnlocked(rel)
+                          : isGlossaryTermUnlocked(rel.id, isSaveObj ? save : null);
+                        if (!relOpen) {
+                          return `<span class="gp-related-chip locked">🔒 未取得（${esc(rel.unlockLabel || '進行で解放')}）</span>`;
+                        }
+                        return `
+                          <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">
+                            ${isMod ? '⚡ ' : '📖 '}${esc(rel.title.split('（')[0])}
+                          </button>
+                        `;
+                      })
+                      .join('')}
+                  </div>
+                `
+                : '';
+
+            const inspectBtnHtml =
+              forged && term.chipId
+                ? `
+                  <div class="codex-inspect-row">
+                    <button type="button" class="mini-inspect-btn" data-inspect-chip="${esc(term.chipId)}" data-from-module="${esc(term.id)}">
+                      🔍 あなたが設計した [${esc(forged.name || term.chipId)}] の内部回路を見る ▶
+                    </button>
+                  </div>
+                `
+                : '';
+
+            return `
+              <div class="codex-item-accordion expanded module-codex-card" data-module-id="${esc(term.id)}">
+                <button type="button" class="codex-item-pull-btn active" data-toggle-module="${esc(term.id)}" aria-expanded="true">
+                  <span class="codex-item-pull-left">
+                    <span class="codex-item-icon">⚡</span>
+                    <span class="codex-item-title">${esc(term.title)}</span>
+                  </span>
+                  <span class="codex-item-pull-right">
+                    ${shortBadge}
+                    <span class="codex-pull-caret">▾</span>
+                  </span>
+                </button>
+                <div class="codex-item-body">
+                  <div class="codex-entry-head">
+                    <span class="codex-act">${esc(term.category)} · ${esc(term.reading || '')}</span>
+                    ${detailBadge}
+                  </div>
+                  ${pinsHtml}
+                  ${diagramHtml}
+                  <p>${esc(term.summary)}</p>
+                  ${
+                    term.analogy
+                      ? `<div class="gp-analogy-wrap" style="margin-top:8px;">
+                          <div class="gp-analogy-lbl">💡 たとえるなら</div>
+                          <div class="gp-analogy">${esc(term.analogy)}</div>
+                        </div>`
+                      : ''
+                  }
+                  ${inspectBtnHtml}
+                  ${codexCrossLinkHtml}
+                  ${relatedHtml}
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+
+        return `
+          <div class="codex-act-group ${isActOpen ? 'open' : 'collapsed'}" data-act-group="${act.id}">
+            <button
+              type="button"
+              class="codex-act-pull-btn"
+              data-toggle-act="${act.id}"
+              aria-expanded="${isActOpen ? 'true' : 'false'}"
+              style="--act-color:${esc(act.color)}"
+            >
+              <span class="codex-act-pull-left">
+                <span class="codex-act-roman" style="color:${esc(act.color)}">${esc(act.roman)}</span>
+                <span class="codex-act-name">${esc(act.title)} <span class="codex-act-sub">（${esc(act.subtitle)}）</span></span>
+              </span>
+              <span class="codex-act-pull-right">
+                <span class="codex-act-count ${unlockedInAct.length > 0 ? 'has-unlocked' : ''}">${unlockedInAct.length} / ${modsInAct.length}</span>
+                <span class="codex-pull-caret">${isActOpen ? '▾' : '▸'}</span>
+              </span>
+            </button>
+            ${isActOpen ? `<div class="codex-act-items">${modItemsHtml}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      // -----------------------------------------------------------------------
+      // 2. Build Pull-Down CS History Archive HTML with Cross-Links to Modules
+      // -----------------------------------------------------------------------
       const historyListHtml = allHistoryEntries
         .map((entry) => {
           const open = unlockedSet.has(entry.id);
           const isNew = highlightSet.has(entry.id);
           if (!open) {
             return `
-              <div class="codex-entry locked">
-                <div class="codex-entry-head">
-                  <span class="codex-act">${esc(entry.act)}</span>
-                  <span class="codex-title">🔒 未解読アーカイブ</span>
-                </div>
-                <p class="dim">対応する回路を自力で組み上げると、篝博士の解説ログが解放されます。</p>
+              <div class="codex-item-locked-row">
+                <span class="codex-locked-icon">🔒</span>
+                <span class="codex-locked-text">[${esc(entry.act)}] 未解読アーカイブ（対応回路のクリアで解放）</span>
               </div>
             `;
           }
-          return `
-            <div class="codex-entry ${isNew ? 'codex-new' : ''}" data-codex-id="${esc(entry.id)}">
-              <div class="codex-entry-head">
-                <span class="codex-act">${esc(entry.act)} · ${esc(entry.year)}${isNew ? ' <span class="codex-new-badge">NEW!</span>' : ''}</span>
-                <span class="codex-title">${esc(entry.term)}</span>
+
+          const isEntryExpanded = expandedCodexIds.has(entry.id);
+          const linkedModules = getModulesForCodexId(entry.id);
+
+          if (!isEntryExpanded) {
+            return `
+              <div class="codex-item-accordion collapsed ${isNew ? 'codex-new' : ''}" data-codex-id="${esc(entry.id)}">
+                <button type="button" class="codex-item-pull-btn" data-toggle-codex="${esc(entry.id)}" aria-expanded="false">
+                  <span class="codex-item-pull-left">
+                    <span class="codex-item-icon">📜</span>
+                    <span class="codex-item-title">${esc(entry.term)}${isNew ? ' <span class="codex-new-badge">NEW!</span>' : ''}</span>
+                  </span>
+                  <span class="codex-item-pull-right">
+                    <span class="codex-year-pill">${esc(entry.act)} · ${esc(entry.year)}</span>
+                    <span class="codex-pull-caret">▸</span>
+                  </span>
+                </button>
               </div>
-              <div class="codex-subtitle">${esc(entry.subtitle)}</div>
-              ${entry.body.map((p) => `<p>${esc(p)}</p>`).join('')}
+            `;
+          }
+
+          const moduleCrossLinkHtml =
+            linkedModules.length > 0
+              ? `
+                <div class="codex-crosslink-box">
+                  <div class="codex-crosslink-lbl">⚡ 対応モジュール（動く図解・回路仕様）：</div>
+                  <div class="codex-crosslink-list">
+                    ${linkedModules
+                      .map((mod) => {
+                        const modOpen = isModuleUnlocked(mod);
+                        if (!modOpen) {
+                          return `<span class="gp-related-chip locked">🔒 ${esc(mod.unlockLabel || '未取得モジュール')}</span>`;
+                        }
+                        return `
+                          <button
+                            type="button"
+                            class="codex-crosslink-btn to-module"
+                            data-jump-module="${esc(mod.id)}"
+                            data-from-codex="${esc(entry.id)}"
+                          >
+                            ⚡ ${esc(mod.title)}（動的図解を見る）▶
+                          </button>
+                        `;
+                      })
+                      .join('')}
+                  </div>
+                </div>
+              `
+              : '';
+
+          return `
+            <div class="codex-item-accordion expanded ${isNew ? 'codex-new' : ''}" data-codex-id="${esc(entry.id)}">
+              <button type="button" class="codex-item-pull-btn active" data-toggle-codex="${esc(entry.id)}" aria-expanded="true">
+                <span class="codex-item-pull-left">
+                  <span class="codex-item-icon">📜</span>
+                  <span class="codex-item-title">${esc(entry.term)}${isNew ? ' <span class="codex-new-badge">NEW!</span>' : ''}</span>
+                </span>
+                <span class="codex-item-pull-right">
+                  <span class="codex-year-pill">${esc(entry.act)} · ${esc(entry.year)}</span>
+                  <span class="codex-pull-caret">▾</span>
+                </span>
+              </button>
+              <div class="codex-item-body">
+                <div class="codex-subtitle">${esc(entry.subtitle)}</div>
+                ${entry.body.map((p) => `<p>${esc(p)}</p>`).join('')}
+                ${moduleCrossLinkHtml}
+              </div>
             </div>
           `;
         })
         .join('');
 
-      const prevModuleId = moduleHistory.length > 0 ? moduleHistory[moduleHistory.length - 1] : null;
-      const prevModuleTerm = prevModuleId ? getGlossaryTerm(prevModuleId) : null;
-      const prevModuleShort = prevModuleTerm ? prevModuleTerm.title.split('（')[0] : '';
+      const prevNav = navHistory.length > 0 ? navHistory[navHistory.length - 1] : null;
+      const allModsExpanded =
+        unlockedModules.length > 0 && unlockedModules.every((m) => expandedModules.has(m.id));
+      const allHistoryExpanded =
+        unlockedHistoryEntries.length > 0 && unlockedHistoryEntries.every((e) => expandedCodexIds.has(e.id));
 
       const bodyHtml = `
         <div class="codex-tabs-bar">
@@ -687,20 +883,40 @@ export class ModalManager {
           </button>
         </div>
 
+        <div id="codex-back-bar" class="codex-back-bar ${prevNav ? '' : 'hidden'}">
+          <button type="button" id="btn-codex-history-back" class="btn btn-amber codex-history-back-btn">
+            ◀ ひとつ前の解説へ戻る（${esc(prevNav ? prevNav.label : '')}）
+          </button>
+        </div>
+
         ${
           activeTab === 'modules'
             ? `
               <div class="codex-module-toolbar">
-                <span class="codex-toolbar-note">👆 解放済みの動的図解はタップで入力パターンを切り替えられます</span>
+                <span class="codex-toolbar-note">▾ 章とモジュールをタップで開閉（図解タップで入力切替）</span>
+                ${
+                  unlockedModules.length > 1
+                    ? `<button type="button" id="btn-codex-toggle-all-mods" class="codex-fold-all-btn">
+                        ${allModsExpanded ? '▲ すべて折りたたむ' : '▼ 取得済みをすべて開く'}
+                      </button>`
+                    : ''
+                }
               </div>
-              <div id="codex-back-bar" class="codex-back-bar ${prevModuleTerm ? '' : 'hidden'}">
-                <button type="button" id="btn-codex-history-back" class="btn btn-amber codex-history-back-btn">
-                  ◀ ひとつ前の解説へ戻る（${esc(prevModuleShort)}）
-                </button>
-              </div>
-              <div class="codex-list">${moduleCardsHtml}</div>
+              <div class="codex-hierarchy-list">${moduleActGroupsHtml}</div>
             `
-            : `<div class="codex-list">${historyListHtml}</div>`
+            : `
+              <div class="codex-module-toolbar">
+                <span class="codex-toolbar-note">▾ 項目をタップで開閉（対応モジュール図解へジャンプ可）</span>
+                ${
+                  unlockedHistoryEntries.length > 1
+                    ? `<button type="button" id="btn-codex-toggle-all-hist" class="codex-fold-all-btn">
+                        ${allHistoryExpanded ? '▲ すべて折りたたむ' : '▼ 解読済みをすべて開く'}
+                      </button>`
+                    : ''
+                }
+              </div>
+              <div class="codex-hierarchy-list">${historyListHtml}</div>
+            `
         }
       `;
 
@@ -718,7 +934,7 @@ export class ModalManager {
         footerHtml,
       });
 
-      // Mount live interactive canvases when on the Modules tab!
+      // Mount live interactive canvases for currently expanded modules!
       if (activeTab === 'modules') {
         this.diagramGroup.mountAll(this.bodyEl);
       }
@@ -734,15 +950,144 @@ export class ModalManager {
         });
       });
 
-      // Bind "◀ ひとつ前の解説へ戻る" button
-      this.bodyEl.querySelector('#btn-codex-history-back')?.addEventListener('click', () => {
-        if (moduleHistory.length === 0) return;
-        sound.playSwitch(false);
-        const targetId = moduleHistory.pop();
-        renderModalContent(targetId);
+      // Bind Level 1 Act pull-down headers
+      this.bodyEl.querySelectorAll('[data-toggle-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const actId = Number(btn.dataset.toggleAct);
+          if (Number.isNaN(actId)) return;
+          sound.playSwitch(!expandedActs.has(actId));
+          if (expandedActs.has(actId)) {
+            expandedActs.delete(actId);
+          } else {
+            expandedActs.add(actId);
+          }
+          renderModalContent();
+        });
       });
 
-      // Bind related module/term jump chips (only unlocked chips have data-jump-term)
+      // Bind Level 2 Module pull-down headers
+      this.bodyEl.querySelectorAll('[data-toggle-module]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const modId = btn.dataset.toggleModule;
+          if (!modId) return;
+          const willOpen = !expandedModules.has(modId);
+          sound.playSwitch(willOpen);
+          if (willOpen) {
+            expandedModules.add(modId);
+          } else {
+            expandedModules.delete(modId);
+          }
+          renderModalContent(willOpen ? modId : null);
+        });
+      });
+
+      // Bind CS History pull-down headers
+      this.bodyEl.querySelectorAll('[data-toggle-codex]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const codexId = btn.dataset.toggleCodex;
+          if (!codexId) return;
+          const willOpen = !expandedCodexIds.has(codexId);
+          sound.playSwitch(willOpen);
+          if (willOpen) {
+            expandedCodexIds.add(codexId);
+          } else {
+            expandedCodexIds.delete(codexId);
+          }
+          renderModalContent(willOpen ? codexId : null);
+        });
+      });
+
+      // Bind Expand/Collapse All buttons
+      this.bodyEl.querySelector('#btn-codex-toggle-all-mods')?.addEventListener('click', () => {
+        sound.playSwitch(!allModsExpanded);
+        if (allModsExpanded) {
+          expandedModules.clear();
+        } else {
+          for (const m of unlockedModules) {
+            expandedActs.add(m.act ?? 0);
+            expandedModules.add(m.id);
+          }
+        }
+        renderModalContent();
+      });
+
+      this.bodyEl.querySelector('#btn-codex-toggle-all-hist')?.addEventListener('click', () => {
+        sound.playSwitch(!allHistoryExpanded);
+        if (allHistoryExpanded) {
+          expandedCodexIds.clear();
+        } else {
+          for (const e of unlockedHistoryEntries) {
+            expandedCodexIds.add(e.id);
+          }
+        }
+        renderModalContent();
+      });
+
+      // Bind Unified Cross-Tab "◀ ひとつ前の解説へ戻る" button
+      this.bodyEl.querySelector('#btn-codex-history-back')?.addEventListener('click', () => {
+        if (navHistory.length === 0) return;
+        sound.playSwitch(false);
+        const prev = navHistory.pop();
+        activeTab = prev.tab;
+        if (prev.tab === 'modules') {
+          const prevTerm = getGlossaryTerm(prev.id);
+          if (prevTerm) {
+            expandedActs.add(prevTerm.act ?? 0);
+            expandedModules.add(prevTerm.id);
+          }
+        } else {
+          expandedCodexIds.add(prev.id);
+        }
+        renderModalContent(prev.id);
+      });
+
+      // Bind Cross-Link: Module -> CS History Codex ([data-jump-codex])
+      this.bodyEl.querySelectorAll('[data-jump-codex]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetCodexId = btn.dataset.jumpCodex;
+          const fromModuleId = btn.dataset.fromModule;
+          if (!targetCodexId || !unlockedSet.has(targetCodexId)) return;
+          sound.playSwitch(true);
+
+          if (fromModuleId) {
+            const fromTerm = getGlossaryTerm(fromModuleId);
+            navHistory.push({
+              tab: 'modules',
+              id: fromModuleId,
+              label: `⚡ ${fromTerm ? fromTerm.title.split('（')[0] : fromModuleId}`,
+            });
+          }
+          activeTab = 'history';
+          expandedCodexIds.add(targetCodexId);
+          renderModalContent(targetCodexId);
+        });
+      });
+
+      // Bind Cross-Link: CS History Codex -> Module ([data-jump-module])
+      this.bodyEl.querySelectorAll('[data-jump-module]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetModuleId = btn.dataset.jumpModule;
+          const fromCodexId = btn.dataset.fromCodex;
+          const targetTerm = getGlossaryTerm(targetModuleId);
+          if (!targetTerm || !isModuleUnlocked(targetTerm)) return;
+          sound.playSwitch(true);
+
+          if (fromCodexId) {
+            const fromEntry = CODEX_ENTRIES[fromCodexId];
+            navHistory.push({
+              tab: 'history',
+              id: fromCodexId,
+              label: `📜 ${fromEntry ? fromEntry.term.split('（')[0] : fromCodexId}`,
+            });
+          }
+          activeTab = 'modules';
+          expandedActs.add(targetTerm.act ?? 0);
+          expandedModules.add(targetTerm.id);
+          renderModalContent(targetModuleId);
+        });
+      });
+
+      // Bind Related Module / Glossary Term jump chips ([data-jump-term])
       this.bodyEl.querySelectorAll('[data-jump-term]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const targetId = btn.dataset.jumpTerm;
@@ -754,8 +1099,16 @@ export class ModalManager {
             const targetTerm = getGlossaryTerm(targetId);
             if (!targetTerm || !isModuleUnlocked(targetTerm)) return;
             if (fromId && fromId !== targetId) {
-              moduleHistory.push(fromId);
+              const fromTerm = getGlossaryTerm(fromId);
+              navHistory.push({
+                tab: 'modules',
+                id: fromId,
+                label: `⚡ ${fromTerm ? fromTerm.title.split('（')[0] : fromId}`,
+              });
             }
+            activeTab = 'modules';
+            expandedActs.add(targetTerm.act ?? 0);
+            expandedModules.add(targetTerm.id);
             renderModalContent(targetId);
           } else {
             if (!isGlossaryTermUnlocked(targetId, isSaveObj ? save : null)) return;
@@ -768,6 +1121,7 @@ export class ModalManager {
       this.bodyEl.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const chipId = btn.dataset.inspectChip;
+          const fromModuleId = btn.dataset.fromModule;
           if (!chipId) return;
           sound.playSwitch(true);
           this.openChipInspector(chipId, customChips, {
@@ -775,6 +1129,7 @@ export class ModalManager {
               this.openCodex(saveOrUnlockedIds, {
                 highlightIds,
                 initialTab: 'modules',
+                initialModuleId: fromModuleId || null,
                 onNextStage,
                 nextStageLabel,
                 onBackToVictory,
@@ -784,16 +1139,18 @@ export class ModalManager {
         });
       });
 
-      // Scroll to target module card (with golden highlight flash) or newly unlocked CS history card
-      if (activeTab === 'modules' && scrollTargetModuleId) {
-        const card = this.bodyEl.querySelector(`[data-module-id="${scrollTargetModuleId}"]`);
+      // Scroll to target module or CS history card (with golden highlight flash)
+      if (activeTab === 'modules' && scrollTargetId) {
+        const card = this.bodyEl.querySelector(`[data-module-id="${scrollTargetId}"]`);
         if (card) {
           card.classList.add('codex-jump-highlight');
           requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         }
-      } else if (activeTab === 'history' && highlightIds.length > 0) {
-        const target = this.bodyEl.querySelector(`[data-codex-id="${highlightIds[0]}"]`);
+      } else if (activeTab === 'history' && (scrollTargetId || highlightIds.length > 0)) {
+        const targetId = scrollTargetId || highlightIds[0];
+        const target = this.bodyEl.querySelector(`[data-codex-id="${targetId}"]`);
         if (target) {
+          target.classList.add('codex-jump-highlight');
           requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }));
         }
       }
