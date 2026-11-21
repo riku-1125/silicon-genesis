@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=17';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=18';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,13 +16,13 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=17';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=17';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=17';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=17';
-import { DialogueController } from './ui/dialogue.js?v=17';
-import { ModalManager } from './ui/modals.js?v=17';
-import { PrologueOverlay } from './ui/prologue.js?v=17';
+import { sound } from './audio/sound.js?v=18';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=18';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=18';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=18';
+import { DialogueController } from './ui/dialogue.js?v=18';
+import { ModalManager } from './ui/modals.js?v=18';
+import { PrologueOverlay } from './ui/prologue.js?v=18';
 
 class SiliconGenesisApp {
   constructor() {
@@ -163,7 +163,7 @@ class SiliconGenesisApp {
 
     this.dom.btnCodex.addEventListener('click', () => {
       sound.playSwitch(true);
-      this.modals.openCodex(this.save.unlockedCodex);
+      this.modals.openCodex(this.save);
     });
 
     const openSettingsHandler = (fromTitle = false) => {
@@ -1007,7 +1007,7 @@ class SiliconGenesisApp {
           this.loadStage(overrideId || nextStage?.id || 'sandbox', { autoIntro: true });
         },
         onOpenCodex: () => {
-          this.modals.openCodex(this.save.unlockedCodex, {
+          this.modals.openCodex(this.save, {
             highlightIds: this.stage.codexUnlock || [],
             nextStageLabel: nextStage ? `次のミッションへ進む (${nextStage.code}) ▶` : '自由実験室（FREE LAB）へ ▶',
             onNextStage: () => {

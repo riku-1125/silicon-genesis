@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg" />
   <link rel="apple-touch-icon" href="./assets/icon.svg" />
-  <link rel="stylesheet" href="./styles/main.css?v=17" />
+  <link rel="stylesheet" href="./styles/main.css?v=18" />
 </head>
 <body>
   <div id="app">
@@ -217,26 +217,35 @@
     </div>
   </div>
 
-  <!-- TAPPABLE STORY GLOSSARY POPOVER (ABOVE PROLOGUE & STORY THEATER) -->
+  <!-- TAPPABLE STORY GLOSSARY POPOVER (ABOVE PROLOGUE, STORY THEATER & MODALS) -->
   <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="true" aria-label="専門用語解説">
     <div class="gp-card">
       <div class="gp-header">
-        <span id="gp-category" class="gp-category">📖 用語解説</span>
+        <div class="gp-header-left">
+          <button id="gp-back-top" class="gp-back-top hidden" type="button">◀ 戻る</button>
+          <span id="gp-category" class="gp-category">📖 用語解説</span>
+        </div>
         <button id="gp-close" class="gp-close" type="button" aria-label="閉じる">✕</button>
       </div>
       <div id="gp-title" class="gp-title"></div>
       <div id="gp-reading" class="gp-reading"></div>
+      <div id="gp-pins-wrap" class="gp-pins-wrap hidden"></div>
+      <div id="gp-diagram-wrap" class="vc-live-wrap gp-diagram-wrap hidden">
+        <div class="gp-diagram-hint">⚡ 動くモジュール図解（タップで状態切替）</div>
+        <canvas id="gp-live-canvas" class="vc-live-canvas" aria-label="モジュール動く図解"></canvas>
+      </div>
       <p id="gp-summary" class="gp-summary"></p>
       <div id="gp-analogy-wrap" class="gp-analogy-wrap hidden">
         <div class="gp-analogy-lbl">💡 たとえるなら</div>
         <div id="gp-analogy" class="gp-analogy"></div>
       </div>
       <div id="gp-related-wrap" class="gp-related-wrap hidden">
-        <div class="gp-related-lbl">関連する用語（タップで開く）</div>
+        <div class="gp-related-lbl">関連する用語・モジュール（タップで開く）</div>
         <div id="gp-related-list" class="gp-related-list"></div>
       </div>
       <div class="gp-footer">
-        <button id="gp-done" class="btn btn-primary gp-done-btn" type="button">わかった（物語へ戻る）</button>
+        <button id="gp-back-bottom" class="btn btn-amber gp-back-bottom hidden" type="button">◀ ひとつ戻る</button>
+        <button id="gp-done" class="btn btn-primary gp-done-btn" type="button">わかった（閉じる）</button>
       </div>
     </div>
   </div>
@@ -244,6 +253,6 @@
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="./src/main.js?v=17"></script>
+  <script type="module" src="./src/main.js?v=18"></script>
 </body>
 </html>

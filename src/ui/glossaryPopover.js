@@ -1,20 +1,24 @@
 /**
- * SILICON GENESIS — Tappable Story Glossary Popover & Stable Rich-Text Typewriter
+ * SILICON GENESIS — Tappable Story Glossary Popover (with Live Module Diagrams & Back History)
  *
- * Renders dialogue tokens into stable DOM nodes (plain Text nodes + <button class="term-link">)
- * so tapping a highlighted technical term works reliably even while the rest of a line is
- * still typing, and NEVER triggers dialogue advance.
+ * Features:
+ *   - Stable DOM-node typewriter (`mountRichText` / `updateRichTextProgress`) so tapping
+ *     a highlighted term never drops clicks mid-typing and never advances the story.
+ *   - Live interactive animated diagram (`StoryDiagramPlayer`) embedded directly inside
+ *     the popover whenever the term represents a module, gate, or physical circuit!
+ *   - History stack (`◀ ひとつ戻る`) when jumping across related terms or inline term links.
  */
 
-import { getGlossaryTerm, tokenizeGlossaryText, hasGlossaryTerms } from '../data/glossary.js?v=17';
-import { sound } from '../audio/sound.js?v=17';
+import { getGlossaryTerm, tokenizeGlossaryText, hasGlossaryTerms } from '../data/glossary.js?v=18';
+import { sound } from '../audio/sound.js?v=18';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=18';
 
 /**
  * Populates containerEl with one stable DOM node per token (all initially empty for typing,
  * or full when instant=true). Returns node metadata for zero-thrash typewriter updates.
  */
-export function mountRichText(containerEl, text, { instant = false } = {}) {
-  const tokens = tokenizeGlossaryText(text);
+export function mountRichText(containerEl, text, { instant = false, excludeTermId = null } = {}) {
+  const tokens = tokenizeGlossaryText(text, excludeTermId);
   containerEl.textContent = '';
 
   const nodes = tokens.map((tok) => {
@@ -43,7 +47,6 @@ export function mountRichText(containerEl, text, { instant = false } = {}) {
 
 /**
  * Updates stable mounted DOM nodes to show exactly `visibleChars` characters.
- * Already-typed buttons stay untouched in the DOM so touch/click never drops!
  */
 export function updateRichTextProgress(nodes, visibleChars) {
   let remaining = visibleChars;
@@ -68,9 +71,15 @@ export function updateRichTextProgress(nodes, visibleChars) {
 class GlossaryPopoverController {
   constructor() {
     this.root = null;
+    this.cardEl = null;
     this.categoryEl = null;
+    this.backTopBtn = null;
+    this.backBottomBtn = null;
     this.titleEl = null;
     this.readingEl = null;
+    this.pinsWrap = null;
+    this.diagramWrap = null;
+    this.diagramCanvas = null;
     this.summaryEl = null;
     this.analogyWrap = null;
     this.analogyEl = null;
@@ -78,6 +87,10 @@ class GlossaryPopoverController {
     this.relatedList = null;
     this.closeBtn = null;
     this.doneBtn = null;
+
+    this.currentTermId = null;
+    this.history = [];
+    this.diagramPlayer = new StoryDiagramPlayer();
     this._bound = false;
   }
 
@@ -88,9 +101,15 @@ class GlossaryPopoverController {
     if (!root) return false;
 
     this.root = root;
+    this.cardEl = root.querySelector('.gp-card');
     this.categoryEl = root.querySelector('#gp-category');
+    this.backTopBtn = root.querySelector('#gp-back-top');
+    this.backBottomBtn = root.querySelector('#gp-back-bottom');
     this.titleEl = root.querySelector('#gp-title');
     this.readingEl = root.querySelector('#gp-reading');
+    this.pinsWrap = root.querySelector('#gp-pins-wrap');
+    this.diagramWrap = root.querySelector('#gp-diagram-wrap');
+    this.diagramCanvas = root.querySelector('#gp-live-canvas');
     this.summaryEl = root.querySelector('#gp-summary');
     this.analogyWrap = root.querySelector('#gp-analogy-wrap');
     this.analogyEl = root.querySelector('#gp-analogy');
@@ -106,6 +125,24 @@ class GlossaryPopoverController {
     };
     this.closeBtn?.addEventListener('click', closeHandler);
     this.doneBtn?.addEventListener('click', closeHandler);
+
+    const backHandler = (e) => {
+      e.stopPropagation();
+      this.goBack();
+    };
+    this.backTopBtn?.addEventListener('click', backHandler);
+    this.backBottomBtn?.addEventListener('click', backHandler);
+
+    // Allow tapping inline highlighted terms inside the popover's own summary text!
+    this.summaryEl?.addEventListener('click', (e) => {
+      const btn = e.target.closest?.('.term-link[data-term-id]');
+      if (!btn) return;
+      e.stopPropagation();
+      e.preventDefault();
+      sound.playSwitch(true);
+      this.navigateTo(btn.dataset.termId);
+    });
+
     this.root.addEventListener('click', (e) => {
       e.stopPropagation();
       if (e.target === this.root) {
@@ -130,16 +167,80 @@ class GlossaryPopoverController {
     return Boolean(this.root && !this.root.classList.contains('hidden'));
   }
 
-  open(termId) {
+  /** Opens a term fresh (resets history stack unless pushHistory=true). */
+  open(termId, { pushHistory = false } = {}) {
     if (!this._ensureBound()) return;
     const term = getGlossaryTerm(termId);
     if (!term) return;
+
+    if (pushHistory && this.currentTermId && this.currentTermId !== termId) {
+      this.history.push(this.currentTermId);
+    } else if (!pushHistory) {
+      this.history = [];
+    }
+
+    this.currentTermId = termId;
+    this._renderTerm(term);
+    this.root.classList.remove('hidden');
+  }
+
+  /** Navigates to another term from inside the popover, pushing current onto history. */
+  navigateTo(termId) {
+    if (!termId || termId === this.currentTermId) return;
+    this.open(termId, { pushHistory: true });
+  }
+
+  /** Steps back to the previous term in the browsing history stack. */
+  goBack() {
+    if (this.history.length === 0) return;
+    sound.playSwitch(false);
+    const prevId = this.history.pop();
+    const prevTerm = getGlossaryTerm(prevId);
+    if (!prevTerm) return;
+    this.currentTermId = prevId;
+    this._renderTerm(prevTerm);
+  }
+
+  _renderTerm(term) {
+    this.diagramPlayer.unmount();
 
     this.categoryEl.textContent = `📖 用語解説 // ${term.category}`;
     this.titleEl.textContent = term.title;
     this.readingEl.textContent = term.reading || '';
     this.readingEl.classList.toggle('hidden', !term.reading);
-    this.summaryEl.textContent = term.summary;
+
+    // Optional module input/output pin spec badges
+    if (this.pinsWrap) {
+      if (term.pins) {
+        const ins = (term.pins.inputs || []).join(', ');
+        const outs = (term.pins.outputs || []).join(', ');
+        this.pinsWrap.innerHTML = `
+          <span class="gp-pin-pill in">入力: <b>${ins}</b></span>
+          <span class="gp-pin-pill out">出力: <b>${outs}</b></span>
+        `;
+        this.pinsWrap.classList.remove('hidden');
+      } else {
+        this.pinsWrap.classList.add('hidden');
+        this.pinsWrap.innerHTML = '';
+      }
+    }
+
+    // Embedded Live Interactive Diagram for Modules & Circuit Concepts!
+    if (this.diagramWrap && this.diagramCanvas) {
+      if (term.anim) {
+        this.diagramWrap.classList.remove('hidden');
+        requestAnimationFrame(() => {
+          if (this.isOpen() && this.currentTermId === term.id) {
+            this.diagramPlayer.mount(this.diagramCanvas, term.anim);
+          }
+        });
+      } else {
+        this.diagramWrap.classList.add('hidden');
+      }
+    }
+
+    // Summary with inline tappable terms (excluding current term)
+    mountRichText(this.summaryEl, term.summary, { instant: true, excludeTermId: term.id });
 
     if (term.analogy) {
       this.analogyEl.textContent = term.analogy;
@@ -148,7 +249,7 @@ class GlossaryPopoverController {
       this.analogyWrap.classList.add('hidden');
     }
 
-    // Related tappable term pills for curious beginners
+    // Related tappable term pills
     this.relatedList.textContent = '';
     const relatedEntries = (term.related || [])
       .map((id) => getGlossaryTerm(id))
@@ -159,11 +260,11 @@ class GlossaryPopoverController {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'gp-related-chip';
-        chip.textContent = rel.title.split('（')[0];
+        chip.textContent = `${rel.anim ? '⚡ ' : ''}${rel.title.split('（')[0]}`;
         chip.addEventListener('click', (e) => {
           e.stopPropagation();
           sound.playSwitch(true);
-          this.open(rel.id);
+          this.navigateTo(rel.id);
         });
         this.relatedList.appendChild(chip);
       }
@@ -172,10 +273,27 @@ class GlossaryPopoverController {
       this.relatedWrap.classList.add('hidden');
     }
 
-    this.root.classList.remove('hidden');
+    // Sync Back button visibility & previous term label
+    const hasHistory = this.history.length > 0;
+    const prevTerm = hasHistory ? getGlossaryTerm(this.history[this.history.length - 1]) : null;
+    const prevShort = prevTerm ? prevTerm.title.split('（')[0] : '';
+
+    if (this.backTopBtn) {
+      this.backTopBtn.classList.toggle('hidden', !hasHistory);
+      if (hasHistory) this.backTopBtn.textContent = `◀ 戻る`;
+    }
+    if (this.backBottomBtn) {
+      this.backBottomBtn.classList.toggle('hidden', !hasHistory);
+      if (hasHistory) {
+        this.backBottomBtn.textContent = `◀ ひとつ戻る（${prevShort}）`;
+      }
+    }
+
+    if (this.cardEl) this.cardEl.scrollTop = 0;
   }
 
   close() {
+    this.diagramPlayer.unmount();
     if (!this.root) return;
     this.root.classList.add('hidden');
   }
@@ -185,7 +303,6 @@ export const glossaryPopover = new GlossaryPopoverController();
 
 /**
  * Attaches delegated click handling for `.term-link[data-term-id]` inside a container.
- * Stops event propagation so tapping a term never advances dialogue.
  */
 export function bindGlossaryDelegation(containerEl, onBeforeOpen = null) {
   if (!containerEl) return;

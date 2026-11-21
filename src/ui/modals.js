@@ -4,10 +4,18 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=17';
-import { CODEX_ENTRIES } from '../data/codex.js?v=17';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=18';
+import { CODEX_ENTRIES } from '../data/codex.js?v=18';
+import {
+  GLOSSARY_TERMS,
+  MODULE_ENCYCLOPEDIA_IDS,
+  getGlossaryTerm,
+} from '../data/glossary.js?v=18';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { isStageUnlocked } from '../state/storage.js';
+import { sound } from '../audio/sound.js?v=18';
+import { StoryDiagramGroup } from './storyDiagram.js?v=18';
+import { glossaryPopover } from './glossaryPopover.js?v=18';
 
 function esc(str) {
   return String(str ?? '')
@@ -30,6 +38,7 @@ export class ModalManager {
     this.bodyEl = backdropEl.querySelector('#modal-body');
     this.footerEl = backdropEl.querySelector('#modal-footer');
     this.closeBtn = backdropEl.querySelector('#modal-close');
+    this.diagramGroup = new StoryDiagramGroup();
 
     this.closeBtn.addEventListener('click', () => this.close());
     this.backdrop.addEventListener('click', (e) => {
@@ -38,6 +47,7 @@ export class ModalManager {
   }
 
   open({ title, bodyHtml, footerHtml = '' }) {
+    this.diagramGroup.unmountAll();
     this.titleEl.textContent = title;
     this.bodyEl.innerHTML = bodyHtml;
     this.footerEl.innerHTML = footerHtml;
@@ -45,6 +55,7 @@ export class ModalManager {
   }
 
   close() {
+    this.diagramGroup.unmountAll();
     this.backdrop.classList.add('hidden');
   }
 
@@ -485,72 +496,332 @@ export class ModalManager {
   }
 
   // ===========================================================================
-  // 6. CS HISTORY & ARCHITECTURE CODEX MODAL
+  // 6. 2-TAB ENCYCLOPEDIA: MODULE ENCYCLOPEDIA (LIVE DIAGRAMS) & CS HISTORY CODEX
   // ===========================================================================
-  openCodex(unlockedIds = [], { highlightIds = [], onNextStage = null, nextStageLabel = '次のミッションへ進む ▶', onBackToVictory = null } = {}) {
-    const unlockedSet = new Set(unlockedIds);
-    const highlightSet = new Set(highlightIds);
-    const allEntries = Object.values(CODEX_ENTRIES);
-    const unlockedCount = allEntries.filter((e) => unlockedSet.has(e.id)).length;
+  openCodex(
+    saveOrUnlockedIds = [],
+    {
+      highlightIds = [],
+      initialTab = null,
+      showAllModules = false,
+      onNextStage = null,
+      nextStageLabel = '次のミッションへ進む ▶',
+      onBackToVictory = null,
+    } = {}
+  ) {
+    const isSaveObj = saveOrUnlockedIds && !Array.isArray(saveOrUnlockedIds) && typeof saveOrUnlockedIds === 'object';
+    const save = isSaveObj
+      ? saveOrUnlockedIds
+      : {
+          unlockedCodex: Array.isArray(saveOrUnlockedIds) ? saveOrUnlockedIds : [],
+          clearedStages: [],
+          customChips: {},
+        };
 
-    const listHtml = allEntries
-      .map((entry) => {
-        const open = unlockedSet.has(entry.id);
-        const isNew = highlightSet.has(entry.id);
-        if (!open) {
-          return `
-            <div class="codex-entry locked">
-              <div class="codex-entry-head">
-                <span class="codex-act">${esc(entry.act)}</span>
-                <span class="codex-title">🔒 未解読アーカイブ</span>
+    const unlockedSet = new Set(save.unlockedCodex || []);
+    const clearedSet = new Set(save.clearedStages || []);
+    const customChips = save.customChips || {};
+    const highlightSet = new Set(highlightIds);
+
+    const allHistoryEntries = Object.values(CODEX_ENTRIES);
+    const unlockedHistoryCount = allHistoryEntries.filter((e) => unlockedSet.has(e.id)).length;
+
+    const moduleEntries = MODULE_ENCYCLOPEDIA_IDS.map((id) => getGlossaryTerm(id)).filter(Boolean);
+    const isModuleUnlocked = (term) => {
+      if (!term.stageId) return true;
+      if (!isSaveObj) return true;
+      return isStageUnlocked(save, term.stageId) || clearedSet.has(term.stageId);
+    };
+    const unlockedModuleCount = moduleEntries.filter((m) => isModuleUnlocked(m)).length;
+
+    let activeTab = initialTab || (highlightIds.length > 0 ? 'history' : 'modules');
+    let previewAll = Boolean(showAllModules);
+    const moduleHistory = []; // Stack of module termIds for "◀ ひとつ戻る" navigation
+
+    const renderModalContent = (scrollTargetModuleId = null) => {
+      // 1. Build Module Encyclopedia HTML
+      const moduleCardsHtml = moduleEntries
+        .map((term) => {
+          const unlocked = previewAll || isModuleUnlocked(term);
+          const cleared = term.stageId ? clearedSet.has(term.stageId) : true;
+          const forged = term.chipId ? customChips[term.chipId] : null;
+
+          if (!unlocked) {
+            return `
+              <div class="codex-entry locked" data-module-id="${esc(term.id)}">
+                <div class="codex-entry-head">
+                  <span class="codex-act">${esc(term.category)}</span>
+                  <span class="codex-title">🔒 未到達モジュール</span>
+                </div>
+                <p class="dim">物語を進めてステージに到達すると解放されます（上の「予習表示」ボタンで今すぐ見ることもできます）。</p>
               </div>
-              <p class="dim">対応する回路を自力で組み上げると、篝博士の解説ログが解放されます。</p>
+            `;
+          }
+
+          const statusBadge = forged
+            ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
+            : cleared && term.stageId
+              ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
+              : `<span class="mod-status-badge">📖 動的図解</span>`;
+
+          const pinsHtml = term.pins
+            ? `
+              <div class="gp-pins-wrap">
+                <span class="gp-pin-pill in">入力: <b>${esc((term.pins.inputs || []).join(', '))}</b></span>
+                <span class="gp-pin-pill out">出力: <b>${esc((term.pins.outputs || []).join(', '))}</b></span>
+              </div>
+            `
+            : '';
+
+          const diagramHtml = term.anim
+            ? `
+              <div class="vc-live-wrap codex-diagram-wrap">
+                <canvas class="vc-live-canvas codex-live-canvas" data-anim="${esc(term.anim)}" aria-label="${esc(term.title)} 動く図解"></canvas>
+              </div>
+            `
+            : '';
+
+          const relatedTerms = (term.related || [])
+            .map((rid) => getGlossaryTerm(rid))
+            .filter(Boolean);
+
+          const relatedHtml =
+            relatedTerms.length > 0
+              ? `
+                <div class="codex-related-row">
+                  <span class="codex-related-lbl">関連解説：</span>
+                  ${relatedTerms
+                    .map(
+                      (rel) => `
+                        <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">
+                          ${MODULE_ENCYCLOPEDIA_IDS.includes(rel.id) ? '⚡ ' : '📖 '}${esc(rel.title.split('（')[0])}
+                        </button>
+                      `
+                    )
+                    .join('')}
+                </div>
+              `
+              : '';
+
+          const inspectBtnHtml =
+            forged && term.chipId
+              ? `
+                <div class="codex-inspect-row">
+                  <button type="button" class="mini-inspect-btn" data-inspect-chip="${esc(term.chipId)}">
+                    🔍 あなたが設計した [${esc(forged.name || term.chipId)}] の内部回路を見る ▶
+                  </button>
+                </div>
+              `
+              : '';
+
+          return `
+            <div class="codex-entry module-codex-card" data-module-id="${esc(term.id)}">
+              <div class="codex-entry-head">
+                <span class="codex-act">${esc(term.category)}</span>
+                ${statusBadge}
+              </div>
+              <div class="codex-title" style="margin-bottom:2px;">${esc(term.title)}</div>
+              <div class="codex-subtitle">${esc(term.reading || '')}</div>
+              ${pinsHtml}
+              ${diagramHtml}
+              <p>${esc(term.summary)}</p>
+              ${
+                term.analogy
+                  ? `<div class="gp-analogy-wrap" style="margin-top:8px;">
+                      <div class="gp-analogy-lbl">💡 たとえるなら</div>
+                      <div class="gp-analogy">${esc(term.analogy)}</div>
+                    </div>`
+                  : ''
+              }
+              ${inspectBtnHtml}
+              ${relatedHtml}
             </div>
           `;
-        }
-        return `
-          <div class="codex-entry ${isNew ? 'codex-new' : ''}" data-codex-id="${esc(entry.id)}">
-            <div class="codex-entry-head">
-              <span class="codex-act">${esc(entry.act)} · ${esc(entry.year)}${isNew ? ' <span class="codex-new-badge">NEW!</span>' : ''}</span>
-              <span class="codex-title">${esc(entry.term)}</span>
+        })
+        .join('');
+
+      // 2. Build CS History Archive HTML
+      const historyListHtml = allHistoryEntries
+        .map((entry) => {
+          const open = unlockedSet.has(entry.id);
+          const isNew = highlightSet.has(entry.id);
+          if (!open) {
+            return `
+              <div class="codex-entry locked">
+                <div class="codex-entry-head">
+                  <span class="codex-act">${esc(entry.act)}</span>
+                  <span class="codex-title">🔒 未解読アーカイブ</span>
+                </div>
+                <p class="dim">対応する回路を自力で組み上げると、篝博士の解説ログが解放されます。</p>
+              </div>
+            `;
+          }
+          return `
+            <div class="codex-entry ${isNew ? 'codex-new' : ''}" data-codex-id="${esc(entry.id)}">
+              <div class="codex-entry-head">
+                <span class="codex-act">${esc(entry.act)} · ${esc(entry.year)}${isNew ? ' <span class="codex-new-badge">NEW!</span>' : ''}</span>
+                <span class="codex-title">${esc(entry.term)}</span>
+              </div>
+              <div class="codex-subtitle">${esc(entry.subtitle)}</div>
+              ${entry.body.map((p) => `<p>${esc(p)}</p>`).join('')}
             </div>
-            <div class="codex-subtitle">${esc(entry.subtitle)}</div>
-            ${entry.body.map((p) => `<p>${esc(p)}</p>`).join('')}
-          </div>
-        `;
-      })
-      .join('');
+          `;
+        })
+        .join('');
 
-    const footerHtml = onNextStage
-      ? `
-        <button class="btn btn-emerald" id="btn-codex-next">${esc(nextStageLabel)}</button>
-        ${onBackToVictory ? `<button class="btn btn-ghost" id="btn-codex-back">クリア画面へ戻る</button>` : ''}
-        <button class="btn btn-ghost" data-close-modal>閉じる</button>
-      `
-      : `<button class="btn btn-primary" data-close-modal>閉じる</button>`;
+      const prevModuleId = moduleHistory.length > 0 ? moduleHistory[moduleHistory.length - 1] : null;
+      const prevModuleTerm = prevModuleId ? getGlossaryTerm(prevModuleId) : null;
+      const prevModuleShort = prevModuleTerm ? prevModuleTerm.title.split('（')[0] : '';
 
-    this.open({
-      title: `CS歴史・用語図鑑（${unlockedCount} / ${allEntries.length}）`,
-      bodyHtml: `<div class="codex-list">${listHtml}</div>`,
-      footerHtml,
-    });
+      const bodyHtml = `
+        <div class="codex-tabs-bar">
+          <button type="button" class="codex-tab-btn ${activeTab === 'modules' ? 'active' : ''}" data-codex-tab="modules">
+            ⚡ モジュール図鑑 (${previewAll ? moduleEntries.length : unlockedModuleCount}/${moduleEntries.length})
+          </button>
+          <button type="button" class="codex-tab-btn ${activeTab === 'history' ? 'active' : ''}" data-codex-tab="history">
+            📜 CS歴史図鑑 (${unlockedHistoryCount}/${allHistoryEntries.length})
+          </button>
+        </div>
 
-    // Smoothly scroll directly to the newly unlocked entry if opened from Victory!
-    if (highlightIds.length > 0) {
-      const target = this.bodyEl.querySelector(`[data-codex-id="${highlightIds[0]}"]`);
-      if (target) {
-        requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        ${
+          activeTab === 'modules'
+            ? `
+              <div class="codex-module-toolbar">
+                <span class="codex-toolbar-note">👆 図解をタップすると入力パターンを切り替えられます</span>
+                ${
+                  unlockedModuleCount < moduleEntries.length
+                    ? `<button type="button" class="codex-preview-toggle" id="btn-codex-preview-all">
+                        ${previewAll ? '🔒 進行状況に合わせる' : '👁 未到達もすべて表示'}
+                      </button>`
+                    : ''
+                }
+              </div>
+              <div id="codex-back-bar" class="codex-back-bar ${prevModuleTerm ? '' : 'hidden'}">
+                <button type="button" id="btn-codex-history-back" class="btn btn-amber codex-history-back-btn">
+                  ◀ ひとつ前の解説へ戻る（${esc(prevModuleShort)}）
+                </button>
+              </div>
+              <div class="codex-list">${moduleCardsHtml}</div>
+            `
+            : `<div class="codex-list">${historyListHtml}</div>`
+        }
+      `;
+
+      const footerHtml = onNextStage
+        ? `
+          <button class="btn btn-emerald" id="btn-codex-next">${esc(nextStageLabel)}</button>
+          ${onBackToVictory ? `<button class="btn btn-ghost" id="btn-codex-back">クリア画面へ戻る</button>` : ''}
+          <button class="btn btn-ghost" data-close-modal>閉じる</button>
+        `
+        : `<button class="btn btn-primary" data-close-modal>閉じる</button>`;
+
+      this.open({
+        title: `📖 アーク7 技術・歴史図鑑`,
+        bodyHtml,
+        footerHtml,
+      });
+
+      // Mount live interactive canvases when on the Modules tab!
+      if (activeTab === 'modules') {
+        this.diagramGroup.mountAll(this.bodyEl);
       }
-    }
 
-    this.footerEl.querySelector('#btn-codex-next')?.addEventListener('click', () => {
-      this.close();
-      onNextStage?.();
-    });
-    this.footerEl.querySelector('#btn-codex-back')?.addEventListener('click', () => {
-      onBackToVictory?.();
-    });
-    this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
+      // Bind tab switching
+      this.bodyEl.querySelectorAll('[data-codex-tab]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const nextTab = btn.dataset.codexTab;
+          if (!nextTab || nextTab === activeTab) return;
+          sound.playSwitch(true);
+          activeTab = nextTab;
+          renderModalContent();
+        });
+      });
+
+      // Bind preview-all toggle
+      this.bodyEl.querySelector('#btn-codex-preview-all')?.addEventListener('click', () => {
+        sound.playSwitch(true);
+        previewAll = !previewAll;
+        renderModalContent();
+      });
+
+      // Bind "◀ ひとつ前の解説へ戻る" button
+      this.bodyEl.querySelector('#btn-codex-history-back')?.addEventListener('click', () => {
+        if (moduleHistory.length === 0) return;
+        sound.playSwitch(false);
+        const targetId = moduleHistory.pop();
+        renderModalContent(targetId);
+      });
+
+      // Bind related module/term jump chips
+      this.bodyEl.querySelectorAll('[data-jump-term]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.dataset.jumpTerm;
+          const fromId = btn.dataset.fromModule;
+          if (!targetId) return;
+          sound.playSwitch(true);
+
+          if (MODULE_ENCYCLOPEDIA_IDS.includes(targetId)) {
+            if (fromId && fromId !== targetId) {
+              moduleHistory.push(fromId);
+            }
+            const targetTerm = getGlossaryTerm(targetId);
+            if (targetTerm && !isModuleUnlocked(targetTerm)) {
+              previewAll = true;
+            }
+            renderModalContent(targetId);
+          } else {
+            // General glossary term (e.g., 静電気, アポロ11号, シャノン) -> open popover on top!
+            glossaryPopover.open(targetId);
+          }
+        });
+      });
+
+      // Bind "自分の設計回路を見る" buttons
+      this.bodyEl.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const chipId = btn.dataset.inspectChip;
+          if (!chipId) return;
+          sound.playSwitch(true);
+          this.openChipInspector(chipId, customChips, {
+            onBack: () => {
+              this.openCodex(saveOrUnlockedIds, {
+                highlightIds,
+                initialTab: 'modules',
+                showAllModules: previewAll,
+                onNextStage,
+                nextStageLabel,
+                onBackToVictory,
+              });
+            },
+          });
+        });
+      });
+
+      // Scroll to target module card (with golden highlight flash) or newly unlocked CS history card
+      if (activeTab === 'modules' && scrollTargetModuleId) {
+        const card = this.bodyEl.querySelector(`[data-module-id="${scrollTargetModuleId}"]`);
+        if (card) {
+          card.classList.add('codex-jump-highlight');
+          requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+      } else if (activeTab === 'history' && highlightIds.length > 0) {
+        const target = this.bodyEl.querySelector(`[data-codex-id="${highlightIds[0]}"]`);
+        if (target) {
+          requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+      }
+
+      this.footerEl.querySelector('#btn-codex-next')?.addEventListener('click', () => {
+        this.close();
+        onNextStage?.();
+      });
+      this.footerEl.querySelector('#btn-codex-back')?.addEventListener('click', () => {
+        onBackToVictory?.();
+      });
+      this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
+    };
+
+    renderModalContent();
   }
 
   // ===========================================================================
@@ -572,7 +843,7 @@ export class ModalManager {
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
   }
 
-  openChipInspector(chipType, customChips) {
+  openChipInspector(chipType, customChips, { onBack = null } = {}) {
     const def = getChipDef(chipType, customChips);
     if (!def) return;
 
@@ -610,9 +881,16 @@ export class ModalManager {
         </div>
         ${schematicHtml}
       `,
-      footerHtml: `<button class="btn btn-primary" data-close-modal>閉じる</button>`,
+      footerHtml: `
+        ${onBack ? `<button class="btn btn-amber" id="btn-inspector-back">◀ モジュール図鑑へ戻る</button>` : ''}
+        <button class="btn btn-primary" data-close-modal>閉じる</button>
+      `,
     });
 
+    this.footerEl.querySelector('#btn-inspector-back')?.addEventListener('click', () => {
+      sound.playSwitch(false);
+      onBack?.();
+    });
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
   }
 

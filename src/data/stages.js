@@ -1271,6 +1271,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の回路メモ：4ビット・データバス（動く図解）',
+          title: '🚌 4本の信号線を「束（バス）」にして一括切替！',
+          anim: 'data_bus_4bit',
+          rule: 'MUX を4個並べて共通の SEL を配るだけ！ SEL=0 で4桁の数 A、SEL=1 で B が丸ごと通るぞ！',
+          accent: '#6ec3ff',
+        },
         text: '1本ずつ切り替えるのはもう卒業だ。コンピュータは複数の線を「束」にして数字を丸ごと運ぶ——これを【バス（Bus）】と呼ぶんだよ。',
       },
       {
@@ -1543,6 +1550,13 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
+        visualCard: {
+          tag: 'ハコの回路図解：ロック付き1ビット金庫（動く図解）',
+          title: '🔐 WE=1 で書き込み、WE=0 で外乱を完全遮断！',
+          anim: 'd_latch_vault',
+          rule: 'AND の門番を2個並べて SR_LAT の前に置く！ WE=0 なら D が暴れても記憶 Q はビクともしないぞ！',
+          accent: '#c89bff',
+        },
         text: '『WE=0 なら SRラッチに S=0, R=0 を渡せば完全ロックだ。WE=1 なら D=1 で S=1、D=0 で R=1 になるよう AND の門番をつけろ』',
       },
     ],
@@ -1712,6 +1726,13 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
+        visualCard: {
+          tag: 'ハコの回路図解：4ビット作業机レジスタ（動く図解）',
+          title: '🗂 LOAD=0 で自分のQを循環保持、LOAD=1 で新規保存！',
+          anim: 'reg_4bit',
+          rule: 'D_FF×4 の出力 Q を MUX_4B の A側へ戻し、外部入力 D を B側へ！ SEL に LOAD をつなげば完成だ！',
+          accent: '#c89bff',
+        },
         text: '『ここで ACT III の自作チップ MUX_4B（またはMUX×4）が火を吹くぞ。LOAD=0なら自分の出力Qを自分へ戻し、LOAD=1なら新しいDを4個の D_FF へ流せ』',
       },
     ],

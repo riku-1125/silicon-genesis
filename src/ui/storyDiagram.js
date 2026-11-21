@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=17';
+import { sound } from '../audio/sound.js?v=18';
 
 const W = 340;
 const H = 126;
@@ -109,6 +109,9 @@ export class StoryDiagramPlayer {
       case 'mosfet_bridge':
         this._drawMosfet(ctx);
         break;
+      case 'short_spark':
+        this._drawShortSpark(ctx);
+        break;
       case 'pullup_drain':
         this._drawPullup(ctx);
         break;
@@ -139,14 +142,23 @@ export class StoryDiagramPlayer {
       case 'mux_rail':
         this._drawMuxRail(ctx);
         break;
+      case 'data_bus_4bit':
+        this._drawDataBus4Bit(ctx);
+        break;
       case 'decoder_2to4':
         this._drawDecoder(ctx);
         break;
       case 'sr_latch_loop':
         this._drawSrLatch(ctx);
         break;
+      case 'd_latch_vault':
+        this._drawDLatchVault(ctx);
+        break;
       case 'dff_airlock':
         this._drawDffAirlock(ctx);
+        break;
+      case 'reg_4bit':
+        this._drawReg4Bit(ctx);
         break;
       case 'alu_twos_comp':
         this._drawAluTwosComp(ctx);
@@ -969,5 +981,236 @@ export class StoryDiagramPlayer {
     this._pill(ctx, 128, 74, 96, 18, `命令: ${p.cmd}`, true, '#ffd166');
 
     this._caption(ctx, p.msg, this.stepIdx, 3, '#ffbe76');
+  }
+
+  // SHORT CIRCUIT vs RESISTOR SAFE DRAIN
+  _drawShortSpark(ctx) {
+    const safe = this.stepIdx % 2 === 1;
+    this._pill(ctx, 12, 36, 72, 24, '🔋 でんち 5V', true, '#ffd166');
+    this._wire(ctx, [[84, 48], [116, 48]], true, safe ? '#ffd166' : '#ff5c5c');
+
+    this._chip(
+      ctx,
+      116,
+      30,
+      96,
+      36,
+      safe ? 'ていこう（細道）' : 'ただの太い導線',
+      safe ? '電流を制限✔' : 'ブレーキ無し!',
+      safe ? '#7cd4f5' : '#ff5c5c',
+      true
+    );
+
+    this._wire(ctx, [[212, 48], [254, 48]], true, safe ? '#7cd4f5' : '#ff5c5c');
+    this._pill(ctx, 254, 36, 74, 24, '⏚ 地面 0V', true, safe ? '#52e3b6' : '#ff5c5c');
+
+    if (!safe) {
+      // Animated short-circuit sparks!
+      const cx = 164;
+      const cy = 48;
+      ctx.save();
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2 + this.time * 10;
+        const r1 = 16;
+        const r2 = 25 + Math.sin(this.time * 24 + i) * 5;
+        ctx.strokeStyle = i % 2 === 0 ? '#ff5252' : '#ffd166';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
+        ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    this._caption(
+      ctx,
+      safe
+        ? '⭕ 抵抗を挟む ▶ 電流が適度に絞られ、火花が出ず安全！'
+        : '💥 電池と地面を直結 ▶ 大電流が暴走してショート焼損！',
+      this.stepIdx,
+      2,
+      safe ? '#52e3b6' : '#ff6b6b'
+    );
+  }
+
+  // 09: 4-BIT DATA BUS (MUX_4B)
+  _drawDataBus4Bit(ctx) {
+    const sel = this.stepIdx % 2;
+    this._pill(ctx, 10, 14, 86, 24, 'バスA: 0101 (5)', sel === 0, '#52e3b6');
+    this._pill(ctx, 10, 62, 86, 24, 'バスB: 1100 (12)', sel === 1, '#6ec3ff');
+
+    // 4 parallel bus traces from A and B
+    for (let i = 0; i < 4; i++) {
+      const dy = (i - 1.5) * 4;
+      this._wire(ctx, [[96, 26 + dy], [136, 36 + dy]], sel === 0, '#52e3b6');
+      this._wire(ctx, [[96, 74 + dy], [136, 58 + dy]], sel === 1, '#6ec3ff');
+    }
+
+    this._chip(ctx, 136, 22, 82, 52, 'MUX_4B', `4本一括 SEL=${sel}`, sel ? '#6ec3ff' : '#52e3b6', true);
+
+    for (let i = 0; i < 4; i++) {
+      const dy = (i - 1.5) * 5;
+      this._wire(ctx, [[218, 48 + dy], [250, 48 + dy]], true, sel ? '#6ec3ff' : '#52e3b6');
+    }
+
+    this._pill(
+      ctx,
+      250,
+      34,
+      80,
+      28,
+      sel === 0 ? 'Y = 0101 (5)' : 'Y = 1100 (12)',
+      true,
+      sel ? '#6ec3ff' : '#52e3b6'
+    );
+
+    this._caption(
+      ctx,
+      sel === 0
+        ? 'SEL=0 ▶ 4本の束（バスA＝5）を丸ごと一斉転送！'
+        : 'SEL=1 ▶ 4本の束（バスB＝12）へ丸ごと一斉切替！',
+      this.stepIdx,
+      2,
+      sel ? '#6ec3ff' : '#52e3b6'
+    );
+  }
+
+  // 12: D-LATCH 1-BIT MEMORY VAULT
+  _drawDLatchVault(ctx) {
+    const phases = [
+      { d: 1, we: 1, q: 1, msg: '① WE=1（保存カギ開）▶ D=1 を金庫へ書き込み Q=1！' },
+      { d: 0, we: 0, q: 1, msg: '② WE=0（ロック中！）▶ 外のDが0に変わっても Q=1 を死守！' },
+      { d: 0, we: 1, q: 0, msg: '③ WE=1（保存カギ開）▶ 新しい D=0 で金庫を Q=0 に上書き！' },
+    ];
+    const p = phases[this.stepIdx % 3];
+
+    this._pill(ctx, 10, 18, 54, 22, `D = ${p.d}`, p.d === 1, '#ffd166');
+    this._pill(ctx, 10, 62, 62, 22, `WE = ${p.we}`, p.we === 1, '#52e3b6');
+
+    this._wire(ctx, [[64, 29], [102, 29]], p.d === 1, '#ffd166');
+    this._wire(ctx, [[72, 73], [102, 54]], p.we === 1, '#52e3b6');
+
+    this._chip(
+      ctx,
+      102,
+      18,
+      72,
+      46,
+      'AND門番',
+      p.we ? '🔓 通過OK' : '🔒 遮断中',
+      p.we ? '#52e3b6' : '#7c8fa3',
+      p.we === 1
+    );
+
+    this._wire(ctx, [[174, 41], [198, 41]], p.we === 1, '#52e3b6');
+    this._chip(ctx, 198, 18, 72, 46, 'SR_LAT', `金庫の中:${p.q}`, '#c89bff', p.q === 1);
+    this._wire(ctx, [[270, 41], [286, 41]], p.q === 1, '#c89bff');
+    this._pill(ctx, 286, 29, 46, 24, `Q=${p.q}`, p.q === 1, '#c89bff');
+
+    this._caption(ctx, p.msg, this.stepIdx, 3, p.we ? '#52e3b6' : '#c89bff');
+  }
+
+  // 14: 4-BIT REGISTER (MUX_4B + D_FF×4)
+  _drawReg4Bit(ctx) {
+    const phases = [
+      { d: 9, load: 1, q: 9, msg: '① LOAD=1, CLK↑ ▶ 新しい4桁「9 (1001)」を作業机へ保存！' },
+      { d: 3, load: 0, q: 9, msg: '② LOAD=0, CLK↑ ▶ 自分のQ=9を自分へ戻して「9」をキープ！' },
+      { d: 14, load: 1, q: 14, msg: '③ LOAD=1, CLK↑ ▶ 新しい4桁「14 (1110)」へ書き換え！' },
+    ];
+    const p = phases[this.stepIdx % 3];
+
+    this._pill(ctx, 8, 22, 56, 22, `入力D=${p.d}`, p.load === 1, '#ffd166');
+    this._pill(ctx, 8, 56, 62, 22, `LOAD=${p.load}`, p.load === 1, '#52e3b6');
+
+    this._wire(ctx, [[64, 33], [98, 33]], p.load === 1, '#ffd166');
+    this._wire(ctx, [[70, 67], [132, 67], [132, 58]], p.load === 1, '#52e3b6');
+
+    this._chip(ctx, 98, 18, 68, 40, 'MUX_4B', p.load ? '新規D選択' : '保持Q選択', '#6ec3ff', true);
+    this._wire(ctx, [[166, 38], [192, 38]], true, '#6ec3ff');
+    this._chip(ctx, 192, 18, 72, 40, 'D_FF×4', `記憶Q = ${p.q}`, '#c89bff', true);
+
+    // Feedback wire from D_FF back to MUX_4B when holding!
+    this._wire(ctx, [[264, 38], [282, 38]], true, '#c89bff');
+    this._wire(ctx, [[272, 38], [272, 86], [84, 86], [84, 46], [98, 46]], p.load === 0, '#c89bff');
+    this._pill(ctx, 282, 26, 50, 24, `Q=${p.q}`, true, '#c89bff');
+
+    this._caption(ctx, p.msg, this.stepIdx, 3, p.load ? '#52e3b6' : '#c89bff');
+  }
+}
+
+/**
+ * Multi-canvas coordinator for the Module Encyclopedia modal:
+ * Drives all visible `<canvas data-anim="...">` elements inside a scroll container
+ * using a SINGLE shared requestAnimationFrame loop for zero mobile battery/GPU waste.
+ */
+export class StoryDiagramGroup {
+  constructor() {
+    this.items = [];
+    this._raf = null;
+    this._lastTs = 0;
+  }
+
+  mountAll(containerEl) {
+    this.unmountAll();
+    if (!containerEl) return;
+    const canvases = containerEl.querySelectorAll('canvas[data-anim]');
+    canvases.forEach((canvas) => {
+      const kind = canvas.dataset.anim;
+      if (!kind) return;
+      const player = new StoryDiagramPlayer();
+      player.canvas = canvas;
+      player.ctx = canvas.getContext('2d');
+      player.kind = kind;
+      player._onClick = (e) => {
+        e.stopPropagation();
+        player.stepIdx++;
+        player.stepTimer = 0;
+        sound.playSwitch(true);
+        player._render();
+      };
+      canvas.addEventListener('click', player._onClick);
+      player._render();
+      this.items.push(player);
+    });
+
+    if (this.items.length === 0) return;
+    this._lastTs = performance.now();
+    const loop = (now) => {
+      const dt = Math.min(0.05, Math.max(0, (now - this._lastTs) / 1000));
+      this._lastTs = now;
+      const vh = window.innerHeight || 844;
+      for (const p of this.items) {
+        if (!p.canvas) continue;
+        const r = p.canvas.getBoundingClientRect();
+        // Only tick & repaint canvases currently visible on screen
+        if (r.width > 0 && r.bottom >= -40 && r.top <= vh + 40) {
+          p.time += dt;
+          p.stepTimer += dt;
+          if (p.stepTimer >= STEP_PERIOD_SEC) {
+            p.stepTimer = 0;
+            p.stepIdx++;
+          }
+          p._render();
+        }
+      }
+      this._raf = requestAnimationFrame(loop);
+    };
+    this._raf = requestAnimationFrame(loop);
+  }
+
+  unmountAll() {
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
+    for (const p of this.items) {
+      if (p.canvas && p._onClick) {
+        p.canvas.removeEventListener('click', p._onClick);
+      }
+      p.canvas = null;
+      p.ctx = null;
+    }
+    this.items = [];
   }
 }

@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STAGES, getStageById } from '../src/data/stages.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
-import { GLOSSARY_TERMS, tokenizeGlossaryText, getGlossaryTerm } from '../src/data/glossary.js';
+import {
+  GLOSSARY_TERMS,
+  MODULE_ENCYCLOPEDIA_IDS,
+  tokenizeGlossaryText,
+  getGlossaryTerm,
+} from '../src/data/glossary.js';
 import { loadSaveData } from '../src/state/storage.js';
 import { createEmptyCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
@@ -623,9 +628,22 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
     }
   }
   assert.ok(totalTermsHighlighted >= 60, `Expected rich glossary coverage, got ${totalTermsHighlighted}`);
-  assert.equal(animKeys.size, 17, `Expected 17 distinct live story diagrams, got ${animKeys.size}`);
+  assert.equal(animKeys.size, 20, `Expected 20 distinct live story diagrams across all 20 stages, got ${animKeys.size}`);
 
-  // 4. Every related term link resolves cleanly
+  // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 21);
+  for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
+    const entry = getGlossaryTerm(modId);
+    assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
+    assert.ok(entry.anim, `Module encyclopedia entry '${modId}' is missing live diagram 'anim'`);
+  }
+
+  // 5. excludeTermId prevents self-linking inside a term's own explanation
+  const selfExcluded = tokenizeGlossaryText('NANDの後ろにNOTをつないでANDゲートを作る', 'and_gate');
+  const linkedIds = selfExcluded.filter((t) => t.type === 'term').map((t) => t.termId);
+  assert.deepEqual(linkedIds, ['nand', 'not_gate']);
+
+  // 6. Every related term link resolves cleanly
   for (const term of Object.values(GLOSSARY_TERMS)) {
     for (const relId of term.related || []) {
       assert.ok(getGlossaryTerm(relId), `Missing related glossary term '${relId}' in '${term.id}'`);
