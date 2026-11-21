@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg" />
   <link rel="apple-touch-icon" href="./assets/icon.svg" />
-  <link rel="stylesheet" href="./styles/main.css?v=16" />
+  <link rel="stylesheet" href="./styles/main.css?v=17" />
 </head>
 <body>
   <div id="app">
@@ -159,6 +159,7 @@
           <div id="pro-choices" class="pro-choices hidden"></div>
           <div class="pro-footer">
             <button id="btn-pro-prev" class="st-prev-btn" type="button" disabled>◀ 戻る</button>
+            <span id="pro-term-hint" class="term-hint-inline hidden">💡 下線タップで解説</span>
             <button id="btn-pro-next" class="st-next-btn" type="button">次へ ▶</button>
           </div>
         </div>
@@ -216,9 +217,33 @@
     </div>
   </div>
 
+  <!-- TAPPABLE STORY GLOSSARY POPOVER (ABOVE PROLOGUE & STORY THEATER) -->
+  <div id="glossary-popover" class="glossary-popover hidden" role="dialog" aria-modal="true" aria-label="専門用語解説">
+    <div class="gp-card">
+      <div class="gp-header">
+        <span id="gp-category" class="gp-category">📖 用語解説</span>
+        <button id="gp-close" class="gp-close" type="button" aria-label="閉じる">✕</button>
+      </div>
+      <div id="gp-title" class="gp-title"></div>
+      <div id="gp-reading" class="gp-reading"></div>
+      <p id="gp-summary" class="gp-summary"></p>
+      <div id="gp-analogy-wrap" class="gp-analogy-wrap hidden">
+        <div class="gp-analogy-lbl">💡 たとえるなら</div>
+        <div id="gp-analogy" class="gp-analogy"></div>
+      </div>
+      <div id="gp-related-wrap" class="gp-related-wrap hidden">
+        <div class="gp-related-lbl">関連する用語（タップで開く）</div>
+        <div id="gp-related-list" class="gp-related-list"></div>
+      </div>
+      <div class="gp-footer">
+        <button id="gp-done" class="btn btn-primary gp-done-btn" type="button">わかった（物語へ戻る）</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="./src/main.js?v=16"></script>
+  <script type="module" src="./src/main.js?v=17"></script>
 </body>
 </html>

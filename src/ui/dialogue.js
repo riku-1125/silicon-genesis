@@ -8,7 +8,14 @@
  */
 
 import { CHARACTERS, SCENES } from '../data/characters.js';
-import { sound } from '../audio/sound.js?v=16';
+import { sound } from '../audio/sound.js?v=17';
+import {
+  mountRichText,
+  updateRichTextProgress,
+  bindGlossaryDelegation,
+  glossaryPopover,
+} from './glossaryPopover.js?v=17';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=17';
 
 export class DialogueController {
   constructor(stripEl, theaterEl) {
@@ -33,6 +40,7 @@ export class DialogueController {
     this.stRole = theaterEl.querySelector('#st-role');
     this.stTextScroll = theaterEl.querySelector('.st-text-scroll');
     this.stText = theaterEl.querySelector('#st-text');
+    this.stTapHint = theaterEl.querySelector('.st-tap-hint');
     this.btnPrev = theaterEl.querySelector('#btn-st-prev');
     this.btnNext = theaterEl.querySelector('#btn-st-next');
 
@@ -41,10 +49,12 @@ export class DialogueController {
     this.fullText = '';
     this.charIdx = 0;
     this.typing = false;
+    this._richNodes = [];
     this._timer = null;
     this.onComplete = null;
     this.idleGoal = '';
     this.endBtnLabel = '作業を始める ▶';
+    this.diagramPlayer = new StoryDiagramPlayer();
 
     // Reopen stage intro story from mission strip
     const reopen = (e) => {
@@ -75,10 +85,13 @@ export class DialogueController {
       this._downY = e.clientY;
     });
     this.theater.addEventListener('click', (e) => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button, .vc-live-canvas')) return;
       if (Math.hypot(e.clientX - this._downX, e.clientY - this._downY) > 12) return;
       this.advance();
     });
+
+    bindGlossaryDelegation(this.stText, () => this._finishTypingNow());
+    bindGlossaryDelegation(this.stVisualCard, () => this._finishTypingNow());
   }
 
   playLines(
@@ -136,6 +149,8 @@ export class DialogueController {
 
   close() {
     this._stopTimer();
+    this.diagramPlayer.unmount();
+    glossaryPopover.close();
     this.theater.classList.add('hidden');
   }
 
@@ -152,7 +167,9 @@ export class DialogueController {
     this.theater.style.setProperty('--pro-accent', ch.color);
     this.btnPrev.disabled = idx <= 0;
 
-    // Optional illustrated guide card OR automatic Incident Trouble Summary Card!
+    // Optional illustrated / live-animated guide card OR automatic Incident Trouble Summary Card!
+    this.diagramPlayer.unmount();
+    let cardHasTerms = false;
     if (this.stVisualCard) {
       const isLastLine = idx === this.lines.length - 1;
       if (line.visualCard) {
@@ -162,9 +179,24 @@ export class DialogueController {
         this.stVisualCard.innerHTML = `
           <div class="vc-tag">${vc.tag || '博士のメモ'}</div>
           <div class="vc-title">${vc.title || ''}</div>
-          ${vc.diagram ? `<div class="vc-diagram">${vc.diagram}</div>` : ''}
-          <div class="vc-rule">${vc.rule || ''}</div>
+          ${
+            vc.anim
+              ? `<div class="vc-live-wrap"><canvas class="vc-live-canvas" aria-label="${vc.title || '動く論理図解'}"></canvas></div>`
+              : vc.diagram
+                ? `<div class="vc-diagram">${vc.diagram}</div>`
+                : ''
+          }
+          <div class="vc-rule"></div>
         `;
+        const ruleEl = this.stVisualCard.querySelector('.vc-rule');
+        if (ruleEl && vc.rule) {
+          const mountedRule = mountRichText(ruleEl, vc.rule, { instant: true });
+          cardHasTerms = mountedRule.hasTerms;
+        }
+        if (vc.anim) {
+          const liveCanvas = this.stVisualCard.querySelector('.vc-live-canvas');
+          if (liveCanvas) this.diagramPlayer.mount(liveCanvas, vc.anim);
+        }
       } else if (this.incidentBrief && (line.showIncident || isLastLine)) {
         const ib = this.incidentBrief;
         this.stVisualCard.className = 'st-visual-card st-incident-card';
@@ -186,28 +218,41 @@ export class DialogueController {
     this.btnNext.textContent = idx < this.lines.length - 1 ? '次へ ▶' : this.endBtnLabel;
 
     this._stopTimer();
+    const mounted = mountRichText(this.stText, this.fullText, { instant });
+    this._richNodes = mounted.nodes;
+    if (this.stTapHint) {
+      const anyTerms = mounted.hasTerms || cardHasTerms;
+      this.stTapHint.textContent = anyTerms ? '💡 下線タップで用語解説' : 'タップでも進む';
+      this.stTapHint.classList.toggle('term-hint-active', anyTerms);
+    }
+
     if (instant) {
-      this.stText.textContent = this.fullText;
+      this.charIdx = this.fullText.length;
       this.typing = false;
       return;
     }
 
     this.charIdx = 0;
     this.typing = true;
-    this.stText.textContent = '';
 
     const pitch = line.speaker === 'mina' ? 560 : line.speaker === 'kagari' ? 420 : 320;
     this._timer = setInterval(() => {
       this.charIdx += 2;
       if (this.charIdx >= this.fullText.length) {
-        this.stText.textContent = this.fullText;
-        this.typing = false;
-        this._stopTimer();
+        this._finishTypingNow();
       } else {
-        this.stText.textContent = this.fullText.slice(0, this.charIdx);
+        updateRichTextProgress(this._richNodes, this.charIdx);
         if (this.charIdx % 6 === 0) sound.playBlip(pitch);
       }
     }, 22);
+  }
+
+  _finishTypingNow() {
+    if (!this.typing) return;
+    this._stopTimer();
+    this.charIdx = this.fullText.length;
+    updateRichTextProgress(this._richNodes, this.charIdx);
+    this.typing = false;
   }
 
   goBack() {
@@ -223,9 +268,7 @@ export class DialogueController {
       return;
     }
     if (this.typing) {
-      this._stopTimer();
-      this.stText.textContent = this.fullText;
-      this.typing = false;
+      this._finishTypingNow();
       return;
     }
     sound.playSwitch(true);
@@ -239,6 +282,8 @@ export class DialogueController {
 
   _finishLines() {
     this._stopTimer();
+    this.diagramPlayer.unmount();
+    glossaryPopover.close();
     this.lines = [];
     this.typing = false;
     this.theater.classList.add('hidden');

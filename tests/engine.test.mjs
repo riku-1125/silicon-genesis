@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STAGES, getStageById } from '../src/data/stages.js';
+import { PROLOGUE_STEPS } from '../src/data/prologue.js';
+import { GLOSSARY_TERMS, tokenizeGlossaryText, getGlossaryTerm } from '../src/data/glossary.js';
 import { loadSaveData } from '../src/state/storage.js';
 import { createEmptyCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
@@ -586,5 +588,47 @@ test('Auto-migrates legacy pre-Stage-00 save to Stage 00 with empty seenTheaterS
     assert.deepEqual(save.seenTheaterStages, []);
   } finally {
     globalThis.localStorage = prevStorage;
+  }
+});
+
+test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip preservation & valid related links', () => {
+  // 1. No false positives inside English words like WORLD or AETHER-IX
+  const noFalsePos = tokenizeGlossaryText('送信電文："HELLO, WORLD." AETHER-IX は起動した。');
+  assert.equal(noFalsePos.some((t) => t.type === 'term'), false);
+
+  // 2. Longest-match compound terms
+  const compound = tokenizeGlossaryText('P型シリコンとMOSFETトランジスタとNANDゲートと電磁パルス（EMP）');
+  const termIds = compound.filter((t) => t.type === 'term').map((t) => [t.text, t.termId]);
+  assert.deepEqual(termIds, [
+    ['P型シリコン', 'p_silicon'],
+    ['MOSFETトランジスタ', 'transistor'],
+    ['NANDゲート', 'nand'],
+    ['電磁パルス（EMP）', 'emp'],
+  ]);
+
+  // 3. Round-trip preservation across EVERY dialogue line in Prologue & all 20 Stages
+  let totalTermsHighlighted = 0;
+  for (const step of PROLOGUE_STEPS) {
+    const toks = tokenizeGlossaryText(step.text);
+    assert.equal(toks.map((t) => t.text).join(''), step.text);
+    totalTermsHighlighted += toks.filter((t) => t.type === 'term').length;
+  }
+  const animKeys = new Set();
+  for (const st of STAGES) {
+    for (const line of [...(st.introDialogue || []), ...(st.outroDialogue || [])]) {
+      const toks = tokenizeGlossaryText(line.text);
+      assert.equal(toks.map((t) => t.text).join(''), line.text);
+      totalTermsHighlighted += toks.filter((t) => t.type === 'term').length;
+      if (line.visualCard?.anim) animKeys.add(line.visualCard.anim);
+    }
+  }
+  assert.ok(totalTermsHighlighted >= 60, `Expected rich glossary coverage, got ${totalTermsHighlighted}`);
+  assert.equal(animKeys.size, 17, `Expected 17 distinct live story diagrams, got ${animKeys.size}`);
+
+  // 4. Every related term link resolves cleanly
+  for (const term of Object.values(GLOSSARY_TERMS)) {
+    for (const relId of term.related || []) {
+      assert.ok(getGlossaryTerm(relId), `Missing related glossary term '${relId}' in '${term.id}'`);
+    }
   }
 });

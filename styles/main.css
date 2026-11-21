@@ -2268,3 +2268,198 @@ button:disabled {
 .st-prev-btn:disabled {
   opacity: 0.32;
 }
+
+/* ============================================================================
+   TAPPABLE STORY GLOSSARY LINKS, POPOVER & LIVE ANIMATED DIAGRAMS (v17)
+   ============================================================================ */
+.term-link {
+  display: inline;
+  padding: 0 3px 1px;
+  margin: 0 1px;
+  font: inherit;
+  font-weight: 800;
+  color: #7ee8ff;
+  background: rgba(110, 195, 255, 0.12);
+  border: none;
+  border-bottom: 1.5px dotted #6fd6ff;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: inherit;
+  vertical-align: baseline;
+  text-align: left;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.term-link:hover,
+.term-link:active {
+  background: rgba(110, 195, 255, 0.28);
+  color: #ffffff;
+  border-bottom-color: #ffd166;
+}
+.term-link.term-hidden {
+  display: none;
+}
+
+.term-hint-inline {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7ee8ff;
+  text-align: center;
+  line-height: 1.3;
+}
+.st-tap-hint.term-hint-active {
+  color: #7ee8ff;
+  font-weight: 700;
+}
+
+/* Live Animated Diagram Canvas inside Story Theater Visual Card */
+.vc-live-wrap {
+  margin-bottom: 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  background: #070e16;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.55);
+}
+.vc-live-canvas {
+  display: block;
+  width: 100%;
+  height: 122px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+@media (max-height: 700px) {
+  .vc-live-canvas {
+    height: 98px;
+  }
+}
+
+/* Glossary Popover Overlay (above Prologue 150 & Modals 200) */
+.glossary-popover {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  background: rgba(4, 8, 13, 0.74);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: gpFadeIn 0.16s ease-out;
+}
+@keyframes gpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gp-card {
+  width: 100%;
+  max-width: 440px;
+  max-height: 84dvh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #162230 0%, #0f1822 100%);
+  border: 2px solid #6fd6ff;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.85), 0 0 26px rgba(111, 214, 255, 0.18);
+  animation: gpPopUp 0.18s ease-out;
+}
+@keyframes gpPopUp {
+  from { transform: translateY(10px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.gp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.gp-category {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: #7ee8ff;
+  letter-spacing: 0.05em;
+}
+.gp-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #cfe0f0;
+  font-size: 14px;
+  font-weight: 800;
+}
+.gp-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.35;
+}
+.gp-reading {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: #93abc2;
+  margin-top: 2px;
+}
+.gp-summary {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  line-height: 1.78;
+  color: #edf4fc;
+}
+.gp-analogy-wrap {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(255, 184, 77, 0.11);
+  border: 1px solid rgba(255, 184, 77, 0.4);
+}
+.gp-analogy-lbl {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--amber-bright);
+  margin-bottom: 3px;
+}
+.gp-analogy {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #fff3da;
+}
+.gp-related-wrap {
+  margin-top: 12px;
+}
+.gp-related-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8fa6bc;
+  margin-bottom: 6px;
+}
+.gp-related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gp-related-chip {
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #bfefff;
+  background: rgba(111, 214, 255, 0.12);
+  border: 1px solid rgba(111, 214, 255, 0.42);
+}
+.gp-related-chip:active {
+  background: rgba(111, 214, 255, 0.28);
+}
+.gp-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+.gp-done-btn {
+  width: 100%;
+  padding: 11px 16px;
+}

@@ -3,9 +3,15 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=16';
-import { STAGES } from '../data/stages.js?v=16';
-import { sound } from '../audio/sound.js?v=16';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=17';
+import { STAGES } from '../data/stages.js?v=17';
+import { sound } from '../audio/sound.js?v=17';
+import {
+  mountRichText,
+  updateRichTextProgress,
+  bindGlossaryDelegation,
+  glossaryPopover,
+} from './glossaryPopover.js?v=17';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue }) {
@@ -32,6 +38,7 @@ export class PrologueOverlay {
     this.speakerName = rootEl.querySelector('#pro-speaker');
     this.speakerRole = rootEl.querySelector('#pro-role');
     this.textEl = rootEl.querySelector('#pro-text');
+    this.termHintEl = rootEl.querySelector('#pro-term-hint');
     this.btnPrev = rootEl.querySelector('#btn-pro-prev');
     this.btnNext = rootEl.querySelector('#btn-pro-next');
     this.choicesWrap = rootEl.querySelector('#pro-choices');
@@ -41,6 +48,7 @@ export class PrologueOverlay {
     this.fullText = '';
     this.charIdx = 0;
     this.typing = false;
+    this._richNodes = [];
     this.awaitingChoice = false;
     this.pendingReply = null;
     this._timer = null;
@@ -94,6 +102,8 @@ export class PrologueOverlay {
       if (Math.hypot(e.clientX - this._downX, e.clientY - this._downY) > 12) return;
       this._advance();
     });
+
+    bindGlossaryDelegation(this.textEl, () => this._finishTypingNow());
   }
 
   showTitle(save) {
@@ -137,6 +147,7 @@ export class PrologueOverlay {
 
   hide() {
     this._stopTimer();
+    glossaryPopover.close();
     this.root.classList.add('hidden');
   }
 
@@ -211,7 +222,9 @@ export class PrologueOverlay {
     if (instant) {
       this._stopTimer();
       this.fullText = step.text;
-      this.textEl.textContent = step.text;
+      const mounted = mountRichText(this.textEl, step.text, { instant: true });
+      this._richNodes = mounted.nodes;
+      if (this.termHintEl) this.termHintEl.classList.toggle('hidden', !mounted.hasTerms);
       this.typing = false;
       this.btnNext.textContent =
         this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
@@ -245,7 +258,9 @@ export class PrologueOverlay {
     this.fullText = text;
     this.charIdx = 0;
     this.typing = true;
-    this.textEl.textContent = '';
+    const mounted = mountRichText(this.textEl, text, { instant: false });
+    this._richNodes = mounted.nodes;
+    if (this.termHintEl) this.termHintEl.classList.toggle('hidden', !mounted.hasTerms);
     this.btnNext.textContent =
       this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
     this._onTypeDone = onDone;
@@ -256,19 +271,25 @@ export class PrologueOverlay {
     this._timer = setInterval(() => {
       this.charIdx += 2;
       if (this.charIdx >= this.fullText.length) {
-        this.textEl.textContent = this.fullText;
-        this.typing = false;
-        this._stopTimer();
-        if (this._onTypeDone) {
-          const cb = this._onTypeDone;
-          this._onTypeDone = null;
-          cb();
-        }
+        this._finishTypingNow();
       } else {
-        this.textEl.textContent = this.fullText.slice(0, this.charIdx);
+        updateRichTextProgress(this._richNodes, this.charIdx);
         if (this.charIdx % 6 === 0) sound.playBlip(pitch);
       }
     }, 24);
+  }
+
+  _finishTypingNow() {
+    if (!this.typing) return;
+    this._stopTimer();
+    this.charIdx = this.fullText.length;
+    updateRichTextProgress(this._richNodes, this.charIdx);
+    this.typing = false;
+    if (this._onTypeDone) {
+      const cb = this._onTypeDone;
+      this._onTypeDone = null;
+      cb();
+    }
   }
 
   _showChoices(choices) {
@@ -312,14 +333,7 @@ export class PrologueOverlay {
 
   _advance() {
     if (this.typing) {
-      this._stopTimer();
-      this.textEl.textContent = this.fullText;
-      this.typing = false;
-      if (this._onTypeDone) {
-        const cb = this._onTypeDone;
-        this._onTypeDone = null;
-        cb();
-      }
+      this._finishTypingNow();
       return;
     }
 

@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=16';
-import { CODEX_ENTRIES } from '../data/codex.js?v=16';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=17';
+import { CODEX_ENTRIES } from '../data/codex.js?v=17';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { isStageUnlocked } from '../state/storage.js';
 

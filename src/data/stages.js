@@ -189,10 +189,10 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の物理メモ 2 / 3',
+          tag: '博士の物理メモ 2 / 3（動く図解・タップで切替）',
           title: '🧊 ガラスの壁 ＆ 🔶 金属ひねり',
-          diagram: '金属ひねり(+1) → ガラスの壁越しに電子を吸い寄せ → 橋が開通！',
-          rule: '真ん中に「ガラスの壁」、その上に「金属ひねり」を乗せる。ガラスのおかげでショートせず電子だけ引き寄せられる！',
+          anim: 'mosfet_bridge',
+          rule: '真ん中に「ガラスの壁」、その上に「金属ひねり」を乗せる。静電気で電子の橋が架かるぞ！',
           accent: '#ffd166',
         },
         text: 'そこで真ん中に薄い【ガラスの壁】を敷き、一番上に【金属ひねり】を乗せるんだ！ 金属に「1」をかけると、ガラス越しに電子が吸い寄せられて“光の橋”が架かり、左から右へ電気がドッと流れ出す！',
@@ -332,10 +332,10 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '解決の鍵：細い道（ていこう）のワザ',
+          tag: '解決の鍵：細い道のワザ（動く図解・タップで切替）',
           title: '💧 上を「細い道（ていこう）」にする！',
-          diagram: '電池 ▶ [ていこう(細)] ▶ ランプ(でぐち) ▶ [ぬけ(広)] ▶ 地面(0V)',
-          rule: '下が閉じてれば水圧が溜まって 1(5V)！ 下が開けば全部地面へ抜けて安全に 0(0V)！',
+          anim: 'pullup_drain',
+          rule: '下が閉じてれば水圧が溜まって 1(5V)！ 下が開けばショートせず地面へ抜けて安全に 0(0V)！',
           accent: '#7cd4f5',
         },
         text: 'そこで上側を電気の通りにくい細い道【ていこう】、下側を広い排水口【ぬけスイッチ】にするんだ！ 下が閉じていれば水圧が溜まって「1」、下が開けば一気に地面へ抜けて安全に「0」になるよ！',
@@ -443,9 +443,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '全体のつなぎ方イメージ',
+          tag: '全体のつなぎ方イメージ（動く図解・タップで切替）',
           title: '2個の「じゃぐち」をまっすぐ一列に！',
-          diagram: '🔋でんち ▶ 🚰じゃぐち(A) ▶ 🚰じゃぐち(B) ▶ 🕳はいすい ▶ OUT',
+          anim: 'nand_series',
           rule: 'AとBの“両方”が開いた瞬間だけ「はいすい」に電気が届いて 0 になる！',
           accent: '#52e3b6',
         },
@@ -549,9 +549,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の回路メモ：分岐のワザ',
+          tag: '博士の回路メモ：分岐のワザ（動く図解）',
           title: '🔀 同じ線を A と B 両方へ入れると？',
-          diagram: 'IN=0 ─┬─▶ A(0) / B(0) ─▶ [NAND] ─▶ 1\nIN=1 ─┴─▶ A(1) / B(1) ─▶ [NAND] ─▶ 0',
+          anim: 'not_branch',
           rule: '1本の入力ピンから2本へ分岐できる！ 同じ値を両方に入れると 0↔1 が逆転するぞ！',
           accent: '#52e3b6',
         },
@@ -638,6 +638,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の回路メモ：反転で素直に（動く図解）',
+          title: '🔄 NAND の後ろに NOT をつなぐと？',
+          anim: 'and_invert',
+          rule: '「両方1のときだけ0」を NOT でひっくり返せば、「両方1のときだけ1」になるぞ！',
+          accent: '#52e3b6',
+        },
         text: 'ふむ、今度は「両方1のときだけ 1」だね！ ちょっと前の NAND と比べてごらん。NAND は「両方1のときだけ 0、それ以外は 1」──ほら、ほしい答えとちょうど真逆じゃないかい？',
       },
       {
@@ -720,9 +727,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の回路メモ：逆転の発想',
+          tag: '博士の回路メモ：逆転の発想（動く図解）',
           title: '🔄 先に反転してから NAND へ入れると？',
-          diagram: 'A ─▶ [NOT] ──┐\n              ├─▶ [NAND] ─▶ OUT（両方0のときだけ0！）\nB ─▶ [NOT] ──┘',
+          anim: 'or_demorgan',
           rule: 'A=0, B=0 のときだけ NOT 後が「1と1」になり、NAND が 0 を返す！ それ以外は全部 1！',
           accent: '#52e3b6',
         },
@@ -815,6 +822,13 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
+        visualCard: {
+          tag: 'ハコの回路図解：ちがい検知（動く図解）',
+          title: '💡 「片方は1(OR)」かつ「両方禁止(NAND)」',
+          anim: 'xor_diff',
+          rule: 'OR の結果と NAND の結果を AND で合体すると、AとBが「ちがうときだけ 1」になるぞ！',
+          accent: '#52e3b6',
+        },
         text: '『条件を言葉にしてみろ。「どちらか片方は1（OR）」かつ「両方とも1ではない（NAND）」……おっと、喋りすぎたか』',
       },
     ],
@@ -896,9 +910,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の計算メモ：はじめての2進数',
+          tag: '博士の計算メモ：はじめての2進数（動く図解）',
           title: '🔢 0 と 1 だけで足し算するしくみ',
-          diagram: '0+0=00 ／ 0+1=01 ／ 1+0=01 ／ 1+1=10（くり上がり1・1の位0！）',
+          anim: 'half_adder',
           rule: '1の位（SUM）は「違うとき1＝XOR」、くり上がり（CARRY）は「両方1＝AND」と全く同じ！',
           accent: '#5ce0a8',
         },
@@ -987,6 +1001,13 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
+        visualCard: {
+          tag: 'ハコの回路図解：3つの足し算（動く図解）',
+          title: '🏃 H_ADD×2 ＋ OR で「くり上がり」も一緒に足す！',
+          anim: 'full_adder',
+          rule: 'まず A+B を H_ADD① で足し、その答えに CIN を H_ADD② で足す！ 2つのくり上がりは OR で合流！',
+          accent: '#5ce0a8',
+        },
         text: '『さっき自作した H_ADD（半加算器）を2個と、ORを1個使えば美しく組めるぞ。まずA+Bを足して、その答えにCINを足す──くり上がりはORでまとめろ！』',
       },
     ],
@@ -1068,9 +1089,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の計算メモ：4ビットの位取り',
+          tag: '博士の計算メモ：4ビットの位取り（動く図解）',
           title: '🪜 1・2・4・8 の位をバトンリレー！',
-          diagram: 'FA0(1の位) ─COUT→ FA1(2の位) ─COUT→ FA2(4の位) ─COUT→ FA3(8の位)',
+          anim: 'ripple_4bit',
           rule: '4個の F_ADD を上から並べ、各桁の COUT を次の桁の CIN へつなぐだけで 0〜15 同士が足せる！',
           accent: '#5ce0a8',
         },
@@ -1160,9 +1181,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の回路メモ：電気のポイント切替',
+          tag: '博士の回路メモ：電気のポイント切替（動く図解）',
           title: '🛤 SEL の値で「通る道」を選ぶ！',
-          diagram: 'SEL=0 → D0だけを通す（D1は門前払い）\nSEL=1 → D1だけを通す（D0は門前払い）',
+          anim: 'mux_rail',
           rule: 'AND を「通行止め門番」に使おう！ (D0 AND NOT SEL) と (D1 AND SEL) を OR で合流！',
           accent: '#6ec3ff',
         },
@@ -1333,6 +1354,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の回路メモ：2進数で部屋指定（動く図解）',
+          title: '🌱 2本の線（00〜11）で4部屋をピンポイント点灯！',
+          anim: 'decoder_2to4',
+          rule: 'NOT で反転した線と元の線を組み合わせ、4つの AND で「00 / 01 / 10 / 11」を1つずつキャッチ！',
+          accent: '#6ec3ff',
+        },
         text: 'もちろんさ！ 2ビットあれば 00(0)・01(1)・10(2)・11(3) の4通りを表せるからね。番号を解読して該当の1本だけ点ける【番号解読スイッチ】の出番だ！',
       },
       {
@@ -1422,9 +1450,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の記憶メモ：輪っかの魔法',
+          tag: '博士の記憶メモ：輪っかの魔法（動く図解）',
           title: '🔁 出力をお互いの入口へ「たすき掛け」に！',
-          diagram: 'nS ─▶ [NAND①] ─▶ Q ──┐（下の入口へ戻る！）\n              ↖______│\nnR ─▶ [NAND②] ─▶ QN ─┘（上の入口へ戻る！）',
+          anim: 'sr_latch_loop',
           rule: 'SとRを先にNOTで反転して、たすき掛けのNAND2個へ！ 輪の中に信号が閉じ込められ、手を離しても記憶する！',
           accent: '#c89bff',
         },
@@ -1588,9 +1616,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の同期メモ：潜水艦の二重エアロック',
+          tag: '博士の同期メモ：二重エアロック（動く図解）',
           title: '🚪 前室（CLK=0）→ 後室（CLK=1）の二段扉！',
-          diagram: 'D ─▶ [前室 D_LAT (WE=NOT CLK)] ─▶ [後室 D_LAT (WE=CLK)] ─▶ Q',
+          anim: 'dff_airlock',
           rule: 'CLK=0 で前室に待機、CLK が 0→1 に立ち上がった一瞬だけ後室 Q へ運ばれる！',
           accent: '#c89bff',
         },
@@ -1769,9 +1797,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の数学メモ：2の補数マジック',
+          tag: '博士の数学メモ：2の補数マジック（動く図解）',
           title: '✨ Bを全反転して +1 足せば「引き算」になる！',
-          diagram: 'SUB=0 → XORはそのままB通過、CIN=0 ⇒ A + B\nSUB=1 → XORでBを全反転、CIN=1 ⇒ A + (~B) + 1 = A − B！',
+          anim: 'alu_twos_comp',
           rule: 'XOR を4個＋ADD_4B を1個だけ！ SUB 線を全 XOR と ADD_4B.CIN へ同時に繋ごう！',
           accent: '#ff8a7a',
         },
@@ -1862,9 +1890,9 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士のCPUメモ：+1＆ジャンプの輪',
+          tag: '博士のCPUメモ：+1＆ジャンプの輪（動く図解）',
           title: '🏃 毎拍 +1 で進み、JMP=1 で指定番地へ飛ぶ！',
-          diagram: 'REG_4B(今の番地) ─▶ [ADD_4B (+1)] ─▶ [MUX_4B (JMPでJと切替)] ─▶ REG_4Bへ戻る！',
+          anim: 'pc_loop',
           rule: 'ADD_4B の B=アース0(0000)・CIN=でんち(1) にすると自動で +1 回路に！ REG_4B.LOAD も「でんち(1)」へ！',
           accent: '#ff8a7a',
         },
@@ -1966,9 +1994,9 @@ export const STAGES = [
       {
         speaker: 'hako',
         visualCard: {
-          tag: '最終設計図：ARK-4 CPUコア',
+          tag: '最終設計図：ARK-4 CPUコア（動く図解）',
           title: '🧠 3大自作チップをひとつの環（ループ）に結べ！',
-          diagram: 'REG_4B(ACC) ─▶ [ALU_4B (OPで加減算)] ─▶ [MUX_4B (SETでIMM代入と切替)] ─▶ REG_4B(WE/CLK)',
+          anim: 'ark4_cpu',
           rule: 'たった3チップ（ALU_4B・MUX_4B・REG_4B）の中に、君が組んだ数百個のNANDが息づいている！',
           accent: '#ffbe76',
         },
