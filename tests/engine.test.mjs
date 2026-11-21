@@ -8,6 +8,7 @@ import {
   MODULE_ENCYCLOPEDIA_IDS,
   tokenizeGlossaryText,
   getGlossaryTerm,
+  getGlossaryTermForChip,
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
@@ -703,5 +704,11 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   for (const codexId of Object.keys(CODEX_ENTRIES)) {
     const linkedMods = getModulesForCodexId(codexId);
     assert.ok(linkedMods.length > 0, `CS History Codex entry '${codexId}' has no linked modules`);
+  }
+  for (const st of STAGES) {
+    if (st.rewardChip?.id) {
+      const chipTerm = getGlossaryTermForChip(st.rewardChip.id);
+      assert.ok(chipTerm && chipTerm.anim, `Reward chip '${st.rewardChip.id}' missing glossary term or anim`);
+    }
   }
 });

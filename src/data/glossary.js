@@ -987,6 +987,35 @@ export function getGlossaryTerm(termId) {
   return GLOSSARY_TERMS[termId] || null;
 }
 
+const CHIP_TO_TERM_FALLBACK = {
+  SW: 'transistor',
+  SW_FORGED: 'transistor',
+  PULL: 'pullup',
+  PULL_FORGED: 'pullup',
+  CONST_0: 'earth',
+  CONST_1: 'pullup',
+  GND: 'earth',
+  N_SILICON: 'n_silicon',
+  P_SILICON: 'p_silicon',
+  INSULATOR: 'insulator',
+  METAL_GATE: 'transistor',
+  RESISTOR: 'pullup',
+  VCC: 'pullup',
+  DRAIN_SW: 'transistor',
+};
+
+/**
+ * Finds the glossary/module entry corresponding to a workbench chip ID or physics part ID.
+ */
+export function getGlossaryTermForChip(chipId) {
+  if (!chipId) return null;
+  for (const term of Object.values(GLOSSARY_TERMS)) {
+    if (term.chipId === chipId) return term;
+  }
+  const fallbackId = CHIP_TO_TERM_FALLBACK[chipId];
+  return fallbackId ? GLOSSARY_TERMS[fallbackId] || null : null;
+}
+
 /**
  * Returns all module terms in MODULE_ENCYCLOPEDIA_IDS that link to a given CS History codexId.
  */

@@ -4,21 +4,23 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=22';
-import { CODEX_ENTRIES } from '../data/codex.js?v=22';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=23';
+import { CODEX_ENTRIES } from '../data/codex.js?v=23';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   getGlossaryTerm,
+  getGlossaryTermForChip,
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=22';
+} from '../data/glossary.js?v=23';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
+import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=22';
-import { StoryDiagramGroup } from './storyDiagram.js?v=22';
-import { glossaryPopover } from './glossaryPopover.js?v=22';
+import { sound } from '../audio/sound.js?v=23';
+import { StoryDiagramGroup } from './storyDiagram.js?v=23';
+import { glossaryPopover } from './glossaryPopover.js?v=23';
 
 function esc(str) {
   return String(str ?? '')
@@ -42,6 +44,7 @@ export class ModalManager {
     this.footerEl = backdropEl.querySelector('#modal-footer');
     this.closeBtn = backdropEl.querySelector('#modal-close');
     this.diagramGroup = new StoryDiagramGroup();
+    this._miniSimTimer = null;
 
     this.closeBtn.addEventListener('click', () => this.close());
     this.backdrop.addEventListener('click', (e) => {
@@ -49,7 +52,15 @@ export class ModalManager {
     });
   }
 
+  _stopMiniSchematicLoop() {
+    if (this._miniSimTimer) {
+      clearInterval(this._miniSimTimer);
+      this._miniSimTimer = null;
+    }
+  }
+
   open({ title, bodyHtml, footerHtml = '' }) {
+    this._stopMiniSchematicLoop();
     this.diagramGroup.unmountAll();
     this.titleEl.textContent = title;
     this.bodyEl.innerHTML = bodyHtml;
@@ -58,6 +69,7 @@ export class ModalManager {
   }
 
   close() {
+    this._stopMiniSchematicLoop();
     this.diagramGroup.unmountAll();
     this.backdrop.classList.add('hidden');
   }
@@ -893,7 +905,7 @@ export class ModalManager {
           activeTab === 'modules'
             ? `
               <div class="codex-module-toolbar">
-                <span class="codex-toolbar-note">▾ 章とモジュールをタップで開閉（図解タップで入力切替）</span>
+                <span class="codex-toolbar-note">▾ 章とモジュールをタップで開閉（図解は自動で動きます）</span>
                 ${
                   unlockedModules.length > 1
                     ? `<button type="button" id="btn-codex-toggle-all-mods" class="codex-fold-all-btn">
@@ -1169,21 +1181,51 @@ export class ModalManager {
   }
 
   // ===========================================================================
-  // 7. CUSTOM CHIP INTERNAL SCHEMATIC INSPECTOR
+  // 7. WORKBENCH MODULE & CUSTOM CHIP INSPECTOR (LIVE DIAGRAM + LIVE INTERNAL CIRCUIT)
   // ===========================================================================
   openPhysicsPartInfo(part) {
     if (!part) return;
+    const term = getGlossaryTermForChip(part.id);
+    const animKey =
+      term?.anim ||
+      (['N_SILICON', 'P_SILICON', 'INSULATOR', 'METAL_GATE'].includes(part.id)
+        ? 'mosfet_build'
+        : ['VCC', 'RESISTOR', 'DRAIN_SW', 'GND'].includes(part.id)
+          ? 'pullup_drain'
+          : null);
+
+    const diagramHtml = animKey
+      ? `
+        <div class="inspector-func-card">
+          <div class="inspector-section-tag">⚡ この部品の働き（自動アニメーション図解）</div>
+          <div class="vc-live-wrap codex-diagram-wrap">
+            <canvas class="vc-live-canvas codex-live-canvas" data-anim="${esc(animKey)}" aria-label="${esc(part.name)} 動く図解"></canvas>
+          </div>
+        </div>
+      `
+      : '';
+
     this.open({
       title: `物理材料メモ · ${part.name}`,
       bodyHtml: `
+        ${diagramHtml}
         <div class="callout callout-amber">
           <div class="callout-title">${esc(part.name)}（${esc(part.meta)}）</div>
           <div>${esc(part.rule)}</div>
         </div>
-        <p class="spec-note">${esc(part.descJa || '')}</p>
+        <p class="spec-note">${esc(part.descJa || term?.summary || '')}</p>
+        ${
+          term?.analogy
+            ? `<div class="gp-analogy-wrap" style="margin-top:8px;">
+                <div class="gp-analogy-lbl">💡 たとえるなら</div>
+                <div class="gp-analogy">${esc(term.analogy)}</div>
+              </div>`
+            : ''
+        }
       `,
       footerHtml: `<button class="btn btn-primary" data-close-modal>閉じる</button>`,
     });
+    this.diagramGroup.mountAll(this.bodyEl);
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
   }
 
@@ -1191,22 +1233,61 @@ export class ModalManager {
     const def = getChipDef(chipType, customChips);
     if (!def) return;
 
+    const term = getGlossaryTermForChip(chipType);
+    const animKey = term?.anim || null;
     const customNandCircuit = chipType === 'NAND' ? customChips?.NAND?.circuit : null;
     const circuitToShow = customNandCircuit || def.circuit;
+
+    const functionalSectionHtml = `
+      <div class="inspector-func-card">
+        <div class="inspector-section-tag">⚡ このモジュールができること（自動で動く図解）</div>
+        ${
+          animKey
+            ? `
+              <div class="vc-live-wrap codex-diagram-wrap">
+                <canvas class="vc-live-canvas codex-live-canvas" data-anim="${esc(animKey)}" aria-label="${esc(def.name)} 動く図解"></canvas>
+              </div>
+            `
+            : ''
+        }
+        <p class="inspector-summary-text">${esc(term?.summary || def.descJa || '')}</p>
+        ${
+          term?.analogy
+            ? `
+              <div class="gp-analogy-wrap" style="margin-top:8px;">
+                <div class="gp-analogy-lbl">💡 たとえるなら</div>
+                <div class="gp-analogy">${esc(term.analogy)}</div>
+              </div>
+            `
+            : ''
+        }
+        <div class="chip-stats-row" style="margin-top:10px;margin-bottom:0;">
+          <div class="stat-pill">入力: <b>${def.inputs.length}</b> (${esc(def.inputs.join(', ') || 'なし')})</div>
+          <div class="stat-pill">出力: <b>${def.outputs.length}</b> (${esc(def.outputs.join(', '))})</div>
+          <div class="stat-pill">実効NAND: <b>${def.nandCount ?? 0}</b></div>
+          <div class="stat-pill">抽象階層: <b>Lv.${def.depth ?? 0}</b></div>
+        </div>
+      </div>
+    `;
 
     let schematicHtml = '';
     if (circuitToShow) {
       const heading =
         chipType === 'NAND'
-          ? `あなたが物理スイッチから創り上げた NAND 原板（${circuitToShow.nodes.length}部品）`
-          : `あなたが設計した内部回路（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`;
+          ? `🔧 あなたが物理スイッチから創り上げた NAND 原板（${circuitToShow.nodes.length}部品）`
+          : `🔧 あなたが設計した内部回路（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`;
       schematicHtml = `
-        <h4 class="section-heading">${heading}</h4>
-        ${this._renderMiniSchematicSvg(circuitToShow, customChips)}
+        <div class="inspector-schematic-card">
+          <div class="inspector-schematic-head">
+            <h4 class="section-heading" style="margin:0;">${heading}</h4>
+            <div id="inspector-live-step-badge" class="inspector-live-step-badge">⚡ 自動稼働デモ中...</div>
+          </div>
+          ${this._renderMiniSchematicSvg(circuitToShow, customChips)}
+        </div>
       `;
     } else if (def.isPrimitive) {
       schematicHtml = `
-        <div class="callout callout-amber">
+        <div class="callout callout-amber" style="margin-top:10px;">
           <b>基本物理素子（これ以上分解できません）</b><br>
           ${esc(def.descJa)}
         </div>
@@ -1214,22 +1295,24 @@ export class ModalManager {
     }
 
     this.open({
-      title: `チップ解析 · ${def.name}（${def.titleJa || def.id}）`,
+      title: `モジュール解説 · ${def.name}（${def.titleJa || term?.title || def.id}）`,
       bodyHtml: `
-        <p class="spec-note">${esc(def.descJa || '')}</p>
-        <div class="chip-stats-row">
-          <div class="stat-pill">入力: <b>${def.inputs.length}</b> (${esc(def.inputs.join(', ') || 'なし')})</div>
-          <div class="stat-pill">出力: <b>${def.outputs.length}</b> (${esc(def.outputs.join(', '))})</div>
-          <div class="stat-pill">実効NAND: <b>${def.nandCount ?? 0}</b></div>
-          <div class="stat-pill">抽象階層: <b>Lv.${def.depth ?? 0}</b></div>
-        </div>
+        ${functionalSectionHtml}
         ${schematicHtml}
       `,
       footerHtml: `
         ${onBack ? `<button class="btn btn-amber" id="btn-inspector-back">◀ モジュール図鑑へ戻る</button>` : ''}
-        <button class="btn btn-primary" data-close-modal>閉じる</button>
+        <button class="btn btn-primary" data-close-modal>作業台へ戻る</button>
       `,
     });
+
+    // 1. Start the auto-playing functional diagram canvas at the top
+    this.diagramGroup.mountAll(this.bodyEl);
+
+    // 2. Start the auto-playing live simulation on the player's own designed internal circuit!
+    if (circuitToShow) {
+      this._startMiniSchematicLoop(circuitToShow, customChips, chipType);
+    }
 
     this.footerEl.querySelector('#btn-inspector-back')?.addEventListener('click', () => {
       sound.playSwitch(false);
@@ -1440,7 +1523,11 @@ export class ModalManager {
         const a = getEp(wire.from, 'out');
         const b = getEp(wire.to, 'in');
         const c = Math.max(30, Math.abs(b.x - a.x) * 0.45);
-        return `<path d="M${a.x},${a.y} C${a.x + c},${a.y} ${b.x - c},${b.y} ${b.x},${b.y}" fill="none" stroke="#ffb84d" stroke-width="2.5" opacity="0.82"/>`;
+        const pathD = `M${a.x},${a.y} C${a.x + c},${a.y} ${b.x - c},${b.y} ${b.x},${b.y}`;
+        return `
+          <path class="mini-wire-base" data-mini-wire="${esc(wire.id)}" d="${pathD}" fill="none" stroke="#33485c" stroke-width="2.6" opacity="0.88"/>
+          <path class="mini-wire-flow" data-mini-wire-flow="${esc(wire.id)}" d="${pathD}" fill="none" stroke="#ffd166" stroke-width="2.8" opacity="0"/>
+        `;
       })
       .join('');
 
@@ -1448,8 +1535,11 @@ export class ModalManager {
       .map((node) => {
         const { nw, nh, def } = nodePos(node);
         return `
-          <rect x="${node.x}" y="${node.y}" width="${nw}" height="${nh}" rx="6" fill="#1b2530" stroke="${esc(def.accent || '#8aa')}" stroke-width="2"/>
-          <text x="${node.x + nw / 2}" y="${node.y + nh / 2 + 4}" text-anchor="middle" fill="#fff" font-size="13" font-family="monospace" font-weight="bold">${esc(def.name)}</text>
+          <g class="mini-node-group" data-mini-node-group="${esc(node.id)}">
+            <rect data-mini-node="${esc(node.id)}" data-accent="${esc(def.accent || '#8aa')}" x="${node.x}" y="${node.y}" width="${nw}" height="${nh}" rx="6" fill="#1b2530" stroke="${esc(def.accent || '#8aa')}" stroke-width="2"/>
+            <text x="${node.x + nw / 2}" y="${node.y + nh / 2 - 2}" text-anchor="middle" fill="#fff" font-size="12.5" font-family="monospace" font-weight="bold">${esc(def.name)}</text>
+            <text data-mini-node-val="${esc(node.id)}" x="${node.x + nw / 2}" y="${node.y + nh / 2 + 13}" text-anchor="middle" fill="#88a2bc" font-size="10.5" font-family="monospace" font-weight="bold">OUT: -</text>
+          </g>
         `;
       })
       .join('');
@@ -1457,14 +1547,24 @@ export class ModalManager {
     const inSvg = circuit.inputs
       .map((lbl, i) => {
         const p = inPos(i);
-        return `<rect x="14" y="${p.y - 12}" width="72" height="24" rx="5" fill="#23303d" stroke="#ffb84d"/><text x="50" y="${p.y + 4}" text-anchor="middle" fill="#ffd166" font-size="12" font-family="monospace">${esc(lbl)}</text>`;
+        return `
+          <g class="mini-in-pin">
+            <rect data-mini-in-rect="${i}" x="10" y="${p.y - 12}" width="76" height="24" rx="5" fill="#1b2632" stroke="#486078" stroke-width="1.8"/>
+            <text data-mini-in-text="${i}" data-lbl="${esc(lbl)}" x="48" y="${p.y + 4}" text-anchor="middle" fill="#a8bed4" font-size="11.5" font-family="monospace" font-weight="bold">${esc(lbl)}=0</text>
+          </g>
+        `;
       })
       .join('');
 
     const outSvg = circuit.outputs
       .map((lbl, i) => {
         const p = outPos(i);
-        return `<rect x="574" y="${p.y - 12}" width="72" height="24" rx="5" fill="#17332a" stroke="#52e3b6"/><text x="610" y="${p.y + 4}" text-anchor="middle" fill="#72f2c8" font-size="12" font-family="monospace">${esc(lbl)}</text>`;
+        return `
+          <g class="mini-out-pin">
+            <rect data-mini-out-rect="${i}" x="574" y="${p.y - 12}" width="76" height="24" rx="5" fill="#16222d" stroke="#3b5368" stroke-width="1.8"/>
+            <text data-mini-out-text="${i}" data-lbl="${esc(lbl)}" x="612" y="${p.y + 4}" text-anchor="middle" fill="#95acc2" font-size="11.5" font-family="monospace" font-weight="bold">${esc(lbl)}=0</text>
+          </g>
+        `;
       })
       .join('');
 
@@ -1479,5 +1579,132 @@ export class ModalManager {
         </svg>
       </div>
     `;
+  }
+
+  _startMiniSchematicLoop(circuit, customChips, chipType) {
+    this._stopMiniSchematicLoop();
+    let sim;
+    try {
+      sim = compileCircuit(circuit, customChips);
+    } catch {
+      return;
+    }
+
+    const stage =
+      chipType === 'NAND'
+        ? STAGES.find((s) => s.id === 'stage_00')
+        : STAGES.find((s) => s.rewardChip?.id === chipType);
+
+    let steps = Array.isArray(stage?.tests) && stage.tests.length > 0 ? stage.tests : [];
+    if (steps.length === 0) {
+      const nIn = Math.min(3, circuit.inputs.length);
+      const count = Math.max(1, 1 << nIn);
+      steps = Array.from({ length: count }, (_, mask) => {
+        const inp = circuit.inputs.map((_, i) => (mask >> i) & 1);
+        return {
+          label: `${circuit.inputs.map((l, i) => `${l}=${inp[i]}`).join(', ')}`,
+          input: inp,
+        };
+      });
+    }
+
+    const isCombinational = !stage || stage.mode === 'combinational';
+    let stepIdx = 0;
+
+    const applyStep = (idx) => {
+      if (!this.bodyEl) return;
+      const step = steps[idx];
+      if (!step) return;
+
+      if (isCombinational || idx === 0) {
+        sim.reset();
+      }
+      if (Array.isArray(step.phases)) {
+        for (const ph of step.phases) {
+          sim.evaluate(ph);
+        }
+      } else if (Array.isArray(step.input)) {
+        sim.evaluate(step.input);
+      }
+
+      const inBits = sim.getInputs();
+      const outBits = sim.getOutputs();
+
+      const badgeEl = this.bodyEl.querySelector('#inspector-live-step-badge');
+      if (badgeEl) {
+        badgeEl.textContent = `⚡ 自動シミュレーション (${idx + 1}/${steps.length})：${step.label}`;
+      }
+
+      // 1. Update Input Terminals
+      inBits.forEach((bit, i) => {
+        const rect = this.bodyEl.querySelector(`[data-mini-in-rect="${i}"]`);
+        const txt = this.bodyEl.querySelector(`[data-mini-in-text="${i}"]`);
+        if (rect) {
+          rect.setAttribute('fill', bit ? '#3b2a10' : '#1b2632');
+          rect.setAttribute('stroke', bit ? '#ffd166' : '#486078');
+        }
+        if (txt) {
+          const lbl = txt.getAttribute('data-lbl') || `IN${i}`;
+          txt.textContent = `${lbl}=${bit}`;
+          txt.setAttribute('fill', bit ? '#ffe599' : '#8fa6bc');
+        }
+      });
+
+      // 2. Update Output Terminals
+      outBits.forEach((bit, i) => {
+        const rect = this.bodyEl.querySelector(`[data-mini-out-rect="${i}"]`);
+        const txt = this.bodyEl.querySelector(`[data-mini-out-text="${i}"]`);
+        if (rect) {
+          rect.setAttribute('fill', bit ? '#123d2f' : '#16222d');
+          rect.setAttribute('stroke', bit ? '#52e3b6' : '#3b5368');
+        }
+        if (txt) {
+          const lbl = txt.getAttribute('data-lbl') || `OUT${i}`;
+          txt.textContent = `${lbl}=${bit}`;
+          txt.setAttribute('fill', bit ? '#8fffdc' : '#8fa6bc');
+        }
+      });
+
+      // 3. Update Wires (glowing flowing current when carrying 1!)
+      for (const wire of circuit.wires) {
+        const val = sim.getWireValue(wire.id);
+        const baseEl = this.bodyEl.querySelector(`[data-mini-wire="${wire.id}"]`);
+        const flowEl = this.bodyEl.querySelector(`[data-mini-wire-flow="${wire.id}"]`);
+        if (baseEl) {
+          baseEl.setAttribute('stroke', val ? '#d98a2b' : '#2e4154');
+          baseEl.setAttribute('opacity', val ? '0.95' : '0.65');
+        }
+        if (flowEl) {
+          flowEl.setAttribute('opacity', val ? '0.95' : '0');
+        }
+      }
+
+      // 4. Update Sub-Chip Nodes
+      for (const node of circuit.nodes) {
+        const pinVals = sim.getNodePinValues(node.id);
+        const outs = pinVals.outputs || [];
+        const anyHigh = outs.some((b) => b === 1);
+        const rectEl = this.bodyEl.querySelector(`[data-mini-node="${node.id}"]`);
+        const valEl = this.bodyEl.querySelector(`[data-mini-node-val="${node.id}"]`);
+        if (rectEl) {
+          const accent = rectEl.getAttribute('data-accent') || '#8aa';
+          rectEl.setAttribute('fill', anyHigh ? '#1f2e3d' : '#17202a');
+          rectEl.setAttribute('stroke', anyHigh ? accent : '#3e5368');
+          rectEl.setAttribute('stroke-width', anyHigh ? '2.4' : '1.6');
+        }
+        if (valEl) {
+          valEl.textContent = outs.length > 4 ? `OUT:${outs.join('')}` : `OUT: ${outs.join(',')}`;
+          valEl.setAttribute('fill', anyHigh ? '#72f2c8' : '#7b93ab');
+        }
+      }
+    };
+
+    applyStep(0);
+    if (steps.length > 1) {
+      this._miniSimTimer = setInterval(() => {
+        stepIdx = (stepIdx + 1) % steps.length;
+        applyStep(stepIdx);
+      }, 1600);
+    }
   }
 }

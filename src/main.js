@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=22';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=23';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,14 +16,14 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=22';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=22';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=22';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=22';
-import { DialogueController } from './ui/dialogue.js?v=22';
-import { ModalManager } from './ui/modals.js?v=22';
-import { PrologueOverlay } from './ui/prologue.js?v=22';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=22';
+import { sound } from './audio/sound.js?v=23';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=23';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=23';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=23';
+import { DialogueController } from './ui/dialogue.js?v=23';
+import { ModalManager } from './ui/modals.js?v=23';
+import { PrologueOverlay } from './ui/prologue.js?v=23';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=23';
 
 class SiliconGenesisApp {
   constructor() {
@@ -734,7 +734,7 @@ class SiliconGenesisApp {
       bar.innerHTML = `
         <span class="sel-label">${def?.name || node.type}</span>
         <button class="sel-btn" id="sel-dup">複製</button>
-        <button class="sel-btn" id="sel-inspect">内部</button>
+        <button class="sel-btn" id="sel-inspect">📖 解説・内部</button>
         <button class="sel-btn danger" id="sel-del">削除</button>
       `;
       bar.querySelector('#sel-dup').addEventListener('click', () => this.duplicateSelectedNode());
@@ -751,11 +751,18 @@ class SiliconGenesisApp {
       `;
       bar.querySelector('#sel-cut').addEventListener('click', () => this.deleteWire(this.selection.wireId));
     } else if (this.selection.pendingPin || this.selection.armedChipType) {
+      const armedType = this.selection.armedChipType;
+      const armedDef = armedType && this.stage?.mode !== 'physics' ? getChipDef(armedType, this.save.customChips) : null;
       bar.classList.remove('hidden');
       bar.innerHTML = `
-        <span class="sel-label">${this.selection.armedChipType ? '配置モード' : '配線モード'}</span>
+        <span class="sel-label">${armedDef ? `${armedDef.name} を配置` : armedType ? '配置モード' : '配線モード'}</span>
+        ${armedDef ? `<button class="sel-btn" id="sel-armed-inspect">📖 解説・内部</button>` : ''}
         <button class="sel-btn" id="sel-cancel">キャンセル</button>
       `;
+      bar.querySelector('#sel-armed-inspect')?.addEventListener('click', () => {
+        sound.playSwitch(true);
+        this.modals.openChipInspector(armedType, this.save.customChips);
+      });
       bar.querySelector('#sel-cancel').addEventListener('click', () => {
         if (this.stage?.mode === 'physics') {
           this.physicsLab.setArmedPart(null);
@@ -1058,7 +1065,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=22', { updateViaCache: 'none' })
+        .register('./sw.js?v=23', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }
