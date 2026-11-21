@@ -18,6 +18,7 @@ export function createDefaultSave() {
     physicsDrafts: {},        // stageId -> { slotId: partId }
     bestNandCounts: {},       // stageId -> number
     unlockedCodex: [],
+    discoveredTerms: [],      // glossary term IDs actually encountered in dialogue so far
     seenPrologue: false,
     seenIntroStages: [],      // legacy
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
@@ -45,6 +46,7 @@ export function loadSaveData() {
       bestNandCounts: parsed.bestNandCounts && typeof parsed.bestNandCounts === 'object' ? parsed.bestNandCounts : {},
       clearedStages: Array.isArray(parsed.clearedStages) ? parsed.clearedStages : [],
       unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
+      discoveredTerms: Array.isArray(parsed.discoveredTerms) ? parsed.discoveredTerms : [],
       seenIntroStages: Array.isArray(parsed.seenIntroStages) ? parsed.seenIntroStages : [],
       seenTheaterStages: Array.isArray(parsed.seenTheaterStages) ? parsed.seenTheaterStages : [],
     };

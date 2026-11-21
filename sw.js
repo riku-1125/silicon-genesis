@@ -1,28 +1,28 @@
-const CACHE_NAME = 'silicon-genesis-v19';
+const CACHE_NAME = 'silicon-genesis-v20';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './styles/main.css?v=19',
-  './src/main.js?v=19',
+  './styles/main.css?v=20',
+  './src/main.js?v=20',
   './src/engine/circuit.js',
   './src/engine/simulator.js',
   './src/engine/evaluator.js',
   './src/data/characters.js',
-  './src/data/codex.js?v=19',
-  './src/data/glossary.js?v=19',
-  './src/data/prologue.js?v=19',
-  './src/data/stages.js?v=19',
+  './src/data/codex.js?v=20',
+  './src/data/glossary.js?v=20',
+  './src/data/prologue.js?v=20',
+  './src/data/stages.js?v=20',
   './src/state/storage.js',
-  './src/audio/sound.js?v=19',
-  './src/ui/glossaryPopover.js?v=19',
-  './src/ui/storyDiagram.js?v=19',
-  './src/ui/prologue.js?v=19',
-  './src/ui/physicsLab.js?v=19',
-  './src/ui/sceneCanvas.js?v=19',
-  './src/ui/workbenchCanvas.js?v=19',
-  './src/ui/dialogue.js?v=19',
-  './src/ui/modals.js?v=19',
+  './src/audio/sound.js?v=20',
+  './src/ui/glossaryPopover.js?v=20',
+  './src/ui/storyDiagram.js?v=20',
+  './src/ui/prologue.js?v=20',
+  './src/ui/physicsLab.js?v=20',
+  './src/ui/sceneCanvas.js?v=20',
+  './src/ui/workbenchCanvas.js?v=20',
+  './src/ui/dialogue.js?v=20',
+  './src/ui/modals.js?v=20',
   './assets/icon.svg',
   './assets/portrait_kagari.jpg',
   './assets/portrait_mina.jpg',
@@ -84,7 +84,7 @@ self.addEventListener('fetch', (event) => {
 
   // Code & HTML: always revalidate with server (bypass GitHub Pages 10-min HTTP disk cache!)
   event.respondWith(
-    fetch(event.request, { cache: 'no-cache' })
+    fetch(event.request, { cache: 'reload' })
       .then((resp) => {
         if (resp && resp.status === 200) {
           const clone = resp.clone();

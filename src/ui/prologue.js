@@ -3,15 +3,16 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=19';
-import { STAGES } from '../data/stages.js?v=19';
-import { sound } from '../audio/sound.js?v=19';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=20';
+import { STAGES } from '../data/stages.js?v=20';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=20';
+import { sound } from '../audio/sound.js?v=20';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=19';
+} from './glossaryPopover.js?v=20';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue }) {
@@ -148,6 +149,7 @@ export class PrologueOverlay {
   hide() {
     this._stopTimer();
     glossaryPopover.close();
+    glossaryPopover.setActiveStoryContext({ activeTerms: null, inPrologue: false });
     this.root.classList.add('hidden');
   }
 
@@ -157,6 +159,11 @@ export class PrologueOverlay {
       this._finishStory();
       return;
     }
+
+    // Strict position-based unlocking: only terms seen in Prologue steps 0..idx are unlocked!
+    const seenTexts = PROLOGUE_STEPS.slice(0, idx + 1).map((s) => s.text);
+    const activeTerms = collectTermIdsFromTexts(seenTexts, null);
+    glossaryPopover.setActiveStoryContext({ activeTerms, inPrologue: true });
 
     this.awaitingChoice = false;
     this.pendingReply = false;

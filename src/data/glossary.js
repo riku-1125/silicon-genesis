@@ -72,8 +72,8 @@ export const GLOSSARY_TERMS = {
     unlockReachedStage: 'stage_00a',
     unlockLabel: 'STAGE 00-A 到達',
     summary:
-      'シリコンに微量のホウ素を混ぜた半導体。電子がすこし足りない「プラス（Positive）の穴」が多く、そのままでは電子が通り抜けられない「見えない壁（土台）」の役割をします。',
-    analogy: '普段は通行止めになっている川幅。上に静電気の力をかけると電子の橋が架かって渡れるようになる！',
+      'シリコンに微量のホウ素などを混ぜた半導体。マイナスの電子がすこし足りない「プラス（Positive）の空席」が多い性質を持ち、そのままでは自由な電子が通り抜けにくい状態になっています。',
+    analogy: '電子が飛び石のように渡るための「空席」が空いている半導体素材。',
     related: ['n_silicon', 'silicon', 'electrostatic', 'transistor'],
   },
   n_silicon: {
@@ -84,8 +84,8 @@ export const GLOSSARY_TERMS = {
     unlockReachedStage: 'stage_00a',
     unlockLabel: 'STAGE 00-A 到達',
     summary:
-      'シリコンに微量のリンを混ぜた半導体。自由に動き回れるマイナスの電子（Negative）がたっぷり余っていて、電気を流すための「電子の池（入口と出口）」の役割をします。',
-    analogy: '電子がぎっしり待機している貯水池。真ん中に橋が架かると一気に反対側へ渡り始める！',
+      'シリコンに微量のリンなどを混ぜた半導体。自由に動き回れるマイナスの電子（Negative）がたっぷり余っている性質を持ち、電気をよく通します。',
+    analogy: '今にも走り出せる電子たちがぎっしり待機している半導体素材。',
     related: ['p_silicon', 'silicon', 'transistor'],
   },
   electrostatic: {
@@ -96,8 +96,8 @@ export const GLOSSARY_TERMS = {
     unlockReachedStage: 'stage_00a',
     unlockLabel: 'STAGE 00-A 到達',
     summary:
-      'プラスとマイナスが離れていても引き合う目に見えない力。下敷きで髪が逆立つのと同じ力で、金属にプラスの電気をかけると、ガラスの壁を隔てた下側へマイナスの電子をギュッと吸い寄せます。',
-    analogy: 'ガラスの向こうにある砂鉄を、磁石でスッと引き寄せるような「触れないリモコン力」。',
+      'プラスとマイナスの電気が離れていても引き合う目に見えない力。下敷きで髪が逆立つのと同じ原理で、直接触れ合わなくても絶縁体越しに電子を引き寄せることができます。',
+    analogy: '板の向こうにある砂鉄を、磁石でスッと引き寄せるような「触れない引力」。',
     related: ['insulator', 'p_silicon', 'transistor'],
   },
   resistor: {
@@ -106,7 +106,7 @@ export const GLOSSARY_TERMS = {
     reading: 'Resistor',
     category: '物理・電気回路',
     summary:
-      'わざと電気を通しにくくした「細い道」の部品。電池と地面のあいだに挟むことで、電気が一気に暴走してショート（焼損）するのを防ぎ、電流を安全な量にコントロールします。',
+      'わざと電気を通しにくくした「細い道」の部品。回路の途中に挟むことで、電流が一気に流れすぎるのを抑え、安全な量にコントロールする役割を持ちます。',
     analogy: '太い水道管の途中に挟む「細いストロー」。水が勢いよく飛び出しすぎるのを防ぐブレーキ役。',
     related: ['short_circuit', 'earth', 'pullup'],
   },
@@ -116,8 +116,7 @@ export const GLOSSARY_TERMS = {
     reading: 'Short Circuit',
     category: 'ACT 0 · 電気物理',
     act: 0,
-    unlockReachedStage: 'stage_00b',
-    unlockClearedStageForDiagram: 'stage_00b',
+    unlockClearedStage: 'stage_00b',
     unlockLabel: 'STAGE 00-B クリア',
     anim: 'short_spark',
     summary:
@@ -730,12 +729,12 @@ export const MODULE_ENCYCLOPEDIA_IDS = [
 ];
 
 /**
- * Checks whether a glossary explanation is unlocked at the player's current progression.
- * - If `term.unlockClearedStage` is set: requires that stage to be in `save.clearedStages`.
- * - If `term.unlockReachedStage` is set: requires that stage to be unlocked or cleared.
- * - If no `save` is provided (e.g. unit test without save filter): returns true.
+ * Checks whether a glossary explanation can appear as an active link in the CURRENT dialogue line.
+ * - Terms with `unlockClearedStage`: ONLY unlocked after that stage is cleared!
+ * - Terms with `unlockReachedStage`: unlocked once that stage is reached/unlocked.
+ * - Basic story vocabulary terms: unlocked when they appear in the dialogue line being read!
  */
-export function isGlossaryTermUnlocked(termId, save = null) {
+export function isGlossaryTermLinkableInLine(termId, save = null) {
   const term = GLOSSARY_TERMS[termId];
   if (!term) return false;
   if (!save) return true;
@@ -750,15 +749,52 @@ export function isGlossaryTermUnlocked(termId, save = null) {
 }
 
 /**
- * Checks whether a term's live circuit diagram (`anim`) is unlocked.
- * For example, 'nand' is readable as a word in Prologue, but its physical switch schematic
- * (`nand_series`) unlocks only after clearing Stage 00-C (`stage_00`).
+ * Checks whether a glossary explanation is unlocked in Related Links / Popover Navigation.
+ * - While in Prologue (`inPrologue = true`), all stage-specific terms are locked, and only
+ *   vocabulary terms encountered up to the current Prologue step (`activeStoryTerms`) are open.
+ * - During stages, terms with `unlockClearedStage` require that stage to be in `save.clearedStages`,
+ *   and vocabulary terms require having appeared up to the current dialogue line (`activeStoryTerms`).
  */
-export function isGlossaryDiagramUnlocked(termId, save = null) {
+export function isGlossaryTermUnlocked(termId, save = null, activeStoryTerms = null, inPrologue = false) {
+  const term = GLOSSARY_TERMS[termId];
+  if (!term) return false;
+
+  if (inPrologue) {
+    if (term.unlockClearedStage || term.unlockReachedStage) return false;
+    if (activeStoryTerms instanceof Set) return activeStoryTerms.has(termId);
+    return true;
+  }
+
+  if (!save) {
+    if (activeStoryTerms instanceof Set) return activeStoryTerms.has(termId);
+    return true;
+  }
+
+  if (!isGlossaryTermLinkableInLine(termId, save)) return false;
+
+  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
+  if (term.unlockClearedStage && cleared.includes(term.unlockClearedStage)) {
+    return true;
+  }
+
+  if (activeStoryTerms instanceof Set) {
+    return activeStoryTerms.has(termId);
+  }
+  if (Array.isArray(save.discoveredTerms)) {
+    return save.discoveredTerms.includes(termId);
+  }
+  return true;
+}
+
+/**
+ * Checks whether a term's live circuit diagram (`anim`) is unlocked.
+ */
+export function isGlossaryDiagramUnlocked(termId, save = null, activeStoryTerms = null, inPrologue = false) {
   const term = GLOSSARY_TERMS[termId];
   if (!term || !term.anim) return false;
+  if (inPrologue) return false;
   if (!save) return true;
-  if (!isGlossaryTermUnlocked(termId, save)) return false;
+  if (!isGlossaryTermUnlocked(termId, save, activeStoryTerms, inPrologue)) return false;
   const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   if (term.unlockClearedStageForDiagram) {
     return cleared.includes(term.unlockClearedStageForDiagram);
@@ -930,7 +966,7 @@ export function tokenizeGlossaryText(text, excludeTermId = null, save = null) {
     const termId = ALIAS_MAP.get(matchedText);
 
     if (!termId || seenTermIds.has(termId)) continue;
-    if (save && !isGlossaryTermUnlocked(termId, save)) continue;
+    if (save && !isGlossaryTermLinkableInLine(termId, save)) continue;
 
     // ASCII boundary guard for aliases starting/ending with ASCII alphanumerics
     const startsAscii = isAsciiWord(matchedText[0]);
@@ -959,4 +995,18 @@ export function getGlossaryTerm(termId) {
 
 export function hasGlossaryTerms(tokens) {
   return Array.isArray(tokens) && tokens.some((t) => t.type === 'term');
+}
+
+/**
+ * Collects all linkable term IDs from an array of text strings for position-aware unlocking.
+ */
+export function collectTermIdsFromTexts(texts, save = null) {
+  const set = new Set();
+  for (const txt of texts) {
+    if (!txt) continue;
+    for (const tok of tokenizeGlossaryText(txt, null, save)) {
+      if (tok.type === 'term' && tok.termId) set.add(tok.termId);
+    }
+  }
+  return set;
 }

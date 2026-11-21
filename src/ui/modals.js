@@ -4,20 +4,20 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=19';
-import { CODEX_ENTRIES } from '../data/codex.js?v=19';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=20';
+import { CODEX_ENTRIES } from '../data/codex.js?v=20';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   getGlossaryTerm,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=19';
+} from '../data/glossary.js?v=20';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=19';
-import { StoryDiagramGroup } from './storyDiagram.js?v=19';
-import { glossaryPopover } from './glossaryPopover.js?v=19';
+import { sound } from '../audio/sound.js?v=20';
+import { StoryDiagramGroup } from './storyDiagram.js?v=20';
+import { glossaryPopover } from './glossaryPopover.js?v=20';
 
 function esc(str) {
   return String(str ?? '')
@@ -594,7 +594,10 @@ export class ModalManager {
                         ? isModuleUnlocked(rel)
                         : isGlossaryTermUnlocked(rel.id, isSaveObj ? save : null);
                       if (!relOpen) {
-                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(rel.unlockLabel || 'クリアで解放')}）</span>`;
+                        const lockReason = rel.unlockClearedStage
+                          ? rel.unlockLabel || 'クリアで解放'
+                          : '物語の進行で解放';
+                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(lockReason)}）</span>`;
                       }
                       return `
                         <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">

@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=19';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=20';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,14 +16,14 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=19';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=19';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=19';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=19';
-import { DialogueController } from './ui/dialogue.js?v=19';
-import { ModalManager } from './ui/modals.js?v=19';
-import { PrologueOverlay } from './ui/prologue.js?v=19';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=19';
+import { sound } from './audio/sound.js?v=20';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=20';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=20';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=20';
+import { DialogueController } from './ui/dialogue.js?v=20';
+import { ModalManager } from './ui/modals.js?v=20';
+import { PrologueOverlay } from './ui/prologue.js?v=20';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=20';
 
 class SiliconGenesisApp {
   constructor() {
@@ -1049,7 +1049,18 @@ class SiliconGenesisApp {
 
   _registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+      navigator.serviceWorker
+        .register('./sw.js?v=20', { updateViaCache: 'none' })
+        .then((reg) => reg.update().catch(() => {}))
+        .catch(() => {});
     }
   }
 }

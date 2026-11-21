@@ -2,11 +2,12 @@
  * SILICON GENESIS — Progression-Locked Story Glossary Popover & Rich-Text Typewriter
  *
  * Enforces strict spoiler/answer protection:
- *   - Unacquired terms (modules/concepts whose stage hasn't been cleared/reached yet)
- *     are NOT linked in dialogue and appear as locked badges (`🔒 未取得（STAGE XX クリアで解放）`)
- *     in related-term lists so players never get puzzle answers spoiled!
- *   - Supports embedded live animated module diagrams (`StoryDiagramPlayer`) once unlocked,
- *     and a browsing history stack (`◀ ひとつ戻る`) across related terms.
+ *   - Terms with a stage-clear path (`unlockClearedStage`) are STRICTLY LOCKED until that stage
+ *     is cleared (`save.clearedStages.includes(unlockClearedStage)`).
+ *   - Story vocabulary terms (`emp`, `insulator`, `relay`, `silicon`, etc.) are unlocked ONLY
+ *     when the player actually encounters the dialogue line containing them (`save.discoveredTerms`).
+ *   - Consequently, on Prologue Step 1 (`EMP`), ALL related links (`リレー`, `絶縁層`, `ショート`)
+ *     are locked (`🔒 未取得`), preventing any chain-clicking into future terms or puzzle answers!
  */
 
 import {
@@ -15,20 +16,38 @@ import {
   hasGlossaryTerms,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
-} from '../data/glossary.js?v=19';
-import { sound } from '../audio/sound.js?v=19';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=19';
+} from '../data/glossary.js?v=20';
+import { persistSaveData } from '../state/storage.js';
+import { sound } from '../audio/sound.js?v=20';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=20';
 
 let _saveProvider = null;
 
 /**
  * Populates containerEl with one stable DOM node per token (all initially empty for typing,
- * or full when instant=true). Only terms unlocked in the current save become tappable buttons.
+ * or full when instant=true). Records any linkable terms in this dialogue line into
+ * `save.discoveredTerms` so they become accessible in the glossary from this moment onward.
  */
 export function mountRichText(containerEl, text, { instant = false, excludeTermId = null, save = null } = {}) {
   const activeSave = save || (_saveProvider ? _saveProvider() : null);
   const tokens = tokenizeGlossaryText(text, excludeTermId, activeSave);
   containerEl.textContent = '';
+
+  if (activeSave) {
+    if (!Array.isArray(activeSave.discoveredTerms)) {
+      activeSave.discoveredTerms = [];
+    }
+    let added = false;
+    for (const tok of tokens) {
+      if (tok.type === 'term' && tok.termId && !activeSave.discoveredTerms.includes(tok.termId)) {
+        activeSave.discoveredTerms.push(tok.termId);
+        added = true;
+      }
+    }
+    if (added) {
+      persistSaveData(activeSave);
+    }
+  }
 
   const nodes = tokens.map((tok) => {
     if (tok.type === 'term') {
@@ -100,6 +119,8 @@ class GlossaryPopoverController {
 
     this.currentTermId = null;
     this.history = [];
+    this.activeStoryTerms = null;
+    this.inPrologue = false;
     this.diagramPlayer = new StoryDiagramPlayer();
     this._bound = false;
   }
@@ -110,6 +131,11 @@ class GlossaryPopoverController {
 
   getSave() {
     return _saveProvider ? _saveProvider() : null;
+  }
+
+  setActiveStoryContext({ activeTerms = null, inPrologue = false } = {}) {
+    this.activeStoryTerms = activeTerms instanceof Set ? activeTerms : null;
+    this.inPrologue = Boolean(inPrologue);
   }
 
   _ensureBound() {
@@ -152,15 +178,6 @@ class GlossaryPopoverController {
     this.backTopBtn?.addEventListener('click', backHandler);
     this.backBottomBtn?.addEventListener('click', backHandler);
 
-    this.summaryEl?.addEventListener('click', (e) => {
-      const btn = e.target.closest?.('.term-link[data-term-id]');
-      if (!btn) return;
-      e.stopPropagation();
-      e.preventDefault();
-      sound.playSwitch(true);
-      this.navigateTo(btn.dataset.termId);
-    });
-
     this.root.addEventListener('click', (e) => {
       e.stopPropagation();
       if (e.target === this.root) {
@@ -191,7 +208,7 @@ class GlossaryPopoverController {
     if (!term) return;
 
     const save = this.getSave();
-    if (save && !isGlossaryTermUnlocked(termId, save)) {
+    if (!isGlossaryTermUnlocked(termId, save, this.activeStoryTerms, this.inPrologue)) {
       return;
     }
 
@@ -209,7 +226,7 @@ class GlossaryPopoverController {
   navigateTo(termId) {
     if (!termId || termId === this.currentTermId) return;
     const save = this.getSave();
-    if (save && !isGlossaryTermUnlocked(termId, save)) return;
+    if (!isGlossaryTermUnlocked(termId, save, this.activeStoryTerms, this.inPrologue)) return;
     this.open(termId, { pushHistory: true });
   }
 
@@ -226,14 +243,18 @@ class GlossaryPopoverController {
   _renderTerm(term) {
     this.diagramPlayer.unmount();
     const save = this.getSave();
-    const diagramUnlocked = isGlossaryDiagramUnlocked(term.id, save);
+    const diagramUnlocked = isGlossaryDiagramUnlocked(
+      term.id,
+      save,
+      this.activeStoryTerms,
+      this.inPrologue
+    );
 
     this.categoryEl.textContent = `📖 用語解説 // ${term.category}`;
     this.titleEl.textContent = term.title;
     this.readingEl.textContent = term.reading || '';
     this.readingEl.classList.toggle('hidden', !term.reading);
 
-    // Module input/output pin spec badges (only shown once diagram/module is unlocked)
     if (this.pinsWrap) {
       if (term.pins && diagramUnlocked) {
         const ins = (term.pins.inputs || []).join(', ');
@@ -263,7 +284,6 @@ class GlossaryPopoverController {
           }
         });
       } else if (term.anim && !diagramUnlocked) {
-        // Show non-spoiler locked diagram banner (e.g. NAND in Prologue before 00-C is cleared)
         this.diagramWrap.classList.remove('hidden');
         this.diagramCanvas.classList.add('hidden');
         if (this.diagramHint) {
@@ -274,9 +294,9 @@ class GlossaryPopoverController {
       }
     }
 
-    // Use preClearSummary if diagram/stage not cleared yet (e.g. NAND in Prologue)
+    // Plain readable summary text (all links live in the explicit lock-checked related section below!)
     const summaryText = !diagramUnlocked && term.preClearSummary ? term.preClearSummary : term.summary;
-    mountRichText(this.summaryEl, summaryText, { instant: true, excludeTermId: term.id, save });
+    this.summaryEl.textContent = summaryText;
 
     if (term.analogy) {
       this.analogyEl.textContent = term.analogy;
@@ -285,7 +305,7 @@ class GlossaryPopoverController {
       this.analogyWrap.classList.add('hidden');
     }
 
-    // Related term pills: unlocked terms are clickable, unacquired terms are locked (`🔒 未取得`)!
+    // Related term pills: strictly checked via isGlossaryTermUnlocked(rel.id, save)!
     this.relatedList.textContent = '';
     const relatedEntries = (term.related || [])
       .map((id) => getGlossaryTerm(id))
@@ -293,13 +313,23 @@ class GlossaryPopoverController {
 
     if (relatedEntries.length > 0) {
       for (const rel of relatedEntries) {
-        const relUnlocked = isGlossaryTermUnlocked(rel.id, save);
+        const relUnlocked = isGlossaryTermUnlocked(
+          rel.id,
+          save,
+          this.activeStoryTerms,
+          this.inPrologue
+        );
         if (relUnlocked) {
           const chip = document.createElement('button');
           chip.type = 'button';
           chip.className = 'gp-related-chip';
-          const hasDiag = isGlossaryDiagramUnlocked(rel.id, save);
-          chip.textContent = `${hasDiag ? '⚡ ' : ''}${rel.title.split('（')[0]}`;
+          const hasDiag = isGlossaryDiagramUnlocked(
+            rel.id,
+            save,
+            this.activeStoryTerms,
+            this.inPrologue
+          );
+          chip.textContent = `${hasDiag ? '⚡ ' : '📖 '}${rel.title.split('（')[0]}`;
           chip.addEventListener('click', (e) => {
             e.stopPropagation();
             sound.playSwitch(true);
@@ -309,7 +339,10 @@ class GlossaryPopoverController {
         } else {
           const lockedBadge = document.createElement('span');
           lockedBadge.className = 'gp-related-chip locked';
-          lockedBadge.textContent = `🔒 未取得（${rel.unlockLabel || 'クリアで解放'}）`;
+          const lockReason = rel.unlockClearedStage
+            ? rel.unlockLabel || 'クリアで解放'
+            : '物語の進行で解放';
+          lockedBadge.textContent = `🔒 未取得（${lockReason}）`;
           this.relatedList.appendChild(lockedBadge);
         }
       }

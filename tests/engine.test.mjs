@@ -10,6 +10,7 @@ import {
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
   isModuleEncyclopediaUnlocked,
+  collectTermIdsFromTexts,
 } from '../src/data/glossary.js';
 import { loadSaveData } from '../src/state/storage.js';
 import { createEmptyCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
@@ -647,11 +648,36 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.deepEqual(linkedIds, ['nand', 'not_gate']);
 
   // 6. Progression lock: unacquired modules & diagrams stay locked until their stage is cleared!
-  const freshSave = { currentStageId: 'stage_00a', clearedStages: [] };
-  assert.equal(isGlossaryTermUnlocked('p_silicon', freshSave), true);   // Needed in 00-A intro
-  assert.equal(isGlossaryTermUnlocked('transistor', freshSave), false); // Locked until 00-A cleared
-  assert.equal(isGlossaryTermUnlocked('not_gate', freshSave), false);   // Locked until 01 cleared
-  assert.equal(isGlossaryDiagramUnlocked('nand', freshSave), false);    // NAND diagram locked until 00-C cleared
+  const freshSave = { currentStageId: 'stage_00a', clearedStages: [], discoveredTerms: [] };
+  // On Prologue Step 1 (only 'emp' seen so far): 'emp' is unlocked, while its related links ('relay', 'insulator', 'short_circuit') are ALL locked!
+  const step1Terms = collectTermIdsFromTexts([PROLOGUE_STEPS[0].text], null);
+  assert.equal(isGlossaryTermUnlocked('emp', freshSave, step1Terms, true), true);
+  assert.equal(isGlossaryTermUnlocked('relay', freshSave, step1Terms, true), false);
+  assert.equal(isGlossaryTermUnlocked('insulator', freshSave, step1Terms, true), false);
+  assert.equal(isGlossaryTermUnlocked('short_circuit', freshSave, step1Terms, true), false);
+  assert.equal(isGlossaryTermUnlocked('p_silicon', freshSave, step1Terms, true), false);
+
+  // On Stage 00-A Line 3 (before Line 6 introduces P-type/N-type): P-type & N-type are STILL locked!
+  const st00a = getStageById('stage_00a');
+  const line3Terms = collectTermIdsFromTexts(
+    st00a.introDialogue.slice(0, 3).map((l) => l.text),
+    freshSave
+  );
+  assert.equal(isGlossaryTermUnlocked('emp', freshSave, line3Terms, false), true);
+  assert.equal(isGlossaryTermUnlocked('p_silicon', freshSave, line3Terms, false), false);
+  assert.equal(isGlossaryTermUnlocked('n_silicon', freshSave, line3Terms, false), false);
+  assert.equal(isGlossaryTermUnlocked('transistor', freshSave, line3Terms, false), false);
+
+  // On Stage 00-A Line 6 (where P-type & N-type are introduced): P-type & N-type unlock, while 'transistor' stays locked until 00-A is cleared!
+  const line6Terms = collectTermIdsFromTexts(
+    st00a.introDialogue.slice(0, 6).map((l) => l.text),
+    freshSave
+  );
+  assert.equal(isGlossaryTermUnlocked('p_silicon', freshSave, line6Terms, false), true);
+  assert.equal(isGlossaryTermUnlocked('n_silicon', freshSave, line6Terms, false), true);
+  assert.equal(isGlossaryTermUnlocked('transistor', freshSave, line6Terms, false), false);
+  assert.equal(isGlossaryTermUnlocked('not_gate', freshSave, line6Terms, false), false);
+  assert.equal(isGlossaryDiagramUnlocked('nand', freshSave, line6Terms, false), false);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     assert.equal(isModuleEncyclopediaUnlocked(modId, freshSave), false, `Module '${modId}' should be locked on fresh save`);
   }

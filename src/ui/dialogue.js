@@ -8,14 +8,16 @@
  */
 
 import { CHARACTERS, SCENES } from '../data/characters.js';
-import { sound } from '../audio/sound.js?v=19';
+import { STAGES } from '../data/stages.js?v=20';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=20';
+import { sound } from '../audio/sound.js?v=20';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=19';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=19';
+} from './glossaryPopover.js?v=20';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=20';
 
 export class DialogueController {
   constructor(stripEl, theaterEl) {
@@ -151,6 +153,7 @@ export class DialogueController {
     this._stopTimer();
     this.diagramPlayer.unmount();
     glossaryPopover.close();
+    glossaryPopover.setActiveStoryContext({ activeTerms: null, inPrologue: false });
     this.theater.classList.add('hidden');
   }
 
@@ -158,6 +161,20 @@ export class DialogueController {
     const line = this.lines[idx];
     if (!line) return;
     const ch = CHARACTERS[line.speaker] || CHARACTERS.kagari;
+
+    // Position-aware glossary lock: ONLY terms from already-cleared stages + lines 0..idx of the current conversation are unlocked!
+    const save = glossaryPopover.getSave();
+    const clearedSet = new Set(save?.clearedStages || []);
+    const clearedStageTexts = STAGES.filter((s) => clearedSet.has(s.id)).flatMap((s) => [
+      ...(s.introDialogue || []).flatMap((l) => [l.text, l.visualCard?.rule || '']),
+      ...(s.outroDialogue || []).flatMap((l) => [l.text, l.visualCard?.rule || '']),
+    ]);
+    const seenTexts = [
+      ...clearedStageTexts,
+      ...this.lines.slice(0, idx + 1).flatMap((l) => [l.text, l.visualCard?.rule || '']),
+    ];
+    const activeTerms = collectTermIdsFromTexts(seenTexts, save);
+    glossaryPopover.setActiveStoryContext({ activeTerms, inPrologue: false });
 
     this.stPortrait.src = ch.portrait;
     this.stPortrait.alt = ch.name;
