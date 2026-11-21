@@ -1,11 +1,17 @@
 /**
- * SILICON GENESIS — Mobile-Hardened Web Audio Synth & Multi-Track BGM Engine
+ * SILICON GENESIS — Mobile-Hardened Web Audio Synth & Multi-Track Ambient BGM Engine
  *
  * Features:
- *   - 4 procedural atmospheric BGM tracks ('title', 'crisis', 'workbench', 'finale')
- *     composed with warm filtered analog pads, crystalline synth arpeggios, bass,
- *     and soft relay percussion — zero external MP3 downloads!
- *   - Independent BGM & SE volume controls + toggles
+ *   - 5 long-form atmospheric procedural BGM tracks tailored to every emotional scene:
+ *       * 'title'     — 地下400メートルの残響 (Echoes of Ark-7) [64 steps × 2 cycles]
+ *       * 'story'     — 地下の灯火 (Shelter Hearth)              [64 steps × 2 cycles]
+ *       * 'crisis'    — 42年目の沈黙 (Blackout Protocol)         [64 steps × 2 cycles]
+ *       * 'workbench' — 深層の思索 (Deep Silicon Drift)          [96 steps × 2 cycles ≈ 80s!]
+ *       * 'finale'    — 夜明けのビーコン (Dawn Over Ash)         [64 steps × 2 cycles]
+ *   - Built-in warm low-pass ambient echo bus (DelayNode + Filter) for spacious,
+ *     zero-fatigue listening during long puzzle-thinking sessions
+ *   - Zero harsh square-wave percussion ticking
+ *   - Independent BGM & SE volume controls + toggles + smooth track transitions
  *   - iOS Safari / Android Chrome gesture unlock + iOS 17+ audioSession='playback'
  *   - Soft DynamicsCompressor anti-clipping + optional subtle haptic feedback
  */
@@ -15,91 +21,226 @@ const SILENT_WAV_URI =
 
 // Musical note frequencies (Hz)
 const N = {
-  A1: 55.0, C2: 65.41, D2: 73.42, E2: 82.41, F2: 87.31, G2: 98.0, A2: 110.0, Bb2: 116.54,
+  G1: 49.0, A1: 55.0, Bb1: 58.27, B1: 61.74,
+  C2: 65.41, D2: 73.42, Eb2: 77.78, E2: 82.41, F2: 87.31, G2: 98.0, A2: 110.0, Bb2: 116.54, B2: 123.47,
   C3: 130.81, D3: 146.83, Eb3: 155.56, E3: 164.81, F3: 174.61, G3: 196.0, A3: 220.0, Bb3: 233.08, B3: 246.94,
   C4: 261.63, D4: 293.66, Eb4: 311.13, E4: 329.63, F4: 349.23, G4: 392.0, A4: 440.0, Bb4: 466.16, B4: 493.88,
-  C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.0,
+  C5: 523.25, D5: 587.33, Eb5: 622.25, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.0,
 };
 
 export const BGM_TRACK_INFO = {
+  // 1. Title & Historical Prologue — solemn, spacious subterranean echo (~49s full A/B cycle)
   title: {
     name: '地下400メートルの残響 (Echoes of Ark-7)',
-    stepMs: 360,
+    stepMs: 380,
+    style: 'ambient',
+    padCutoff: 560,
+    echoSend: 0.42,
     chords: [
-      [N.D3, N.F3, N.A3, N.E4],
-      [N.Bb2, N.F3, N.A3, N.D4],
-      [N.C3, N.G3, N.C4, N.E4],
-      [N.A2, N.E3, N.A3, N.C4],
+      [N.D3, N.A3, N.E4, N.F4],       // Dm9
+      [N.Bb2, N.F3, N.A3, N.D4],      // Bbmaj7
+      [N.C3, N.G3, N.D4, N.E4],       // C6/9
+      [N.A2, N.E3, N.A3, N.C4],       // Am
+      [N.G2, N.D3, N.A3, N.Bb3],      // Gm9
+      [N.F2, N.C3, N.A3, N.E4],       // Fmaj7
+      [N.G2, N.D3, N.G3, N.Bb3],      // Gm
+      [N.A2, N.E3, N.A3, N.D4],       // Asus4
     ],
-    bass: [N.D2, N.Bb2, N.C2, N.A1],
-    arp: [
-      N.A4, null, N.F4, N.E4, N.D4, null, N.A4, null,
-      N.D5, null, N.A4, N.F4, N.E4, null, N.D4, null,
-      N.E4, null, N.G4, N.C5, N.G4, null, N.E4, null,
-      N.E4, null, N.C4, N.A3, N.E4, null, null, null,
+    bass: [N.D2, N.Bb1, N.C2, N.A1, N.G1, N.F2, N.G1, N.A1],
+    arpA: [
+      N.A4, null, null, N.F4, null, N.E4, null, null,
+      N.D5, null, null, N.A4, null, null, N.F4, null,
+      N.E4, null, null, N.G4, null, N.C5, null, null,
+      N.E4, null, null, N.C4, null, null, null, null,
+      N.D4, null, null, N.A4, null, N.Bb4, null, null,
+      N.A4, null, null, N.E4, null, null, N.C4, null,
+      N.D4, null, null, N.G4, null, N.F4, null, null,
+      N.E4, null, null, null, N.A3, null, null, null,
     ],
-    perc: false,
-    padCutoff: 620,
+    arpB: [
+      N.E5, null, null, N.A4, null, N.F4, null, null,
+      N.F5, null, null, N.D5, null, null, N.A4, null,
+      N.G4, null, null, N.E5, null, N.D5, null, null,
+      N.C5, null, null, N.A4, null, null, null, null,
+      N.Bb4, null, null, N.A4, null, N.G4, null, null,
+      N.A4, null, null, N.C5, null, null, N.E4, null,
+      N.F4, null, null, N.D4, null, N.Bb3, null, null,
+      N.E4, null, null, null, null, null, null, null,
+    ],
   },
+
+  // 2. Human Daily Life, Story Theater & Post-Clear Relief — warm Rhodes ballad (~52s full A/B cycle)
+  story: {
+    name: '地下の灯火 (Shelter Hearth)',
+    stepMs: 410,
+    style: 'warm',
+    padCutoff: 640,
+    echoSend: 0.36,
+    chords: [
+      [N.F3, N.A3, N.C4, N.G4],       // Fmaj9
+      [N.C3, N.G3, N.B3, N.E4],       // Cmaj7
+      [N.D3, N.A3, N.C4, N.E4],       // Dm9
+      [N.A2, N.E3, N.G3, N.C4],       // Am7
+      [N.Bb2, N.F3, N.A3, N.D4],      // Bbmaj7
+      [N.A2, N.F3, N.C4, N.E4],       // Fmaj7/A
+      [N.G2, N.D3, N.F3, N.Bb3],      // Gm7
+      [N.C3, N.G3, N.Bb3, N.D4],      // C9sus4
+    ],
+    bass: [N.F2, N.C2, N.D2, N.A1, N.Bb1, N.A1, N.G1, N.C2],
+    arpA: [
+      N.C5, null, null, N.A4, null, N.G4, null, null,
+      N.E4, null, null, N.G4, null, null, N.B4, null,
+      N.A4, null, null, N.F4, null, N.E4, null, null,
+      N.C4, null, null, N.E4, null, null, null, null,
+      N.D5, null, null, N.A4, null, N.F4, null, null,
+      N.C5, null, null, N.A4, null, null, N.E4, null,
+      N.G4, null, null, N.Bb4, null, N.A4, null, null,
+      N.G4, null, null, null, N.E4, null, null, null,
+    ],
+    arpB: [
+      N.A4, null, null, N.C5, null, N.E5, null, null,
+      N.D5, null, null, N.C5, null, null, N.G4, null,
+      N.F4, null, null, N.A4, null, N.C5, null, null,
+      N.G4, null, null, N.E4, null, null, null, null,
+      N.F4, null, null, N.A4, null, N.D5, null, null,
+      N.E5, null, null, N.C5, null, null, N.A4, null,
+      N.Bb4, null, null, N.A4, null, N.G4, null, null,
+      N.F4, null, null, N.G4, null, null, null, null,
+    ],
+  },
+
+  // 3. Emergency / Blackout / Urgent Crisis Scenes — cinematic deep sub-pulse & sonar, ZERO harsh clicks (~40s)
   crisis: {
     name: '42年目の沈黙 (Blackout Protocol)',
-    stepMs: 250,
+    stepMs: 310,
+    style: 'crisis',
+    padCutoff: 440,
+    echoSend: 0.45,
     chords: [
-      [N.D3, N.F3, N.A3],
-      [N.Eb3, N.G3, N.Bb3],
-      [N.D3, N.F3, N.A3],
-      [N.C3, N.E3, N.A3],
+      [N.D3, N.F3, N.A3],             // Dm
+      [N.Eb3, N.G3, N.Bb3],           // Eb
+      [N.D3, N.F3, N.A3],             // Dm
+      [N.C3, N.Eb3, N.G3],            // Cm
+      [N.Bb2, N.D3, N.F3],            // Bb
+      [N.A2, N.E3, N.A3],             // A5
+      [N.G2, N.D3, N.Bb3],            // Gm
+      [N.A2, N.E3, N.G3],             // A7(no3)
     ],
-    bass: [N.D2, N.D2, N.D2, N.C2],
-    arp: [
-      N.D4, null, N.F4, null, N.A4, null, N.F4, null,
-      N.Eb4, null, N.G4, null, N.Bb4, null, N.G4, null,
-      N.D4, null, N.A4, null, N.F4, null, N.E4, null,
-      N.C4, null, N.E4, null, N.A4, null, null, null,
+    bass: [N.D2, N.Eb2, N.D2, N.C2, N.Bb1, N.A1, N.G1, N.A1],
+    arpA: [
+      N.A4, null, null, null, N.F4, null, null, null,
+      N.Bb4, null, null, null, N.G4, null, null, null,
+      N.A4, null, null, N.E4, null, null, null, null,
+      N.G4, null, null, null, N.Eb4, null, null, null,
+      N.F4, null, null, null, N.D4, null, null, null,
+      N.E4, null, null, null, null, null, N.A3, null,
+      N.Bb4, null, null, null, N.G4, null, null, null,
+      N.A4, null, null, null, null, null, null, null,
     ],
-    perc: true,
-    tense: true,
-    padCutoff: 480,
+    arpB: [
+      N.D5, null, null, null, N.A4, null, null, null,
+      N.G4, null, null, null, N.Eb4, null, null, null,
+      N.F4, null, null, N.A4, null, null, null, null,
+      N.Eb4, null, null, null, N.C4, null, null, null,
+      N.D4, null, null, null, N.F4, null, null, null,
+      N.E4, null, null, null, N.A4, null, null, null,
+      N.G4, null, null, null, N.D4, null, null, null,
+      N.E4, null, null, null, null, null, null, null,
+    ],
   },
+
+  // 4. Circuit Workbench & Physics Lab — ultra-calm, spacious, meditative 12-bar ambient (~80.6s A/B cycle!)
+  //    Replaces the old short repetitive "Silicon Pulse". Zero harsh ticking, generous rests, cozy deep focus.
   workbench: {
-    name: '硅素の鼓動 (Silicon Pulse)',
-    stepMs: 285,
+    name: '深層の思索 (Deep Silicon Drift)',
+    stepMs: 420,
+    style: 'drift',
+    padCutoff: 500,
+    echoSend: 0.46,
     chords: [
-      [N.A2, N.E3, N.A3, N.C4],
-      [N.F2, N.C3, N.F3, N.A3],
-      [N.C3, N.G3, N.C4, N.E4],
-      [N.G2, N.D3, N.G3, N.B3],
+      [N.A2, N.E3, N.B3, N.C4],       // Am9
+      [N.F2, N.C3, N.G3, N.A3],       // Fmaj9
+      [N.C3, N.G3, N.B3, N.E4],       // Cmaj7
+      [N.E2, N.B2, N.G3, N.D4],       // Em7
+      [N.D3, N.A3, N.C4, N.E4],       // Dm9
+      [N.A2, N.E3, N.G3, N.C4],       // Am7
+      [N.F2, N.C3, N.A3, N.E4],       // Fmaj7
+      [N.G2, N.D3, N.B3, N.E4],       // G6
+      [N.E2, N.B2, N.F3 + 10.39, N.G3], // Em9 (F#3 ≈ 185.0Hz)
+      [N.F2, N.C3, N.G3, N.A3],       // Fmaj9
+      [N.D3, N.A3, N.C4, N.F4],       // Dm7
+      [N.E2, N.B2, N.A3, N.D4],       // E7sus4
     ],
-    bass: [N.A1, N.F2, N.C2, N.G2],
-    arp: [
-      N.E4, null, N.A4, N.C5, null, N.B4, N.A4, null,
-      N.A4, null, N.F4, N.C5, null, N.A4, N.G4, null,
-      N.G4, null, N.C5, N.E5, null, N.D5, N.C5, null,
-      N.B4, null, N.G4, N.D5, null, N.B4, N.G4, null,
+    bass: [N.A1, N.F2, N.C2, N.E2, N.D2, N.A1, N.F2, N.G2, N.E2, N.F2, N.D2, N.E2],
+    // Sparse, meditative electric-piano/kalimba droplets with lots of quiet space to think
+    arpA: [
+      N.E4, null, null, null, null, N.B4, null, null,
+      N.A4, null, null, null, N.G4, null, null, null,
+      null, null, N.E5, null, null, null, N.B4, null,
+      N.G4, null, null, null, null, null, null, null,
+      N.F4, null, null, N.A4, null, null, N.E4, null,
+      null, null, N.C5, null, null, null, N.G4, null,
+      N.A4, null, null, null, null, N.E4, null, null,
+      N.D4, null, null, null, null, null, null, null,
+      N.B4, null, null, null, N.G4, null, null, null,
+      N.A4, null, null, null, null, N.E4, null, null,
+      N.F4, null, null, N.C5, null, null, N.A4, null,
+      N.B4, null, null, null, null, null, null, null,
     ],
-    perc: true,
-    tense: false,
-    padCutoff: 740,
+    arpB: [
+      null, null, N.C5, null, null, N.E4, null, null,
+      N.G4, null, null, null, null, null, N.A4, null,
+      N.B4, null, null, N.G4, null, null, null, null,
+      N.E4, null, null, null, N.D4, null, null, null,
+      null, null, N.E4, null, null, N.A4, null, null,
+      N.C5, null, null, null, N.B4, null, null, null,
+      null, null, N.A4, null, null, N.G4, null, null,
+      N.E4, null, null, null, null, null, null, null,
+      N.G4, null, null, null, null, N.B4, null, null,
+      N.C5, null, null, null, N.A4, null, null, null,
+      null, null, N.F4, null, null, N.E4, null, null,
+      N.D4, null, null, null, null, null, null, null,
+    ],
   },
+
+  // 5. ACT V Finale & Civilization Reboot — radiant, uplifting, hopeful (~44s full A/B cycle)
   finale: {
     name: '夜明けのビーコン (Dawn Over Ash)',
-    stepMs: 300,
+    stepMs: 340,
+    style: 'finale',
+    padCutoff: 840,
+    echoSend: 0.4,
     chords: [
-      [N.F3, N.A3, N.C4, N.E4],
-      [N.G3, N.B3, N.D4, N.E4],
-      [N.A3, N.C4, N.E4, N.G4],
-      [N.C3, N.G3, N.C4, N.E4],
+      [N.F3, N.A3, N.C4, N.G4],       // Fmaj9
+      [N.G3, N.B3, N.D4, N.E4],       // G6
+      [N.A3, N.C4, N.E4, N.B4],       // Am9
+      [N.C3, N.G3, N.C4, N.E4],       // C
+      [N.D3, N.A3, N.C4, N.F4],       // Dm7
+      [N.E3, N.B3, N.D4, N.G4],       // Em7
+      [N.F3, N.A3, N.C4, N.E4],       // Fmaj7
+      [N.G3, N.C4, N.D4, N.A4],       // G9sus4
     ],
-    bass: [N.F2, N.G2, N.A2, N.C2],
-    arp: [
-      N.C5, N.E5, N.A4, null, N.F5, N.E5, N.C5, null,
-      N.D5, N.G5, N.B4, null, N.E5, N.D5, N.B4, null,
-      N.E5, N.A5, N.C5, null, N.G5, N.E5, N.C5, null,
-      N.G5, N.E5, N.C5, N.D5, N.E5, null, null, null,
+    bass: [N.F2, N.G2, N.A2, N.C2, N.D2, N.E2, N.F2, N.G2],
+    arpA: [
+      N.C5, null, N.E5, null, N.A4, null, N.G4, null,
+      N.B4, null, N.D5, null, N.G5, null, N.E5, null,
+      N.E5, null, N.C5, null, N.B4, null, N.A4, null,
+      N.G4, null, N.C5, null, N.E5, null, null, null,
+      N.F5, null, N.C5, null, N.A4, null, N.D5, null,
+      N.E5, null, N.B4, null, N.G4, null, N.D5, null,
+      N.C5, null, N.E5, null, N.G5, null, N.E5, null,
+      N.D5, null, N.C5, null, N.D5, null, null, null,
     ],
-    perc: true,
-    tense: false,
-    padCutoff: 960,
+    arpB: [
+      N.A4, null, N.C5, null, N.E5, null, N.G5, null,
+      N.D5, null, N.G5, null, N.E5, null, N.B4, null,
+      N.C5, null, N.E5, null, N.A5, null, N.G5, null,
+      N.E5, null, N.D5, null, N.C5, null, null, null,
+      N.A4, null, N.D5, null, N.F5, null, N.E5, null,
+      N.G5, null, N.E5, null, N.D5, null, N.B4, null,
+      N.A4, null, N.C5, null, N.E5, null, N.C5, null,
+      N.G4, null, N.A4, null, N.B4, null, null, null,
+    ],
   },
 };
 
@@ -108,6 +249,7 @@ class SoundEngine {
     this.ctx = null;
     this.seGain = null;
     this.bgmGain = null;
+    this.bgmEchoIn = null;
     this.compressor = null;
 
     this.enabled = true;        // SE on/off
@@ -120,6 +262,7 @@ class SoundEngine {
     this.currentTrack = null;
     this._bgmTimer = null;
     this._bgmStep = 0;
+    this._bgmCycle = 0;
     this._unlocked = false;
     this._silentAudio = null;
 
@@ -239,9 +382,25 @@ class SoundEngine {
   setBgmTrack(trackId) {
     if (!BGM_TRACK_INFO[trackId]) return;
     if (this.currentTrack === trackId && this._bgmTimer) return;
+    const switched = Boolean(this.currentTrack && this.currentTrack !== trackId);
     this.currentTrack = trackId;
     this._bgmStep = 0;
+    this._bgmCycle = 0;
     this._stopBgmLoop();
+
+    // Gentle breath fade on track transitions so scene switches feel seamless
+    if (switched && this.ctx && this.bgmGain && this.bgmEnabled) {
+      const now = this.ctx.currentTime;
+      const target = this.bgmVolume * 0.65;
+      try {
+        this.bgmGain.gain.cancelScheduledValues(now);
+        this.bgmGain.gain.setTargetAtTime(target * 0.25, now, 0.08);
+        this.bgmGain.gain.setTargetAtTime(target, now + 0.16, 0.22);
+      } catch {
+        // ignore
+      }
+    }
+
     if (this.bgmEnabled && this.ctx && this.ctx.state === 'running') {
       this._startBgmLoop();
     }
@@ -268,7 +427,7 @@ class SoundEngine {
     }
     if (this.bgmGain) {
       const targetBgm = this.bgmEnabled ? this.bgmVolume * 0.65 : 0;
-      try { this.bgmGain.gain.setTargetAtTime(targetBgm, now, 0.06); } catch { this.bgmGain.gain.value = targetBgm; }
+      try { this.bgmGain.gain.setTargetAtTime(targetBgm, now, 0.08); } catch { this.bgmGain.gain.value = targetBgm; }
     }
   }
 
@@ -282,6 +441,31 @@ class SoundEngine {
       this.seGain.gain.value = this.enabled ? this.volume : 0;
       this.bgmGain = this.ctx.createGain();
       this.bgmGain.gain.value = this.bgmEnabled ? this.bgmVolume * 0.65 : 0;
+
+      // Warm low-pass ambient delay bus for dreamy, spacious BGM notes
+      try {
+        const echoIn = this.ctx.createGain();
+        echoIn.gain.value = 1.0;
+        const delay = this.ctx.createDelay(1.0);
+        delay.delayTime.value = 0.36;
+        const echoFilter = this.ctx.createBiquadFilter();
+        echoFilter.type = 'lowpass';
+        echoFilter.frequency.value = 950;
+        const feedback = this.ctx.createGain();
+        feedback.gain.value = 0.28;
+        const wetOut = this.ctx.createGain();
+        wetOut.gain.value = 0.34;
+
+        echoIn.connect(delay);
+        delay.connect(echoFilter);
+        echoFilter.connect(feedback);
+        feedback.connect(delay);
+        echoFilter.connect(wetOut);
+        wetOut.connect(this.bgmGain);
+        this.bgmEchoIn = echoIn;
+      } catch {
+        this.bgmEchoIn = null;
+      }
 
       if (typeof this.ctx.createDynamicsCompressor === 'function') {
         this.compressor = this.ctx.createDynamicsCompressor();
@@ -303,7 +487,7 @@ class SoundEngine {
   }
 
   // ===========================================================================
-  // PROCEDURAL MULTI-TRACK BGM SEQUENCER
+  // PROCEDURAL LONG-FORM AMBIENT BGM SEQUENCER
   // ===========================================================================
   _startBgmLoop() {
     if (this._bgmTimer || !this.bgmEnabled || !this.currentTrack) return;
@@ -314,8 +498,13 @@ class SoundEngine {
       if (!this.bgmEnabled || !this.ctx || this.ctx.state !== 'running') return;
       const t = BGM_TRACK_INFO[this.currentTrack];
       if (!t) return;
-      this._playBgmStep(t, this._bgmStep);
-      this._bgmStep = (this._bgmStep + 1) % 32;
+      const totalSteps = t.chords.length * 8;
+      this._playBgmStep(t, this._bgmStep, this._bgmCycle);
+      this._bgmStep++;
+      if (this._bgmStep >= totalSteps) {
+        this._bgmStep = 0;
+        this._bgmCycle++;
+      }
     };
 
     tick();
@@ -329,109 +518,158 @@ class SoundEngine {
     }
   }
 
-  _playBgmStep(track, step) {
+  _playBgmStep(track, step, cycle) {
     const ctx = this.ctx;
     const out = this.bgmGain;
     if (!ctx || !out || this.bgmVolume <= 0.005) return;
 
-    const now = ctx.currentTime + 0.01;
+    const now = ctx.currentTime + 0.012;
     const stepSec = track.stepMs / 1000;
     const barIdx = Math.floor(step / 8) % track.chords.length;
     const beatInBar = step % 8;
+    const isDrift = track.style === 'drift';
+    const isCrisis = track.style === 'crisis';
+    const isFinale = track.style === 'finale';
 
-    // 1. Warm Analog Synth Pad on start of each 8-step bar
+    // 1. Slow-Breathing Warm Pad on start of each 8-step bar
     if (beatInBar === 0) {
       const chord = track.chords[barIdx];
-      const padDur = stepSec * 8.4;
+      const padDur = stepSec * 8.6;
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(track.padCutoff * 0.7, now);
-      filter.frequency.linearRampToValueAtTime(track.padCutoff, now + padDur * 0.45);
-      filter.frequency.linearRampToValueAtTime(track.padCutoff * 0.65, now + padDur);
+      filter.Q.value = 0.7;
+      filter.frequency.setValueAtTime(track.padCutoff * 0.62, now);
+      filter.frequency.linearRampToValueAtTime(track.padCutoff, now + padDur * 0.48);
+      filter.frequency.linearRampToValueAtTime(track.padCutoff * 0.58, now + padDur);
       filter.connect(out);
 
       chord.forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = idx % 2 === 0 ? 'triangle' : 'sawtooth';
+        // Drift & warm tracks use pure silky sine/triangle — zero buzzy sawtooth fatigue!
+        osc.type = isDrift || track.style === 'warm'
+          ? (idx % 2 === 0 ? 'sine' : 'triangle')
+          : (idx === 1 ? 'sawtooth' : 'triangle');
         osc.frequency.setValueAtTime(freq, now);
-        osc.detune.setValueAtTime(idx % 2 === 0 ? -4 : 4, now);
-        const peak = idx % 2 === 0 ? 0.055 : 0.028;
+        osc.detune.setValueAtTime(idx % 2 === 0 ? -3.5 : 3.5, now);
+
+        const peak = osc.type === 'sawtooth' ? 0.02 : isDrift ? 0.048 : 0.045;
         g.gain.setValueAtTime(0.0005, now);
-        g.gain.linearRampToValueAtTime(peak, now + 0.45);
-        g.gain.setValueAtTime(peak * 0.85, now + padDur - 0.55);
+        g.gain.linearRampToValueAtTime(peak, now + Math.min(0.9, padDur * 0.28));
+        g.gain.setValueAtTime(peak * 0.82, now + padDur - 0.75);
         g.gain.exponentialRampToValueAtTime(0.0005, now + padDur);
+
         osc.connect(g);
         g.connect(filter);
         osc.start(now);
-        osc.stop(now + padDur + 0.05);
+        osc.stop(now + padDur + 0.08);
       });
     }
 
-    // 2. Deep Sub-Bass pulse (beats 0 and 4, or pulsing in crisis track)
-    const playBass = track.tense ? beatInBar % 2 === 0 : beatInBar === 0 || beatInBar === 4;
+    // 2. Velvety Sub-Bass Foundation
+    const playBass = isCrisis
+      ? beatInBar === 0 || beatInBar === 3 || beatInBar === 6
+      : isDrift
+        ? beatInBar === 0
+        : beatInBar === 0 || beatInBar === 4;
+
     if (playBass) {
       const freq = track.bass[barIdx];
       const osc = ctx.createOscillator();
       const filter = ctx.createBiquadFilter();
       const g = ctx.createGain();
-      osc.type = 'triangle';
+      osc.type = isDrift ? 'sine' : 'triangle';
       osc.frequency.setValueAtTime(freq, now);
       filter.type = 'lowpass';
-      filter.frequency.value = 220;
-      const dur = track.tense ? stepSec * 1.4 : stepSec * 3.2;
+      filter.frequency.value = isDrift ? 170 : 210;
+      const dur = isCrisis ? stepSec * 1.9 : isDrift ? stepSec * 6.5 : stepSec * 3.6;
+      const peak = beatInBar === 0 ? (isDrift ? 0.12 : 0.13) : 0.075;
       g.gain.setValueAtTime(0.001, now);
-      g.gain.linearRampToValueAtTime(beatInBar === 0 ? 0.14 : 0.09, now + 0.02);
+      g.gain.linearRampToValueAtTime(peak, now + (isDrift ? 0.14 : 0.035));
       g.gain.exponentialRampToValueAtTime(0.0008, now + dur);
+
       osc.connect(filter);
       filter.connect(g);
       g.connect(out);
       osc.start(now);
-      osc.stop(now + dur + 0.03);
+      osc.stop(now + dur + 0.05);
     }
 
-    // 3. Crystalline Synth Bell / Rhodes Arpeggio
-    const arpFreq = track.arp[step % track.arp.length];
+    // 3. Soft Rhodes / Glass-Marimba Melodic Droplets (alternates Phrase A / Phrase B every cycle!)
+    const arpList = cycle % 2 === 1 && track.arpB ? track.arpB : track.arpA;
+    const arpFreq = arpList[step % arpList.length];
     if (arpFreq) {
+      // On calm drift track, softly breathe down occasional notes on later cycles for organic feel
+      const skipOrganic = isDrift && cycle >= 2 && ((step * 7 + cycle * 13) % 11 === 0);
+      if (!skipOrganic) {
+        const osc = ctx.createOscillator();
+        const overtone = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(arpFreq, now);
+        overtone.type = 'sine';
+        overtone.frequency.setValueAtTime(arpFreq * 2, now);
+
+        const og = ctx.createGain();
+        og.gain.value = isFinale ? 0.16 : isDrift ? 0.09 : 0.12;
+        overtone.connect(og);
+        og.connect(filter);
+        osc.connect(filter);
+
+        filter.type = 'lowpass';
+        filter.frequency.value = isFinale ? 2200 : isDrift ? 1350 : 1650;
+
+        const dur = isDrift ? stepSec * 3.4 : stepSec * 2.5;
+        const peak = isDrift ? 0.058 : isCrisis ? 0.052 : 0.068;
+        g.gain.setValueAtTime(0.0008, now);
+        g.gain.linearRampToValueAtTime(peak, now + (isDrift ? 0.035 : 0.018));
+        g.gain.exponentialRampToValueAtTime(0.0006, now + dur);
+
+        filter.connect(g);
+        g.connect(out);
+
+        // Send a touch into the warm ambient echo bus!
+        if (this.bgmEchoIn && track.echoSend > 0) {
+          const send = ctx.createGain();
+          send.gain.value = track.echoSend;
+          g.connect(send);
+          send.connect(this.bgmEchoIn);
+        }
+
+        osc.start(now);
+        overtone.start(now);
+        osc.stop(now + dur + 0.06);
+        overtone.stop(now + dur + 0.06);
+      }
+    }
+
+    // 4. Cinematic Deep Pulse (ONLY soft low-passed sine thump in crisis/finale — NEVER harsh square ticks!)
+    if (isCrisis && (beatInBar === 0 || beatInBar === 4)) {
       const osc = ctx.createOscillator();
-      const overtone = ctx.createOscillator();
       const g = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(arpFreq, now);
-      overtone.type = 'triangle';
-      overtone.frequency.setValueAtTime(arpFreq * 2, now);
-
-      const og = ctx.createGain();
-      og.gain.value = 0.18;
-      overtone.connect(og);
-      og.connect(g);
+      osc.frequency.setValueAtTime(beatInBar === 0 ? 78 : 62, now);
+      osc.frequency.exponentialRampToValueAtTime(34, now + 0.14);
+      g.gain.setValueAtTime(beatInBar === 0 ? 0.11 : 0.065, now);
+      g.gain.exponentialRampToValueAtTime(0.0008, now + 0.16);
       osc.connect(g);
-
-      const dur = stepSec * 2.2;
-      g.gain.setValueAtTime(0.001, now);
-      g.gain.linearRampToValueAtTime(0.075, now + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0008, now + dur);
       g.connect(out);
-
       osc.start(now);
-      overtone.start(now);
-      osc.stop(now + dur + 0.03);
-      overtone.stop(now + dur + 0.03);
-    }
-
-    // 4. Subtle Mechanical Relay Tick Percussion (gives tactile puzzle rhythm!)
-    if (track.perc && (beatInBar % 2 === 1 || (track.tense && beatInBar === 0))) {
+      osc.stop(now + 0.18);
+    } else if (isFinale && beatInBar === 0) {
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(track.tense && beatInBar === 0 ? 140 : 1200, now);
-      osc.frequency.exponentialRampToValueAtTime(track.tense && beatInBar === 0 ? 55 : 420, now + 0.028);
-      g.gain.setValueAtTime(track.tense && beatInBar === 0 ? 0.05 : 0.015, now);
-      g.gain.exponentialRampToValueAtTime(0.0005, now + 0.032);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(92, now);
+      osc.frequency.exponentialRampToValueAtTime(44, now + 0.12);
+      g.gain.setValueAtTime(0.08, now);
+      g.gain.exponentialRampToValueAtTime(0.0008, now + 0.14);
       osc.connect(g);
       g.connect(out);
       osc.start(now);
-      osc.stop(now + 0.038);
+      osc.stop(now + 0.16);
     }
   }
 
@@ -505,9 +743,9 @@ class SoundEngine {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(on ? 540 : 350, now);
-      osc.frequency.exponentialRampToValueAtTime(on ? 920 : 190, now + 0.05);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(on ? 520 : 340, now);
+      osc.frequency.exponentialRampToValueAtTime(on ? 880 : 195, now + 0.05);
       gain.gain.setValueAtTime(0.2, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
       osc.connect(gain);
@@ -644,9 +882,9 @@ class SoundEngine {
       const now = ctx.currentTime;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'square';
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(pitch, now);
-      gain.gain.setValueAtTime(0.075, now);
+      gain.gain.setValueAtTime(0.07, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.028);
       osc.connect(gain);
       gain.connect(out);

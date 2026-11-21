@@ -356,10 +356,12 @@ export class PhysicsLabCanvas {
   fitToView() {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 20) return;
-    const pad = 10;
-    this.scale = Math.min((rect.width - pad * 2) / W, (rect.height - pad * 2) / H);
+    const padX = 10;
+    const padTop = 38;
+    const padBottom = 10;
+    this.scale = Math.min((rect.width - padX * 2) / W, (rect.height - padTop - padBottom) / H);
     this.offsetX = (rect.width - W * this.scale) / 2;
-    this.offsetY = (rect.height - H * this.scale) / 2;
+    this.offsetY = padTop + (rect.height - padTop - padBottom - H * this.scale) / 2;
   }
 
   _screenToWorld(clientX, clientY) {
@@ -395,7 +397,8 @@ export class PhysicsLabCanvas {
           } else if (this.slots[d.id]) {
             // Tap an occupied slot with empty hand -> remove part cleanly!
             this.slots[d.id] = null;
-            this.feedbackMsg = '';
+            this.feedbackMsg = '部品を外しました（下の材料をタップして配置できます）';
+            this.feedbackColor = '#9bb0c4';
             this.cb.onPartRemoved?.();
             this.cb.onSlotsChange?.({ ...this.slots });
             this._notifyState();
@@ -916,12 +919,15 @@ export class PhysicsLabCanvas {
 
   _drawBanner(ctx, w, text, accent) {
     ctx.save();
-    ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
-    const tw = Math.min(w - 16, ctx.measureText(text).width + 22);
-    const x = (w - tw) / 2;
-    const y = 44;
+    ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const leftSafe = 84; // Clear of top-left ⌖ / ✕ utility buttons
+    const rightSafe = 10;
+    const availW = Math.max(120, w - leftSafe - rightSafe);
+    const tw = Math.min(availW, ctx.measureText(text).width + 20);
+    const x = leftSafe + (availW - tw) / 2;
+    const y = 8;
     ctx.fillStyle = 'rgba(12, 18, 25, 0.94)';
-    this._roundRect(ctx, x, y, tw, 26, 13);
+    this._roundRect(ctx, x, y, tw, 25, 12.5);
     ctx.fill();
     ctx.strokeStyle = accent;
     ctx.lineWidth = 1.5;
@@ -929,7 +935,7 @@ export class PhysicsLabCanvas {
     ctx.fillStyle = accent;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, w / 2, y + 13.5, tw - 14);
+    ctx.fillText(text, x + tw / 2, y + 13, tw - 12);
     ctx.restore();
   }
 

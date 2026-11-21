@@ -105,6 +105,7 @@ export const STAGES = [
     title: '砂から「じゃぐち」を創れ',
     revealedTitle: 'MOSFETトランジスタ（電気スイッチ）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'silicon_lab',
     mode: 'physics',
     incidentBrief: {
@@ -164,7 +165,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: '落ち着けミナ！ 冷却弁を直すにはまず、電気信号だけでパチパチ開閉できる「電気のじゃぐち」が必要だ。──だがEMPのせいで既製のスイッチ部品は全滅した。',
+        text: '落ち着けミナ！ 冷却弁を直すにはまず、電気信号だけでパチパチ開閉できる「電気のじゃぐち」が必要だ。──だが42年前のEMPと長い年月で、予備の電子スイッチ部品はとうに尽きてしまった。',
       },
       {
         speaker: 'mina',
@@ -199,7 +200,7 @@ export const STAGES = [
       {
         speaker: 'hako',
         visualCard: {
-          tag: '組み立て手順',
+          tag: '博士の物理メモ 3 / 3（組み立て手順）',
           title: '材料をタップして4つの枠にハメよう',
           diagram: '下の材料をタップ → 光る空き枠をタップ（2回タップで自動配置もOK）',
           rule: '組み立てたら「ひねり」ボタンを触って電子の橋を確認 → 右下の「▶テスト実行」を押せ！',
@@ -215,7 +216,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: 'それこそが現代文明の最小細胞──【MOSFETトランジスタ】だ！ 1959年にベル研究所で発明され、今やスマホ1台の中に数百億個も詰め込まれている「砂から生まれた電気の蛇口」だよ！',
+        text: 'それこそが旧文明の最小細胞──【MOSFETトランジスタ】だ！ 1959年にベル研究所で発明され、かつての地上──戦前のスマホ1台の中には、この小さなスイッチが数百億個も詰め込まれていたんだよ！',
       },
       {
         speaker: 'kagari',
@@ -255,6 +256,7 @@ export const STAGES = [
     title: '電気の抜け道「はいすい」を創れ',
     revealedTitle: 'プルアップ抵抗回路（PULL）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'pullup_lab',
     mode: 'physics',
     incidentBrief: {
@@ -330,7 +332,7 @@ export const STAGES = [
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '解決の鍵：プルアップ抵抗',
+          tag: '解決の鍵：細い道（ていこう）のワザ',
           title: '💧 上を「細い道（ていこう）」にする！',
           diagram: '電池 ▶ [ていこう(細)] ▶ ランプ(でぐち) ▶ [ぬけ(広)] ▶ 地面(0V)',
           rule: '下が閉じてれば水圧が溜まって 1(5V)！ 下が開けば全部地面へ抜けて安全に 0(0V)！',
@@ -396,6 +398,7 @@ export const STAGES = [
     title: '非常冷却弁を繋げ──NANDの誕生',
     revealedTitle: 'NANDゲート（物理トランジスタ原板）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'nand_forge',
     mode: 'combinational',
     incidentBrief: {
@@ -418,54 +421,24 @@ export const STAGES = [
       '【水のホースでイメージ！】でんち(1) → じゃぐち①(ひねり=A) → じゃぐち②(ひねり=B) とまっすぐ一列につないで「はいすい」の『ぬけ』へ繋ぐと、AとBの両方の蛇口が開いた瞬間だけ電気が地面へ抜けて OUT=0 になります！',
     introDialogue: [
       {
-        speaker: 'mina',
-        text: '部品が2つ揃ったね！ これでやっと地熱発電炉の冷却ラインに安全弁を取り付けられる！ 温度計が赤いラインに近づいてるよ、急ごう！',
+        speaker: 'kagari',
+        text: 'よし！ 00-Aで砂から創った【じゃぐち（トランジスタ）】と、00-Bでショートを防いで組んだ【はいすい（プルアップ抵抗）】──ついに必要な物理部品がぜんぶ手元にそろったぞ！',
       },
       {
         speaker: 'mina',
         showIncident: true,
-        text: '条件をおさらいするね！ 冷却水は【普段はずっと 1（流しっぱなし）】。止めて（0）いいのは──「A：炉心の安全停止」と「B：冷却完了センサー」の【両方が同時に 1 になったときだけ】だよ！',
-      },
-      {
-        speaker: 'kagari',
-        text: '……待てよ！ 今ミナが言った「両方1のときだけ 0、それ以外は全部 1」の安全弁──それこそが、焼付け機のマスター原板【NAND】そのものじゃないか！！',
-      },
-      {
-        speaker: 'kagari',
-        text: 'よし、一石二鳥だ！ 焼け跡から拾った3種類の部品で、この安全弁を組んで発電炉を救おう。──専門用語は一切使わないから安心して。1つずつ「水のホース」にたとえて説明するよ！',
+        text: '地熱発電炉の予備冷却タンク、あと数分で限界だよ……！ 冷却弁の条件をおさらいするね：【普段はずっと 1（流しっぱなし）】。止めて（0）いいのは──「A：炉心の安全停止」と「B：冷却完了センサー」の【両方が同時に 1 になったときだけ】！',
       },
       {
         speaker: 'kagari',
         visualCard: {
-          tag: '博士の部品ガイド 1 / 3',
-          title: '🔋 でんち（いつも 1）',
-          diagram: '[ でんち ] ──▶ つねに 1（電気ON）',
-          rule: '電気を流し始めるスタート地点。出力ピン「1」からずっと電気が出ます。',
+          tag: 'おさらい：3つの物理部品',
+          title: '🔋でんち ／ 🚰じゃぐち ／ 🕳はいすい',
+          diagram: '🔋でんち(常に1) ／ 🚰じゃぐち(ひねり=1で通す) ／ 🕳はいすい(ぬけ=1で0へ落とす)',
+          rule: 'さっき創った2部品＋電源【でんち】で「両方1のときだけ0」の原板【NAND】を組もう！',
           accent: '#ffd166',
         },
-        text: '1つ目は【でんち】だ。難しいことは何もない、つねに「1（電気あり）」を出しつづけるだけのスタート地点さ。ここから電気を流し始めるよ！',
-      },
-      {
-        speaker: 'kagari',
-        visualCard: {
-          tag: '博士の部品ガイド 2 / 3',
-          title: '🚰 じゃぐち（スイッチ）',
-          diagram: 'いり ──[ 🚰 ひねり=1で開通! ]──▶ でぐち',
-          rule: '「ひねり」が 1 のときだけ「いり」の電気を「でぐち」へ通す！ 0 なら止める。',
-          accent: '#ffbe6b',
-        },
-        text: '2つ目は【じゃぐち】だ。「ひねり」に 1 が来ると栓が開いて、「いり」から来た電気を「でぐち」へ通してくれる。ひねりが 0 のときはギュッと閉まって電気をせき止めるよ。',
-      },
-      {
-        speaker: 'kagari',
-        visualCard: {
-          tag: '博士の部品ガイド 3 / 3',
-          title: '🕳 はいすい（抜け道バルブ）',
-          diagram: 'ふだんは でぐち=1 ／ ぬけ=1で地面へ抜けて → でぐち=0!',
-          rule: 'ふだんは自動で「1」を出力。でも「ぬけ」に電気が届くと地面へ抜けて「0」に落ちる！',
-          accent: '#7cd4f5',
-        },
-        text: '最後がキモになる【はいすい】だ！ こいつは普段、自分で「1（冷却水を流す）」を出しつづけている。……でも「ぬけ」の穴に電気（1）が流れ込むと、電気が地面へスッと抜け落ちて出力が「0（停止）」になるんだ！',
+        text: 'まさに「両方1のときだけ 0、それ以外は全部 1」──B4焼付け機のマスター原板【NAND】とまったく同じ条件だ！ ここからは本格的な「回路配線ボード」の出番だよ。さっき創った部品に電源の【でんち】を足して繋ごう！',
       },
       {
         speaker: 'kagari',
@@ -476,32 +449,32 @@ export const STAGES = [
           rule: 'AとBの“両方”が開いた瞬間だけ「はいすい」に電気が届いて 0 になる！',
           accent: '#52e3b6',
         },
-        text: 'さあ繋がったかい？ 【でんち】から2個の【じゃぐち】をまっすぐ一列につないで【はいすい】へ流せば──AとBの両方の蛇口が開いたときだけ電気が抜けて 0、それ以外は全部 1 になる！',
+        text: 'ひらめいたかい？ 【でんち】から2個の【じゃぐち】をまっすぐ一列につないで【はいすい】の「ぬけ」へ流せば──AとBの両方の蛇口が開いたときだけ電気が地面へ抜けて 0、それ以外は全部 1 になる！',
       },
       {
         speaker: 'hako',
         visualCard: {
-          tag: 'かんたん操作ガイド',
+          tag: '配線ボードの操作ガイド',
           title: 'タップだけで回路が組める',
-          diagram: '部品を2回タップで自動配置 ／ 丸いピン同士をタップして配線',
+          diagram: '部品を2回タップで自動配置 ／ 丸いピン同士をタップ（またはドラッグ）で配線',
           rule: '迷ったら下の「💡ヒント」や部品の「i」ボタンをいつでも見ていいぞ！',
           accent: '#ffb84d',
         },
-        text: '『操作はかんたんだ。下の部品をポンポンと2回押すと盤面に置ける。あとは丸いピン同士をタップして線を繋げ！ 組み終わったら右下の「▶テスト実行」を押せ』',
+        text: '『ここから本格的な配線モードだ。下の部品をポンポンと2回押すと盤面に置ける。あとは丸いピン同士をタップして線を繋げ！ 組み終わったら右下の「▶テスト実行」を押せ！』',
       },
     ],
     outroDialogue: [
       {
         speaker: 'mina',
-        text: '……冷却圧が安定、非常発電炉が持ちこたえた！！ AとBの両方が開いた瞬間だけピタッと弁が閉じたよ！ すごい、B4のチップ焼付け機にも電力が来た！！',
+        text: '……冷却圧が安定、非常発電炉が持ちこたえた！！ AとBの両方が開いた瞬間だけピタッと弁が閉じたよ！ すごい、B4のチップ焼付け機にも本電力が来た！！',
       },
       {
         speaker: 'kagari',
-        text: 'おめでとう、見習い君！ 実はいま君が繋いだ【じゃぐち】は現実世界では「トランジスタ（SW）」、【はいすい】は「プルアップ抵抗（PULL）」と呼ぶんだ。難しそうな名前だけど、中身は今の“蛇口と排水”そのままなんだよ！',
+        text: 'やったぞ、見習い君！！ 砂から創ったトランジスタ2個とプルアップ抵抗1個が、いま目の前で「考えて判断する」最初の論理素子──【NANDゲート】として目覚めた瞬間だ！',
       },
       {
         speaker: 'kagari',
-        text: 'そしてこの「両方1のときだけ0」になる回路の正式名称こそ──すべてのコンピュータの原点【NANDゲート】だ！ 君の回路を焼付け機の原板にセットしたから、次からはこの1個の【NAND】チップだけで世界中の計算機を組み上げていくぞ！',
+        text: '君が組み上げたこの回路を、B4焼付け機のマスター原板にセットしたよ！ もう1個ずつ物理部品から手組みする必要はない──ここからは量産した【NAND】チップだけを積み上げて、人類の頭脳をゼロから復活させるぞ！',
       },
     ],
     hints: [
@@ -538,6 +511,7 @@ export const STAGES = [
     title: '逆転スイッチを直せ',
     revealedTitle: 'NOTゲート（インバーター）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'air_scrubber',
     mode: 'combinational',
     incidentBrief: {
@@ -574,6 +548,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の回路メモ：分岐のワザ',
+          title: '🔀 同じ線を A と B 両方へ入れると？',
+          diagram: 'IN=0 ─┬─▶ A(0) / B(0) ─▶ [NAND] ─▶ 1\nIN=1 ─┴─▶ A(1) / B(1) ─▶ [NAND] ─▶ 0',
+          rule: '1本の入力ピンから2本へ分岐できる！ 同じ値を両方に入れると 0↔1 が逆転するぞ！',
+          accent: '#52e3b6',
+        },
         text: '覚えてるかい？ NANDは「入口AとB、両方が1のときだけ0」「両方が0のときは1」を返す。……もし1本の線から2つに分岐して、AとBの両方へ同じ信号を入れたらどうなるだろう？',
       },
       {
@@ -624,6 +605,7 @@ export const STAGES = [
     title: '二重ロックの隔壁',
     revealedTitle: 'ANDゲート（論理積）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'bulkhead',
     mode: 'combinational',
     incidentBrief: {
@@ -704,6 +686,7 @@ export const STAGES = [
     title: '南北センサー非常網',
     revealedTitle: 'ORゲート（論理和）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'alarm_grid',
     mode: 'combinational',
     incidentBrief: {
@@ -736,11 +719,18 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: 'ふふ、ここは最初の頭脳戦だね！ NANDは「両方が1のときだけ 0」になる。じゃあ今回ほしい回路は「両方が“何”のときだけ 0」になるかな？',
+        visualCard: {
+          tag: '博士の回路メモ：逆転の発想',
+          title: '🔄 先に反転してから NAND へ入れると？',
+          diagram: 'A ─▶ [NOT] ──┐\n              ├─▶ [NAND] ─▶ OUT（両方0のときだけ0！）\nB ─▶ [NOT] ──┘',
+          rule: 'A=0, B=0 のときだけ NOT 後が「1と1」になり、NAND が 0 を返す！ それ以外は全部 1！',
+          accent: '#52e3b6',
+        },
+        text: 'ふふ、ここは最初の頭脳戦だね！ NANDは「両方が1のときだけ 0」になる。じゃあ今回ほしい回路は「両方が“0”のときだけ 0」にしたい──つまり入口で先にNOTで反転してからNANDへ入れればいいんだ！',
       },
       {
         speaker: 'hako',
-        text: '『答えの匂いがしたな。AもBも両方 0 のときだけ 0 にしたい──つまり入口で先に NOT をかませて反転してから NAND へ入れたら、どうなるか試してみろ』',
+        text: '『パレットにある NOT を2個と NAND を1個並べるだけだ。入口をひっくり返してから合流させて、南北の煙センサーを試してみろ！』',
       },
     ],
     outroDialogue: [
@@ -788,6 +778,7 @@ export const STAGES = [
     title: '階段のふたつのスイッチ',
     revealedTitle: 'XORゲート（排他的論理和）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'corridor_lamp',
     mode: 'combinational',
     incidentBrief: {
@@ -800,7 +791,7 @@ export const STAGES = [
     inputs: ['A', 'B'],
     outputs: ['OUT'],
     pinHelp: {
-      inputs: ['A: 地下1階スイッチ', 'B: 地下2階スイッチ'],
+      inputs: ['A: 地下3区（上）スイッチ', 'B: 地下4階（下）スイッチ'],
       outputs: ['OUT: 階段照明（AとBが違うときだけ 1）'],
     },
     allowedPrimitives: ['NAND'],
@@ -871,6 +862,7 @@ export const STAGES = [
     title: '電気で「1+1」を数えろ',
     revealedTitle: '半加算器（Half Adder）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'ration_counter',
     mode: 'combinational',
     incidentBrief: {
@@ -903,6 +895,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の計算メモ：はじめての2進数',
+          title: '🔢 0 と 1 だけで足し算するしくみ',
+          diagram: '0+0=00 ／ 0+1=01 ／ 1+0=01 ／ 1+1=10（くり上がり1・1の位0！）',
+          rule: '1の位（SUM）は「違うとき1＝XOR」、くり上がり（CARRY）は「両方1＝AND」と全く同じ！',
+          accent: '#5ce0a8',
+        },
         text: '歴史的な瞬間だぞ、見習い君！ スイッチは0と1しかないから「2」になったら桁を1つ上げる──これが【2進数】だ。0+0=00、0+1=01、1+0=01、そして 1+1=10（くり上がり1、1の位0）！',
       },
       {
@@ -951,6 +950,7 @@ export const STAGES = [
     title: 'くり上がりのバトンリレー',
     revealedTitle: '全加算器（Full Adder）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'ration_counter',
     mode: 'combinational',
     incidentBrief: {
@@ -974,7 +974,12 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'mina',
-        text: '1桁の足し算はできたけど、実際の配給計算は何桁もあるよね？ 筆算を思い出すと、2桁目からは「下の桁からのくり上がり」も一緒に足さないとダメだよね？',
+        text: 'すごいよ、1桁の足し算ランプが動いたのを見て、配給係のおばちゃんたちが拍手してた！ ……でもね、実際のアーク7の水の配給は1桁じゃとても足りないの。',
+      },
+      {
+        speaker: 'mina',
+        showIncident: true,
+        text: '筆算を思い出すと、2桁目からは「下の桁から上がってくるくり上がり（CIN）」も一緒に足さないと計算が合わないよね？ 3つ（A・B・CIN）を同時に足せる回路って作れるのかな？',
       },
       {
         speaker: 'kagari',
@@ -982,7 +987,7 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
-        text: '『さっき自作した H_ADD（半加算器）を2個と、ORを1個使えば美しく組めるぞ』',
+        text: '『さっき自作した H_ADD（半加算器）を2個と、ORを1個使えば美しく組めるぞ。まずA+Bを足して、その答えにCINを足す──くり上がりはORでまとめろ！』',
       },
     ],
     outroDialogue: [
@@ -1030,6 +1035,7 @@ export const STAGES = [
     title: '配給計算機・4ビット加算',
     revealedTitle: '4ビット加算器（Ripple-Carry Adder）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'ration_terminal',
     mode: 'combinational',
     incidentBrief: {
@@ -1056,10 +1062,18 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'mina',
-        text: 'よし、本番だよ！ シェルター全4区画の食料と水の配給数を一気に合計したいの。0から15まで数えられる4桁の計算機があれば、もう手計算のミスはゼロになる！',
+        showIncident: true,
+        text: 'よし、本番だよ！ 夕方6時の配給列がもうでき始めてるの。シェルター全4区画の食料と水の配給数を一気に合計したいんだ──0から15まで数えられる4桁の計算機があれば、もう手計算のミスはゼロになる！',
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の計算メモ：4ビットの位取り',
+          title: '🪜 1・2・4・8 の位をバトンリレー！',
+          diagram: 'FA0(1の位) ─COUT→ FA1(2の位) ─COUT→ FA2(4の位) ─COUT→ FA3(8の位)',
+          rule: '4個の F_ADD を上から並べ、各桁の COUT を次の桁の CIN へつなぐだけで 0〜15 同士が足せる！',
+          accent: '#5ce0a8',
+        },
         text: 'さっき作った【F_ADD（全加算器）】を4つ並べるだけでいい。一番上（1の位）のくり上がりを2の位へ、2の位を4の位へ、4の位を8の位へ——バトンリレーのように繋ぐんだ！',
       },
       {
@@ -1116,6 +1130,7 @@ export const STAGES = [
     title: '配管ルート切替器',
     revealedTitle: 'マルチプレクサ（2→1 MUX）',
     scene: 'machinery',
+    storyBgm: 'story',
     widget: 'pipe_mux',
     mode: 'combinational',
     incidentBrief: {
@@ -1139,15 +1154,23 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'mina',
-        text: '浄水プラントに予備の地下井戸をつないだんだけど、モニターが1台しかないの。切替レバー（SEL）が0なら主タンク(D0)、1なら予備井戸(D1)の信号が映るようにしたいんだ。',
+        showIncident: true,
+        text: '配給カウンターが大助かりだって喜んでたよ！ ……さて次はB4の浄水プラント。予備の地下井戸をつないだんだけど、監視モニターが1台しかないの。切替レバー（SEL）が 0 なら主タンク(D0)、1 なら予備井戸(D1)の信号が映るようにしたいんだ！',
       },
       {
         speaker: 'kagari',
-        text: 'ここで「計算」から「判断・選択」のフェーズへ進もう！ プログラミングでいう『もし〜ならこっち』を電気回路で作るんだ。',
+        visualCard: {
+          tag: '博士の回路メモ：電気のポイント切替',
+          title: '🛤 SEL の値で「通る道」を選ぶ！',
+          diagram: 'SEL=0 → D0だけを通す（D1は門前払い）\nSEL=1 → D1だけを通す（D0は門前払い）',
+          rule: 'AND を「通行止め門番」に使おう！ (D0 AND NOT SEL) と (D1 AND SEL) を OR で合流！',
+          accent: '#6ec3ff',
+        },
+        text: 'ここで「計算」から「判断・選択」のフェーズへ進もう！ プログラミングでいう『もし〜ならこっち』を電気回路で作るんだ。ANDゲートを2つ並べて「門番」にすれば綺麗に切り替えられるよ！',
       },
       {
         speaker: 'hako',
-        text: '『ANDゲートを「通行止めゲート」だと思え。SEL=0のときD0を通し、SEL=1のときD1を通して、最後にORで1本にまとめろ』',
+        text: '『SEL=0 のときだけ D0 の門番を開け、SEL=1 のときだけ D1 の門番を開ける。最後に OR で1本に合流させれば完成だ』',
       },
     ],
     outroDialogue: [
@@ -1195,6 +1218,7 @@ export const STAGES = [
     title: '4ビット・データバス切替',
     revealedTitle: '4ビット・マルチプレクサ（MUX_4BIT）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'data_bus',
     mode: 'combinational',
     incidentBrief: {
@@ -1220,16 +1244,21 @@ export const STAGES = [
       'さっき作った MUX を4個並べて、共通の切替レバー SEL を4個ぜんぶに配るだけ！',
     introDialogue: [
       {
+        speaker: 'mina',
+        showIncident: true,
+        text: '浄水モニターの切替、すっごく便利になったよ！ でもね、中央制御室のモニターに「4桁の数字（0〜15）」を丸ごと切り替えて表示したいんだけど、1本ずつ切り替えるんじゃとても間に合わないの。',
+      },
+      {
         speaker: 'kagari',
         text: '1本ずつ切り替えるのはもう卒業だ。コンピュータは複数の線を「束」にして数字を丸ごと運ぶ——これを【バス（Bus）】と呼ぶんだよ。',
       },
       {
         speaker: 'kagari',
-        text: 'ファミコンが「8ビット」、昔のパソコンが「32ビット」、今のスマホが「64ビット」と言うだろう？ あれはまさに、この線の束が何本あるかのことなんだ！',
+        text: '戦前のゲーム機が「8ビット」、昔のパソコンが「32ビット」、旧時代のスマホが「64ビット」と呼ばれていたのを図鑑で見たことがあるだろう？ あれはまさに、この線の束が何本あるかのことなんだ！',
       },
       {
         speaker: 'mina',
-        text: 'じゃあ今から作る4ビット切替器は、1971年の初代マイクロプロセッサと同じ4ビット幅ってことね。よし、MUXを4つ並べて束ねよう！',
+        text: 'じゃあ今から作る4ビット切替器は、1971年の初代マイクロプロセッサと同じ4ビット幅ってことね。よし、自作の MUX を4つ並べて、共通の SEL で一気に束ねよう！',
       },
     ],
     outroDialogue: [
@@ -1271,6 +1300,7 @@ export const STAGES = [
     title: '水耕室アドレス解読機',
     revealedTitle: '2→4デコーダ（DEC_2TO4）',
     scene: 'machinery',
+    storyBgm: 'story',
     widget: 'hydroponics',
     mode: 'combinational',
     incidentBrief: {
@@ -1303,7 +1333,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: 'もちろんさ！ 2ビットあれば 00(0)・01(1)・10(2)・11(3) の4通りを表せるからね。番号を解読して該当の1本だけ点ける回路──【デコーダ】の出番だ！',
+        text: 'もちろんさ！ 2ビットあれば 00(0)・01(1)・10(2)・11(3) の4通りを表せるからね。番号を解読して該当の1本だけ点ける【番号解読スイッチ】の出番だ！',
       },
       {
         speaker: 'hako',
@@ -1354,6 +1384,7 @@ export const STAGES = [
     title: '消えない地震警報灯',
     revealedTitle: 'SRラッチ（記憶の原点）',
     scene: 'machinery',
+    storyBgm: 'crisis',
     widget: 'seismic_lamp',
     mode: 'sequential',
     incidentBrief: {
@@ -1390,6 +1421,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の記憶メモ：輪っかの魔法',
+          title: '🔁 出力をお互いの入口へ「たすき掛け」に！',
+          diagram: 'nS ─▶ [NAND①] ─▶ Q ──┐（下の入口へ戻る！）\n              ↖______│\nnR ─▶ [NAND②] ─▶ QN ─┘（上の入口へ戻る！）',
+          rule: 'SとRを先にNOTで反転して、たすき掛けのNAND2個へ！ 輪の中に信号が閉じ込められ、手を離しても記憶する！',
+          accent: '#c89bff',
+        },
         text: 'これまでの回路は“今の入力”に反応するだけだった。だが、2個のNANDの出力を【お互いの入口へたすき掛けにぐるっと戻す】と、信号が輪の中に閉じ込められて“過去”を覚え続けるんだ！',
       },
       {
@@ -1404,7 +1442,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: '1918年、エクルズとジョーダンが発見した双安定記憶回路【SRラッチ】！ 君のスマホのメモリも、人類の知識を保存するサーバーも、すべての記憶装置はこの小さな輪っかから始まったんだ！',
+        text: '1918年、エクルズとジョーダンが発見した双安定記憶回路【SRラッチ】！ かつて地上で使われていたスマホのメモリも、人類の知識を保存するサーバーも、すべての記憶装置はこの小さな輪っかから始まったんだ！',
       },
     ],
     hints: [
@@ -1440,6 +1478,7 @@ export const STAGES = [
     title: '書き込みロック付き金庫',
     revealedTitle: 'Dラッチ（1ビット・メモリセル）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'memory_vault',
     mode: 'sequential',
     incidentBrief: {
@@ -1447,7 +1486,7 @@ export const STAGES = [
       trouble: '信号線のノイズで記憶が勝手に書き換わってしまう！ 「保存ボタン(WE)」を押した瞬間だけ記憶させたい',
       condition: 'WE=1 のときだけ D を記憶 ／ WE=0 の間は D が変わっても Q を保持せよ！',
       shortRule: 'WE=1 で D を保存、WE=0 で完全ロックする1ビット金庫（Dラッチ）を組め！',
-      stakes: '現代メモリの最小単位「1ビット記憶セル」を完成させる',
+      stakes: 'コンピュータの記憶装置の最小単位「1ビット記憶セル」を完成させる',
     },
     inputs: ['D', 'WE'],
     outputs: ['Q'],
@@ -1462,22 +1501,27 @@ export const STAGES = [
       'SRラッチのSとRの前にANDの門番を置こう！ WE=1でD=1ならS=1、WE=1でD=0ならR=1、WE=0ならSもRも0（保持）になるように組めば完璧！',
     introDialogue: [
       {
+        speaker: 'mina',
+        showIncident: true,
+        text: '地震の記憶ランプ、すっごく頼もしいよ！ ただ中央制御室の記録盤に繋いでみたら、古い配線のノイズが飛び込んできて記憶が勝手に書き換わっちゃうことがあって……。',
+      },
+      {
         speaker: 'kagari',
-        text: 'SRラッチは素晴らしいが、実際のコンピュータでは「SとRを別々に押す」のではなく、「データ(D)」と「保存ボタン(WE)」で操作したいんだ。',
+        text: 'そこでSRラッチをもう一段進化させよう！ 実際のコンピュータでは「SとRを別々に押す」のではなく、「データ(D)」と「保存ボタン(WE)」の2本で安全に操作するんだ。',
       },
       {
         speaker: 'mina',
-        text: 'たしかに！ 保存ボタン（WE）がOFFのときは、外の配線がノイズでパチパチ変わっても記憶が壊れない「金庫」になっててほしいよね。',
+        text: 'なるほど！ 保存ボタン（WE）が 0 のときは、外の配線がノイズでパチパチ変わっても記憶が絶対に壊れない「ロック付き金庫」にすればいいんだね！',
       },
       {
         speaker: 'hako',
-        text: '『WE=0 なら SRラッチに S=0, R=0 を渡せば完全ロックだ。WE=1 なら D=1 で S=1、D=0 で R=1 になるよう門番をつけろ』',
+        text: '『WE=0 なら SRラッチに S=0, R=0 を渡せば完全ロックだ。WE=1 なら D=1 で S=1、D=0 で R=1 になるよう AND の門番をつけろ』',
       },
     ],
     outroDialogue: [
       {
         speaker: 'kagari',
-        text: '素晴らしい！【Dラッチ（1ビット・メモリセル）】の誕生だ！ 現代の「1ギガバイトのメモリ」は、今きみが作ったこの1ビット金庫が85億個並んでいるだけなんだよ！',
+        text: '素晴らしい！【Dラッチ（1ビット・メモリセル）】の誕生だ！ かつて地上にあった「1ギガバイトのメモリ」は、今きみが作ったこの1ビット金庫が85億個並んでいるだけなんだよ！',
       },
     ],
     hints: [
@@ -1513,6 +1557,7 @@ export const STAGES = [
     title: '心臓の鼓動・クロック同期',
     revealedTitle: 'Dフリップフロップ（エッジ駆動）',
     scene: 'shelter_hub',
+    storyBgm: 'crisis',
     widget: 'clock_pulse',
     mode: 'sequential',
     incidentBrief: {
@@ -1537,11 +1582,19 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'kagari',
-        text: 'いよいよCPUの「心臓の鼓動（クロック）」を作るぞ！ 普通のDラッチはWE=1の間ずっと筒抜けだから、出力を足し算器へ戻すと信号が一瞬で暴走してしまうんだ。',
+        showIncident: true,
+        text: 'いよいよCPUの「心臓の鼓動（クロック）」を作るぞ！ 普通のDラッチはWE=1の間ずっと筒抜けだから、出力を足し算器へ戻すと信号が一瞬でぐるぐる暴走してしまうんだ。',
       },
       {
         speaker: 'kagari',
-        text: 'そこで潜水艦の【二重エアロック】を使う！ 1個目のDラッチ（前室）は CLK=0 のときだけ開き、2個目のDラッチ（後室）は CLK=1 のときだけ開くようにするんだ。',
+        visualCard: {
+          tag: '博士の同期メモ：潜水艦の二重エアロック',
+          title: '🚪 前室（CLK=0）→ 後室（CLK=1）の二段扉！',
+          diagram: 'D ─▶ [前室 D_LAT (WE=NOT CLK)] ─▶ [後室 D_LAT (WE=CLK)] ─▶ Q',
+          rule: 'CLK=0 で前室に待機、CLK が 0→1 に立ち上がった一瞬だけ後室 Q へ運ばれる！',
+          accent: '#c89bff',
+        },
+        text: 'そこで潜水艦の【二重エアロック】を使う！ 1個目のDラッチ（前室）は CLK=0 のときだけ開き、2個目のDラッチ（後室）は CLK=1 のときだけ開くように直列につなぐんだ。',
       },
       {
         speaker: 'hako',
@@ -1555,7 +1608,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: '【Dフリップフロップ（マスター・スレーブ型）】の完成だ！ 現代のスマホに「3GHz」と書いてあるのは、今きみが作ったこの鼓動を1秒間に30億回打っているという意味なんだよ！',
+        text: '【Dフリップフロップ（マスター・スレーブ型）】の完成だ！ 戦前のスマホの仕様書に「3GHz」と書いてあるのは、今きみが作ったこの鼓動を1秒間に30億回打っているという意味なんだよ！',
       },
     ],
     hints: [
@@ -1593,6 +1646,7 @@ export const STAGES = [
     title: '4ビット・作業机レジスタ',
     revealedTitle: '4ビット・レジスタ（REG_4BIT）',
     scene: 'shelter_hub',
+    storyBgm: 'story',
     widget: 'register_bank',
     mode: 'sequential',
     incidentBrief: {
@@ -1616,8 +1670,13 @@ export const STAGES = [
       'ヒント：MUX_4B を使うと超スッキリ！ D_FF の出力 Q を MUX_4B の「A側」へぐるっと戻し、外部入力 D を「B側」へ、SEL に LOAD をつないで4個の D_FF に入れよう！',
     introDialogue: [
       {
+        speaker: 'mina',
+        text: 'アーク7の生命維持設備が、ほとんど息を吹き返してきたよ……！ ついに地上ハッチの奥に眠ってる探査ローバーの電源にも手が届きそうなんだ！',
+      },
+      {
         speaker: 'kagari',
-        text: 'あと一歩で計算機の中枢がそろうぞ！ 今から作るのは、CPUが計算の途中結果を置いておく超高速の作業机——【4ビット・レジスタ】だ！',
+        showIncident: true,
+        text: 'あと一歩で計算機の中枢がそろうぞ！ 今から作るのは、CPUが4桁の数字（0〜15）を丸ごと覚えておく超高速の作業机——【4ビット・レジスタ】だ！',
       },
       {
         speaker: 'mina',
@@ -1625,7 +1684,7 @@ export const STAGES = [
       },
       {
         speaker: 'hako',
-        text: '『ここで ACT III の自作チップ MUX_4B（またはMUX×4）が火を吹くぞ。LOAD=0なら自分の出力Qを自分へ戻し、LOAD=1なら新しいDを D_FF へ流せ』',
+        text: '『ここで ACT III の自作チップ MUX_4B（またはMUX×4）が火を吹くぞ。LOAD=0なら自分の出力Qを自分へ戻し、LOAD=1なら新しいDを4個の D_FF へ流せ』',
       },
     ],
     outroDialogue: [
@@ -1673,6 +1732,7 @@ export const STAGES = [
     title: 'ローバー演算心臓・加減算ALU',
     revealedTitle: '4ビットALU（2の補数・加減算器）',
     scene: 'surface_rover',
+    storyBgm: 'story',
     widget: 'rover_alu',
     mode: 'combinational',
     incidentBrief: {
@@ -1708,6 +1768,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士の数学メモ：2の補数マジック',
+          title: '✨ Bを全反転して +1 足せば「引き算」になる！',
+          diagram: 'SUB=0 → XORはそのままB通過、CIN=0 ⇒ A + B\nSUB=1 → XORでBを全反転、CIN=1 ⇒ A + (~B) + 1 = A − B！',
+          rule: 'XOR を4個＋ADD_4B を1個だけ！ SUB 線を全 XOR と ADD_4B.CIN へ同時に繋ごう！',
+          accent: '#ff8a7a',
+        },
         text: 'ふふふ、ここがコンピュータ科学で一番ゾクゾクする魔法だ！ 引き算専用回路なんていらない。実は【Bの0と1を全部ひっくり返して、1を足す】だけで、さっきの ADD_4B がそのまま引き算をしてしまうんだ！',
       },
       {
@@ -1760,6 +1827,7 @@ export const STAGES = [
     title: '手順を刻む歩み・プログラムカウンタ',
     revealedTitle: 'プログラムカウンタ（PC_4BIT）',
     scene: 'surface_rover',
+    storyBgm: 'story',
     widget: 'program_counter',
     mode: 'sequential',
     incidentBrief: {
@@ -1780,19 +1848,31 @@ export const STAGES = [
     allowedCustomChips: ['NOT', 'AND', 'OR', 'XOR', 'HALF_ADDER', 'FULL_ADDER', 'ADD_4BIT', 'MUX', 'MUX_4BIT', 'DEC_2TO4', 'SR_LATCH', 'D_LATCH', 'D_FF', 'REG_4BIT', 'ALU_4BIT'],
     plainGoal: 'CLKのたびに「今の番地+1」へ自動で進み、JMP=1 のときは指定番地 J へ飛び移るプログラムカウンタを作ろう！',
     beginnerNote:
-      'このステージから定数端子「0 (GND)」と「1 (VCC)」も使えます！ REG_4B の値に ADD_4B で +1 し、MUX_4B で通常(+1)とジャンプ(J)を切り替えて REG_4B へ戻そう！',
+      'このステージからパレットの「アース0（いつも0）」と「でんち（いつも1）」も使えます！ REG_4B の値に ADD_4B で +1 し、MUX_4B で通常(+1)とジャンプ(J)を切り替えて REG_4B へ戻そう！',
     introDialogue: [
+      {
+        speaker: 'mina',
+        showIncident: true,
+        text: 'ローバーが瓦礫の間をゆっくり進み始めたよ！ でもね、厚い火山岩盤のせいで地上との通信に遅れがあるの……。手動で1歩ずつ指示するんじゃなくて、機械が自分で「次の手順」へ進み続けられるようにできないかな？',
+      },
       {
         speaker: 'kagari',
         text: 'コンピュータが人間なしで自律して動く秘密——それは「今は何行目の命令を実行しているか」を自分で数え進める【プログラムカウンタ（PC）】にある！',
       },
       {
         speaker: 'kagari',
+        visualCard: {
+          tag: '博士のCPUメモ：+1＆ジャンプの輪',
+          title: '🏃 毎拍 +1 で進み、JMP=1 で指定番地へ飛ぶ！',
+          diagram: 'REG_4B(今の番地) ─▶ [ADD_4B (+1)] ─▶ [MUX_4B (JMPでJと切替)] ─▶ REG_4Bへ戻る！',
+          rule: 'ADD_4B の B=アース0(0000)・CIN=でんち(1) にすると自動で +1 回路に！ REG_4B.LOAD も「でんち(1)」へ！',
+          accent: '#ff8a7a',
+        },
         text: 'クロックが1拍打つたびに、今の番号に「+1」して 0→1→2→3… と進む。さらにジャンプ命令（JMP=1）が来たら指定番地（J）へ飛び移る——これがループや条件分岐の正体だ！',
       },
       {
         speaker: 'hako',
-        text: '『自作の ADD_4B、MUX_4B、REG_4B の3つと、定数0・定数1だけで組めるぞ。ADD_4B の B=0000、CIN=1 にすれば自動で「+1回路」になる』',
+        text: '『自作の ADD_4B、MUX_4B、REG_4B の3つと、パレットの「アース0（いつも0）」「でんち（いつも1）」だけで組めるぞ。ADD_4B の B=0000、CIN=1 にすれば自動で「+1回路」になる』',
       },
     ],
     outroDialogue: [
@@ -1802,13 +1882,13 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: '素晴らしい！ これで部品はすべて揃った。次が最終工程——君がNANDひとつから組み上げたすべての結晶を束ね、アーク7の新中枢CPU【ARK-4】を起動するぞ！',
+        text: '素晴らしい！ これで部品はすべて揃った。次が最終工程——君が砂とNANDから組み上げたすべての結晶を束ね、アーク7の新中枢CPU【ARK-4】を起動するぞ！',
       },
     ],
     hints: [
       '【考え方】現在の値 Q を ADD_4B(A=Q, B=0000, CIN=1) に通すと Q+1 が出ます。それを MUX_4B で J と切り替え、LOAD=1 固定の REG_4B へ戻せば完成！',
-      '【構成】ADD_4B、MUX_4B、REG_4B を各1個 ＋ 定数0（GND）と定数1（VCC）！',
-      '【手順】REG_4B.Q0..3 → 外部Q0..3 かつ ADD_4B.A0..3。定数0 → ADD_4B.B0..3。定数1 → ADD_4B.CIN と REG_4B.LOAD。ADD_4B.S0..3 → MUX_4B.A0..3、外部J0..3 → MUX_4B.B0..3、JMP → MUX_4B.SEL。MUX_4B.Y0..3 → REG_4B.D0..3、CLK → REG_4B.CLK！',
+      '【構成】ADD_4B、MUX_4B、REG_4B を各1個 ＋「アース0（いつも0）」と「でんち（いつも1）」！',
+      '【手順】REG_4B.Q0..3 → 外部Q0..3 かつ ADD_4B.A0..3。アース0 → ADD_4B.B0..3。でんち → ADD_4B.CIN と REG_4B.LOAD。ADD_4B.S0..3 → MUX_4B.A0..3、外部J0..3 → MUX_4B.B0..3、JMP → MUX_4B.SEL。MUX_4B.Y0..3 → REG_4B.D0..3、CLK → REG_4B.CLK！',
     ],
     tests: [
       pc4Cycle('① 0番地へ初期化 (J=0, JMP=1)', 0, 1, 0),
@@ -1840,6 +1920,7 @@ export const STAGES = [
     title: '最終起動：自作CPU「ARK-4」',
     revealedTitle: 'アキュムレータCPUコア（ARK-4）',
     scene: 'surface_rover',
+    storyBgm: 'finale',
     widget: 'ark4_finale',
     mode: 'sequential',
     incidentBrief: {
@@ -1875,14 +1956,22 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'kagari',
-        text: 'ついにここまで来たね、見習い君。最初は「0と1のスイッチ」すら知らなかった君が、NANDたった1種類から、加算器も、バスも、記憶回路も、ALUもすべて自分の手で組み上げた。',
+        text: 'ついにここまで来たね、見習い君。最初は砂（シリコン）と抵抗のしくみすら知らなかった君が、物理の法則からNANDを生み出し、加算器も、バスも、記憶回路も、ALUもすべて自分の手で組み上げた。',
       },
       {
         speaker: 'mina',
+        showIncident: true,
         text: '地上中継塔への救難・復興ビーコン、送信準備完了してるよ！ あとは【ARK-4 CPUコア】が6行の起動プログラムを最後まで計算し切れば、地下シェルター・アーク7は再び世界と繋がる……！',
       },
       {
         speaker: 'hako',
+        visualCard: {
+          tag: '最終設計図：ARK-4 CPUコア',
+          title: '🧠 3大自作チップをひとつの環（ループ）に結べ！',
+          diagram: 'REG_4B(ACC) ─▶ [ALU_4B (OPで加減算)] ─▶ [MUX_4B (SETでIMM代入と切替)] ─▶ REG_4B(WE/CLK)',
+          rule: 'たった3チップ（ALU_4B・MUX_4B・REG_4B）の中に、君が組んだ数百個のNANDが息づいている！',
+          accent: '#ffbe76',
+        },
         text: '『最後の配線だ。ALU_4B、MUX_4B、REG_4B をひとつの環に結べ。お前が積み上げた数百個のNANDゲートすべてが、いまひとつの頭脳として目を覚ます』',
       },
     ],
@@ -1897,7 +1986,7 @@ export const STAGES = [
       },
       {
         speaker: 'kagari',
-        text: 'おめでとう、アーク7主任技師。もう「見習い」じゃない。君はいま、人類が100年かけて築いたコンピュータ科学のすべてを、たった1個のNANDから自分の手で再発明したんだ。胸を張っていい！',
+        text: 'おめでとう、アーク7主任技師。もう「見習い」じゃない。君はいま、人類が100年かけて築いたコンピュータ科学のすべてを、たった1粒の砂と1個のNANDから自分の手で再発明したんだ。胸を張っていい！',
       },
     ],
     hints: [

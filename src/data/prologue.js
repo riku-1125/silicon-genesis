@@ -13,6 +13,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_surface_rover.jpg',
     dateline: 'PROLOGUE I // 2052 — 沈黙の閃光',
     mood: 'ash',
+    bgm: 'title',
     chapterCard: {
       roman: 'PROLOGUE · I',
       title: '地下400メートルの朝',
@@ -25,6 +26,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_surface_rover.jpg',
     dateline: 'A.D. 2052 — 2094 // SHELTER ARK-7',
     mood: 'ash',
+    bgm: 'title',
     speaker: null,
     text: '灰に覆われた地上を逃れ、わずかに生き残った人々は、火山岩盤の下400メートル──地下シェルター『アーク7』へ閉じこもった。\nあれから42年。いま、この地下には118人が暮らしている。',
   },
@@ -32,6 +34,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_machinery.jpg',
     dateline: '2094.11.21 06:00 // B4 生命維持・地熱区画',
     mood: 'calm',
+    bgm: 'story',
     speaker: 'mina',
     text: 'おはよう、見習いさん！ ほら、朝の巡回いくよ。ここが地下4階──シェルターの心臓部「生命維持・地熱発電区画」だよ。',
   },
@@ -92,6 +95,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_opening_aether.jpg',
     dateline: '2094.11.21 06:14 // 臨界崩壊',
     mood: 'alert',
+    bgm: 'crisis',
     fx: 'shake',
     sfx: 'alarm',
     chapterCard: {
@@ -147,6 +151,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_opening_aether.jpg',
     dateline: '2094.11.21 06:17 // B4 保守保管庫',
     mood: 'amber',
+    bgm: 'finale',
     sfx: 'powerup',
     chapterCard: {
       roman: 'PROLOGUE · III',
@@ -182,6 +187,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_shelter_hub.jpg',
     dateline: '2094.11.21 06:19 // 見習い技師への託宣',
     mood: 'calm',
+    bgm: 'story',
     speaker: 'kagari',
     text: '見習い君。君は「専門知識なんて何もない」と思っているかもしれない。──それでいいんだ。僕が隣で1つずつ、水のホースや普段の言葉に噛み砕いて案内するよ。',
   },
@@ -189,6 +195,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_shelter_hub.jpg',
     dateline: '2094.11.21 06:19 // 約束',
     mood: 'calm',
+    bgm: 'story',
     speaker: 'mina',
     text: '……見習いさん。118人の暮らしも、3区の子どもたちにいつか青空を見せる夢も──いま、私たち3人の手にかかってる。一緒に、もういちどアーク7へ明かりを灯してくれる？',
     choices: [
@@ -208,6 +215,7 @@ export const PROLOGUE_STEPS = [
     scene: './assets/scene_machinery.jpg',
     dateline: '2094.11.21 06:20 // 最初の非常警報',
     mood: 'alert',
+    bgm: 'crisis',
     fx: 'shake',
     sfx: 'alarm',
     speaker: 'hako',

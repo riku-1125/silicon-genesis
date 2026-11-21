@@ -8,7 +8,7 @@
  */
 
 import { CHARACTERS, SCENES } from '../data/characters.js';
-import { sound } from '../audio/sound.js';
+import { sound } from '../audio/sound.js?v=16';
 
 export class DialogueController {
   constructor(stripEl, theaterEl) {
@@ -31,6 +31,7 @@ export class DialogueController {
     this.stPortrait = theaterEl.querySelector('#st-portrait');
     this.stSpeaker = theaterEl.querySelector('#st-speaker');
     this.stRole = theaterEl.querySelector('#st-role');
+    this.stTextScroll = theaterEl.querySelector('.st-text-scroll');
     this.stText = theaterEl.querySelector('#st-text');
     this.btnPrev = theaterEl.querySelector('#btn-st-prev');
     this.btnNext = theaterEl.querySelector('#btn-st-next');
@@ -67,8 +68,15 @@ export class DialogueController {
       e.stopPropagation();
       this.advance();
     });
+    this._downX = 0;
+    this._downY = 0;
+    this.theater.addEventListener('pointerdown', (e) => {
+      this._downX = e.clientX;
+      this._downY = e.clientY;
+    });
     this.theater.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
+      if (Math.hypot(e.clientX - this._downX, e.clientY - this._downY) > 12) return;
       this.advance();
     });
   }
@@ -173,6 +181,7 @@ export class DialogueController {
     }
 
     this.fullText = line.text;
+    if (this.stTextScroll) this.stTextScroll.scrollTop = 0;
     this.stProgress.textContent = `${idx + 1} / ${this.lines.length}`;
     this.btnNext.textContent = idx < this.lines.length - 1 ? '次へ ▶' : this.endBtnLabel;
 

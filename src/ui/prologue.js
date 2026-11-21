@@ -3,9 +3,9 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js';
-import { STAGES } from '../data/stages.js';
-import { sound } from '../audio/sound.js';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=16';
+import { STAGES } from '../data/stages.js?v=16';
+import { sound } from '../audio/sound.js?v=16';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue }) {
@@ -82,9 +82,16 @@ export class PrologueOverlay {
       this._advance();
     });
 
+    this._downX = 0;
+    this._downY = 0;
+    this.storyTapArea.addEventListener('pointerdown', (e) => {
+      this._downX = e.clientX;
+      this._downY = e.clientY;
+    });
     this.storyTapArea.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       if (this.awaitingChoice) return;
+      if (Math.hypot(e.clientX - this._downX, e.clientY - this._downY) > 12) return;
       this._advance();
     });
   }
@@ -163,10 +170,8 @@ export class PrologueOverlay {
       this.storyScreen.classList.add('pro-shake');
     }
 
-    // SFX & dynamic BGM mood cues
-    if (step.mood === 'alert') sound.setBgmTrack('crisis');
-    else if (step.mood === 'amber') sound.setBgmTrack('finale');
-    else if (step.mood === 'ash' || step.mood === 'calm') sound.setBgmTrack('title');
+    // SFX & director-curated BGM mood cues (resolves accurately even when stepping backward!)
+    sound.setBgmTrack(this._resolveStepBgm(idx));
 
     if (!instant) {
       if (step.sfx === 'alarm') sound.playAlarm();
@@ -197,6 +202,7 @@ export class PrologueOverlay {
 
     // Speaker & portrait
     this._applySpeaker(step.speaker);
+    if (this.textEl) this.textEl.scrollTop = 0;
     const afterText = () => {
       if (step.choices && step.choices.length > 0) {
         this._showChoices(step.choices);
@@ -330,6 +336,17 @@ export class PrologueOverlay {
   _finishStory() {
     this.hide();
     this.onFinish?.();
+  }
+
+  _resolveStepBgm(idx) {
+    for (let i = idx; i >= 0; i--) {
+      if (PROLOGUE_STEPS[i]?.bgm) return PROLOGUE_STEPS[i].bgm;
+    }
+    const mood = PROLOGUE_STEPS[idx]?.mood;
+    if (mood === 'alert') return 'crisis';
+    if (mood === 'amber') return 'finale';
+    if (mood === 'calm') return 'story';
+    return 'title';
   }
 
   _stopTimer() {

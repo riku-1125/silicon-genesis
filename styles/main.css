@@ -2061,6 +2061,7 @@ button:disabled {
   color: var(--vc-accent, var(--amber-bright));
   margin-bottom: 6px;
   line-height: 1.45;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 

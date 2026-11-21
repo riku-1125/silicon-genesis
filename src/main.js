@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=16';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,13 +16,13 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=15';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=15';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=15';
-import { DialogueController } from './ui/dialogue.js?v=15';
-import { ModalManager } from './ui/modals.js?v=15';
-import { PrologueOverlay } from './ui/prologue.js?v=15';
+import { sound } from './audio/sound.js?v=16';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=16';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=16';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=16';
+import { DialogueController } from './ui/dialogue.js?v=16';
+import { ModalManager } from './ui/modals.js?v=16';
+import { PrologueOverlay } from './ui/prologue.js?v=16';
 
 class SiliconGenesisApp {
   constructor() {
@@ -248,12 +248,16 @@ class SiliconGenesisApp {
     this.dom.dialogueBox.addEventListener('replay-intro', () => {
       const act = ACTS.find((a) => a.id === this.stage.act) || ACTS[0];
       sound.playSwitch(true);
+      sound.setBgmTrack(this._getStageStoryBgm(this.stage));
       this.dialogue.playLines(this.stage.introDialogue, {
         fallbackGoal: this.stage.plainGoal,
         incidentBrief: this.stage.incidentBrief || null,
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
-        endLabel: '回路を組む ▶',
+        endLabel: this.stage.mode === 'physics' ? '実験台へ ▶' : '回路を組む ▶',
+        onComplete: () => {
+          sound.setBgmTrack(this._getStageWorkBgm(this.stage));
+        },
       });
     });
 
@@ -390,14 +394,20 @@ class SiliconGenesisApp {
     // Dialogue: guarantee full-screen Story Theater opens at least once per stage!
     const theaterKey = this.stage.id === 'stage_00' ? 'stage_00_guided' : this.stage.id;
     const alreadyShownTheater = this.save.seenTheaterStages.includes(theaterKey);
-    if (autoIntro && !alreadyShownTheater && this.stage.introDialogue.length > 0) {
+    const openingTheater = autoIntro && !alreadyShownTheater && this.stage.introDialogue.length > 0;
+    if (openingTheater) {
       this.save.seenTheaterStages.push(theaterKey);
       this.dialogue.playLines(this.stage.introDialogue, {
         fallbackGoal: this.stage.plainGoal,
         incidentBrief: this.stage.incidentBrief || null,
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
-        endLabel: '回路を組む ▶',
+        endLabel: this.stage.mode === 'physics' ? '実験台へ ▶' : '回路を組む ▶',
+        onComplete: () => {
+          if (this.dom.prologueOverlay.classList.contains('hidden')) {
+            sound.setBgmTrack(this._getStageWorkBgm(this.stage));
+          }
+        },
       });
     } else {
       this.dialogue.close();
@@ -430,13 +440,26 @@ class SiliconGenesisApp {
       this._syncSceneCanvas();
     }
 
-    // Switch BGM track smoothly to match the current Act/mood!
+    // Match BGM smoothly to whether we're reading the Story Theater scene or working on the board!
     if (this.dom.prologueOverlay.classList.contains('hidden')) {
-      sound.setBgmTrack(this.stage.act >= 5 || this.stage.isSandbox ? 'finale' : 'workbench');
+      sound.setBgmTrack(
+        openingTheater ? this._getStageStoryBgm(this.stage) : this._getStageWorkBgm(this.stage)
+      );
     }
 
     this._syncUndoBtn();
     persistSaveData(this.save);
+  }
+
+  _getStageStoryBgm(stage) {
+    if (!stage) return 'story';
+    if (stage.storyBgm) return stage.storyBgm;
+    return stage.isFinale ? 'finale' : 'story';
+  }
+
+  _getStageWorkBgm(stage) {
+    if (!stage) return 'workbench';
+    return stage.isFinale || stage.isSandbox ? 'finale' : 'workbench';
   }
 
   _getNextStage() {
@@ -975,6 +998,7 @@ class SiliconGenesisApp {
     this._syncSceneCanvas();
 
     // 4. Play post-clear revelation dialogue, then open Chip Forging ceremony!
+    sound.setBgmTrack(this.stage.isFinale ? 'finale' : 'story');
     const nextStage = this._getNextStage();
 
     const openCeremony = () => {
@@ -992,7 +1016,9 @@ class SiliconGenesisApp {
             onBackToVictory: () => openCeremony(),
           });
         },
-        onStay: () => {},
+        onStay: () => {
+          sound.setBgmTrack(this._getStageWorkBgm(this.stage));
+        },
       });
     };
 
