@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=27';
-import { CODEX_ENTRIES } from '../data/codex.js?v=27';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=28';
+import { CODEX_ENTRIES } from '../data/codex.js?v=28';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=27';
+} from '../data/glossary.js?v=28';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=27';
-import { StoryDiagramGroup } from './storyDiagram.js?v=27';
-import { glossaryPopover } from './glossaryPopover.js?v=27';
+import { sound } from '../audio/sound.js?v=28';
+import { StoryDiagramGroup } from './storyDiagram.js?v=28';
+import { glossaryPopover } from './glossaryPopover.js?v=28';
 
 function esc(str) {
   return String(str ?? '')
@@ -174,9 +174,9 @@ export class ModalManager {
       <div class="callout callout-amber">
         <div class="callout-title">3つの部品のしくみ（Stage 00-C 専用）</div>
         <ul style="margin:4px 0 0;padding-left:16px;font-size:12px;line-height:1.6;">
-          <li><b>🔋 でんち</b>：つねに <code>1</code>（電気ON）を流しつづけるスタート地点</li>
-          <li><b>🚰 じゃぐち</b>：<code>ひねり=1</code> のときだけ栓が開き、<code>いり</code> の電気を <code>でぐち</code> へ通す</li>
-          <li><b>🕳 はいすい</b>：ふだんは <code>でぐち=1</code>。でも <code>ぬけ</code> に電気(1)が流れ込むと地面へ抜けて <code>でぐち=0</code>！</li>
+          <li><b>🔋 でんち</b>：つねに <code>1</code> を出す電源。2個のじゃぐちが両方開いたときに「はいすい」へ合図を送るスタート地点</li>
+          <li><b>🚰 じゃぐち</b>：00-Aで創ったトランジスタ。<code>ひねり=1</code> のときだけ栓が開き、<code>いり</code> の電気を <code>でぐち</code> へ通す</li>
+          <li><b>🕳 はいすい</b>：00-Bで組んだ「内蔵+5V電源→抵抗→地面へ抜くじゃぐちTR」のセット。普段は内蔵電源から抵抗越しに <code>でぐち=1</code> を出し、<code>ぬけ=1</code> の合図が届いた瞬間だけ中の排水TRが開いて地面へ落ち <code>でぐち=0</code>！</li>
         </ul>
       </div>
     `;

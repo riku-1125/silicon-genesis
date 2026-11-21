@@ -181,8 +181,8 @@ export const GLOSSARY_TERMS = {
   },
   pullup: {
     id: 'pullup',
-    title: 'プルアップ抵抗（はいすい）',
-    reading: 'Pull-Up Resistor (PULL)',
+    title: 'プルアップ抵抗回路（はいすい）',
+    reading: 'Pull-Up Resistor Circuit (PULL)',
     category: 'ACT 0 · 物理素子',
     act: 0,
     stageId: 'stage_00b',
@@ -190,11 +190,11 @@ export const GLOSSARY_TERMS = {
     unlockLabel: 'STAGE 00-B クリア',
     codexIds: ['pullup_resistor', 'transistor_nand'],
     chipId: 'PULL',
-    pins: { inputs: ['ぬけ(Drain)'], outputs: ['でぐち'] },
+    pins: { inputs: ['ぬけ(排水TRひねり)'], outputs: ['でぐち'] },
     anim: 'pullup_drain',
     summary:
-      '電池側に電気を通しにくい「細い道（抵抗）」を挟んでおく回路。普段は出力を1（5V）へ引っ張り上げつつ、下の排水スイッチが開いた瞬間だけショートさせず安全に0（0V）へ落とせます。',
-    analogy: '細い蛇口から少しずつ水をためておき、底の大きな栓を抜いた瞬間だけ水圧をゼロにする水槽の仕組み。',
+      '「電源(+5V) ➔ 細い道（プルアップ抵抗） ➔ 下の排水用トランジスタ（00-Aのじゃぐち） ➔ 地面(0V)」のセット回路。部品『はいすい』の中にこの電源と抵抗が丸ごと内蔵されているため、外から入力が来ていない（ぬけ=0）ときも内蔵電源から抵抗越しに出力が 1(5V) に引っ張り上げられ、ぬけ=1 のときだけ下のトランジスタが開いてショートせず安全に 0(0V) へ落ちます。',
+    analogy: '内蔵の水タンク(+5V)から細い管(抵抗)で常に水圧をためておき、合図が来たときだけ底のじゃぐち(TR)を開いて排水する水槽の仕組み。',
     related: ['resistor', 'short_circuit', 'earth', 'transistor', 'nand'],
   },
   nand: {

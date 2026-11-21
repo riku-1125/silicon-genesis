@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=27';
+import { sound } from '../audio/sound.js?v=28';
 
 const W = 340;
 const H = 126;
@@ -614,34 +614,44 @@ export class StoryDiagramPlayer {
     this._wire(ctx, [[220, 48], [268, 48]], !drain, '#52e3b6');
     this._pill(ctx, 268, 34, 62, 28, drain ? '0.0V (0)' : '5.0V (1)', !drain, '#52e3b6');
 
-    // Bottom drain switch to GND
-    this._wire(ctx, [[220, 48], [220, 64]], drain, '#ffd166');
-    this._chip(ctx, 174, 64, 92, 22, drain ? 'ぬけ=1 (開)' : 'ぬけ=0 (閉)', '', '#ffd166', drain);
-    this._wire(ctx, [[220, 86], [220, 98]], drain, '#ffd166');
+    // Bottom drain switch (the Stage 00-A MOSFET transistor!) to GND
+    this._wire(ctx, [[220, 48], [220, 62]], drain, '#ffd166');
+    this._chip(
+      ctx,
+      168,
+      62,
+      104,
+      26,
+      drain ? 'じゃぐちTR(開)' : 'じゃぐちTR(閉)',
+      '00-Aの部品 (ぬけ)',
+      '#ffbe6b',
+      drain
+    );
+    this._wire(ctx, [[220, 88], [220, 99]], drain, '#ffd166');
 
     // Earth label
     ctx.fillStyle = drain ? '#ffd166' : '#8aa2b8';
     ctx.font = 'bold 9.5px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('⏚ 地面(0V)', 232, 95);
+    ctx.fillText('⏚ 地面(0V)', 234, 96);
 
     // Left explanatory badge
     ctx.fillStyle = drain ? '#ffd166' : '#8fffdc';
     ctx.font = 'bold 9.5px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(drain ? '細い道のおかげで' : '下が閉じているから', 16, 56);
-    ctx.fillText(drain ? 'ショートせず安全に0へ！' : '水圧5Vが溜まって 1！', 16, 70);
+    ctx.fillText(drain ? '細い道のおかげで' : '下のじゃぐちTRが閉じ', 14, 56);
+    ctx.fillText(drain ? 'ショートせず安全に0へ！' : '電源5Vから抵抗越しに 1！', 14, 70);
 
     this._caption(
       ctx,
-      drain ? 'ぬけ=1 ▶ 抵抗で安全に地面へ逃げて 出力=0！' : 'ぬけ=0 ▶ 抵抗を通して 5V が溜まり 出力=1！',
+      drain ? 'ぬけ=1 ▶ 00-AのじゃぐちTRが開き、安全に地面へ逃げて 0！' : 'ぬけ=0 ▶ 電源5Vから抵抗越しに引っ張り上げられ 出力=1！',
       this.stepIdx,
       2,
       drain ? '#ffd166' : '#52e3b6'
     );
   }
 
-  // 00-C: Physical Series NAND (Battery -> SW A -> SW B -> PULL -> OUT)
+  // 00-C: Physical Series NAND (Battery -> SW A -> SW B -> PULL[built-in +5V/R/GND] -> OUT)
   _drawNandSeries(ctx) {
     const cases = [
       [0, 0],
@@ -655,29 +665,39 @@ export class StoryDiagramPlayer {
     const out = passB ? 0 : 1;
 
     this._pill(ctx, 6, 42, 42, 22, '🔋 1', true, '#ffd166');
-    this._wire(ctx, [[48, 53], [66, 53]], true, '#ffd166');
+    this._wire(ctx, [[48, 53], [64, 53]], true, '#ffd166');
 
-    this._pill(ctx, 74, 10, 44, 18, `A=${a}`, a === 1, '#ffd166');
-    this._wire(ctx, [[96, 28], [96, 40]], a === 1, '#ffd166');
-    this._chip(ctx, 66, 40, 60, 26, 'じゃぐち①', a ? '開通' : '閉', '#ffbe6b', passA);
+    this._pill(ctx, 72, 10, 44, 18, `A=${a}`, a === 1, '#ffd166');
+    this._wire(ctx, [[94, 28], [94, 40]], a === 1, '#ffd166');
+    this._chip(ctx, 64, 40, 58, 26, 'じゃぐち①', a ? '開通' : '閉', '#ffbe6b', passA);
 
-    this._wire(ctx, [[126, 53], [146, 53]], passA, '#ffd166');
+    this._wire(ctx, [[122, 53], [140, 53]], passA, '#ffd166');
 
-    this._pill(ctx, 154, 10, 44, 18, `B=${b}`, b === 1, '#ffd166');
-    this._wire(ctx, [[176, 28], [176, 40]], b === 1, '#ffd166');
-    this._chip(ctx, 146, 40, 60, 26, 'じゃぐち②', b ? '開通' : '閉', '#ffbe6b', passB);
+    this._pill(ctx, 148, 10, 44, 18, `B=${b}`, b === 1, '#ffd166');
+    this._wire(ctx, [[170, 28], [170, 40]], b === 1, '#ffd166');
+    this._chip(ctx, 140, 40, 58, 26, 'じゃぐち②', b ? '開通' : '閉', '#ffbe6b', passB);
 
-    this._wire(ctx, [[206, 53], [220, 53]], passB, '#ff7b6b');
-    this._chip(ctx, 220, 38, 58, 30, 'はいすい', passB ? '地面へ0!' : '普段は1', '#7cd4f5', out === 1);
+    // Built-in +5V -> Resistor top rail and GND bottom rail of PULL (はいすい)!
+    this._pill(ctx, 206, 6, 76, 17, '🔋内蔵5V+抵抗', true, '#7cd4f5');
+    this._wire(ctx, [[244, 23], [244, 37]], true, passB ? '#ffd166' : '#52e3b6');
 
-    this._wire(ctx, [[278, 53], [292, 53]], out === 1, '#52e3b6');
-    this._pill(ctx, 292, 41, 44, 24, `OUT=${out}`, out === 1, '#52e3b6');
+    this._wire(ctx, [[198, 53], [214, 53]], passB, '#ff7b6b');
+    this._chip(ctx, 214, 37, 60, 32, 'はいすい', passB ? 'TR開→0V' : '内蔵5V→1', '#7cd4f5', out === 1);
+
+    this._wire(ctx, [[244, 69], [244, 83]], passB, '#ff7b6b');
+    ctx.fillStyle = passB ? '#ff9c8f' : '#7b92a8';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏚ 地面(0V)', 244, 94);
+
+    this._wire(ctx, [[274, 53], [288, 53]], out === 1, '#52e3b6');
+    this._pill(ctx, 288, 41, 46, 24, `OUT=${out}`, out === 1, '#52e3b6');
 
     this._caption(
       ctx,
       passB
-        ? 'A=1, B=1 ▶ 両方開通！ はいすいへ抜けて OUT=0（停止）'
-        : `A=${a}, B=${b} ▶ 途中で止まる → はいすいは OUT=1（通水）`,
+        ? 'A=1, B=1 ▶ 合図1が届き内蔵TRが開いて地面へ！ OUT=0'
+        : `A=${a}, B=${b} ▶ 合図0 → 内蔵5Vから抵抗越しに OUT=1！`,
       this.stepIdx,
       4,
       passB ? '#ff8a7a' : '#52e3b6'

@@ -258,7 +258,7 @@ export class PhysicsLabCanvas {
       if (upper !== 'RESISTOR') {
         error = '上側には「ていこう（細いパイプ）」を入れて、普段は 1 に引っ張り上げよう！';
       } else if (lower !== 'DRAIN_VALVE') {
-        error = '下側には「ぬけスイッチ」を入れて、ぬけ=1 のときだけ地面へ開くようにしよう！';
+        error = '下側にはさっき00-Aで作った「じゃぐち(排水)」を入れて、ぬけ=1 のときだけ地面へ開くようにしよう！';
       } else {
         error = '出力が期待と一致しません。上下の部品の配置を見直してみよう！';
       }
@@ -1004,10 +1004,10 @@ export class PhysicsLabCanvas {
         ctx.moveTo(cx - 16, cy - 8);
         ctx.lineTo(cx + 16, open ? cy - 8 : cy - 20);
         ctx.stroke();
-        ctx.font = 'bold 12px sans-serif';
+        ctx.font = 'bold 11.5px sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
-        ctx.fillText(open ? 'ぬけスイッチ（全開！）' : 'ぬけスイッチ（閉じ）', cx, cy + 18);
+        ctx.fillText(open ? 'じゃぐちTR（排水全開！）' : 'じゃぐちTR（閉じ）', cx, cy + 18);
       } else {
         ctx.font = 'bold 12.5px -apple-system, sans-serif';
         ctx.fillStyle = '#ffffff';
