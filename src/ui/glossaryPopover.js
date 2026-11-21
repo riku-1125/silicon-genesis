@@ -339,10 +339,7 @@ class GlossaryPopoverController {
         } else {
           const lockedBadge = document.createElement('span');
           lockedBadge.className = 'gp-related-chip locked';
-          const lockReason = rel.unlockClearedStage
-            ? rel.unlockLabel || 'クリアで解放'
-            : '物語の進行で解放';
-          lockedBadge.textContent = `🔒 未取得（${lockReason}）`;
+          lockedBadge.textContent = `🔒 未取得（${rel.unlockLabel || '進行で解放'}）`;
           this.relatedList.appendChild(lockedBadge);
         }
       }

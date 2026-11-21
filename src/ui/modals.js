@@ -594,10 +594,7 @@ export class ModalManager {
                         ? isModuleUnlocked(rel)
                         : isGlossaryTermUnlocked(rel.id, isSaveObj ? save : null);
                       if (!relOpen) {
-                        const lockReason = rel.unlockClearedStage
-                          ? rel.unlockLabel || 'クリアで解放'
-                          : '物語の進行で解放';
-                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(lockReason)}）</span>`;
+                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(rel.unlockLabel || '進行で解放')}）</span>`;
                       }
                       return `
                         <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">

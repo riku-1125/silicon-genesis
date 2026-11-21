@@ -1,4 +1,4 @@
-const CACHE_NAME = 'silicon-genesis-v20';
+const CACHE_NAME = 'silicon-genesis-v21';
 const ASSETS = [
   './',
   './index.html',

@@ -750,51 +750,24 @@ export function isGlossaryTermLinkableInLine(termId, save = null) {
 
 /**
  * Checks whether a glossary explanation is unlocked in Related Links / Popover Navigation.
- * - While in Prologue (`inPrologue = true`), all stage-specific terms are locked, and only
- *   vocabulary terms encountered up to the current Prologue step (`activeStoryTerms`) are open.
- * - During stages, terms with `unlockClearedStage` require that stage to be in `save.clearedStages`,
- *   and vocabulary terms require having appeared up to the current dialogue line (`activeStoryTerms`).
+ * - Stage-clear modules & post-clear solution concepts (`term.unlockClearedStage`) are
+ *   STRICTLY LOCKED until the player clears that stage (so puzzle answers are never spoiled!).
+ * - Story & background vocabulary terms for stages the player has already reached
+ *   (`emp`, `relay`, `insulator`, `silicon`, `p_silicon`, `n_silicon`, etc.) are freely
+ *   browsable via related links while reading the story!
  */
-export function isGlossaryTermUnlocked(termId, save = null, activeStoryTerms = null, inPrologue = false) {
-  const term = GLOSSARY_TERMS[termId];
-  if (!term) return false;
-
-  if (inPrologue) {
-    if (term.unlockClearedStage || term.unlockReachedStage) return false;
-    if (activeStoryTerms instanceof Set) return activeStoryTerms.has(termId);
-    return true;
-  }
-
-  if (!save) {
-    if (activeStoryTerms instanceof Set) return activeStoryTerms.has(termId);
-    return true;
-  }
-
-  if (!isGlossaryTermLinkableInLine(termId, save)) return false;
-
-  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
-  if (term.unlockClearedStage && cleared.includes(term.unlockClearedStage)) {
-    return true;
-  }
-
-  if (activeStoryTerms instanceof Set) {
-    return activeStoryTerms.has(termId);
-  }
-  if (Array.isArray(save.discoveredTerms)) {
-    return save.discoveredTerms.includes(termId);
-  }
-  return true;
+export function isGlossaryTermUnlocked(termId, save = null) {
+  return isGlossaryTermLinkableInLine(termId, save);
 }
 
 /**
  * Checks whether a term's live circuit diagram (`anim`) is unlocked.
  */
-export function isGlossaryDiagramUnlocked(termId, save = null, activeStoryTerms = null, inPrologue = false) {
+export function isGlossaryDiagramUnlocked(termId, save = null) {
   const term = GLOSSARY_TERMS[termId];
   if (!term || !term.anim) return false;
-  if (inPrologue) return false;
   if (!save) return true;
-  if (!isGlossaryTermUnlocked(termId, save, activeStoryTerms, inPrologue)) return false;
+  if (!isGlossaryTermUnlocked(termId, save)) return false;
   const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   if (term.unlockClearedStageForDiagram) {
     return cleared.includes(term.unlockClearedStageForDiagram);
