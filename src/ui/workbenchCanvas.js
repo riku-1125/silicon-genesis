@@ -13,12 +13,13 @@
 import { getChipDef } from '../engine/circuit.js';
 
 const GRID = 16;
-const BOARD_W = 660;
-const LEFT_X = 60;
-const RIGHT_X = 600;
-const RAIL_W = 66;
-const RAIL_H = 30;
-const PIN_STUB = 11;
+const BOARD_W = 760;
+const LEFT_X = 39;
+const RIGHT_X = BOARD_W - 39;
+const RAIL_W = 60;
+const RAIL_H = 26;
+const PIN_STUB = 9;
+const RAIL_TRACK_W = 78;
 
 function snap(v) {
   return Math.round(v / GRID) * GRID;
@@ -83,8 +84,7 @@ export class WorkbenchCanvas {
     if (inputBits !== undefined) this.inputBits = inputBits;
 
     if (this.stage) {
-      const maxPins = Math.max(this.stage.inputs.length, this.stage.outputs.length);
-      this.boardH = maxPins >= 8 ? 500 : maxPins >= 6 ? 430 : 360;
+      this.boardH = Math.max(this.boardH, this._getMinBoardH());
     }
 
     if (stageChanged || fit) {
@@ -96,6 +96,12 @@ export class WorkbenchCanvas {
       this.fitToView();
       this._notifySelection();
     }
+  }
+
+  _getMinBoardH() {
+    if (!this.stage) return 460;
+    const maxPins = Math.max(this.stage.inputs.length, this.stage.outputs.length);
+    return maxPins >= 8 ? 580 : maxPins >= 6 ? 500 : 460;
   }
 
   setArmedChip(chipType) {
@@ -140,31 +146,56 @@ export class WorkbenchCanvas {
   fitToView() {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 20) return;
-    const padX = 12;
-    const padY = 12;
+    const padX = 6;
+    const padY = 6;
     const sx = (rect.width - padX * 2) / BOARD_W;
+    const minH = this._getMinBoardH();
+    // On portrait mobile screens, expand boardH vertically so the PCB fills the entire workbench height!
+    const portraitWorldH = sx > 0 ? Math.floor((rect.height - padY * 2) / sx) : minH;
+    let maxNodeBottom = 0;
+    for (const n of this.circuit?.nodes || []) {
+      const dim = this.getChipDimensions(n.type);
+      maxNodeBottom = Math.max(maxNodeBottom, n.y + dim.h + 24);
+    }
+    this.boardH = clamp(Math.max(minH, portraitWorldH, maxNodeBottom), minH, 1120);
+
     const sy = (rect.height - padY * 2) / this.boardH;
-    this.scale = clamp(Math.min(sx, sy), 0.42, 2.2);
+    this.scale = clamp(Math.min(sx, sy), 0.34, 2.4);
     this.offsetX = (rect.width - BOARD_W * this.scale) / 2;
     this.offsetY = (rect.height - this.boardH * this.scale) / 2;
+  }
+
+  zoomBy(factor) {
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const nextScale = clamp(this.scale * factor, 0.34, 2.5);
+    const wx = (cx - this.offsetX) / this.scale;
+    const wy = (cy - this.offsetY) / this.scale;
+    this.scale = nextScale;
+    this.offsetX = cx - wx * this.scale;
+    this.offsetY = cy - wy * this.scale;
   }
 
   /** Finds a clean unoccupied board position for auto-placing a chip. */
   findOpenSpot(chipType) {
     const dim = this.getChipDimensions(chipType);
-    const cols = [230, 330, 430, 280, 380];
+    const midX = BOARD_W / 2;
+    const cols = [midX - 160, midX - 55, midX + 55, midX + 160, midX - 110, midX, midX + 110];
     const rows = [
       this.boardH * 0.3,
-      this.boardH * 0.55,
-      this.boardH * 0.76,
+      this.boardH * 0.48,
+      this.boardH * 0.66,
       this.boardH * 0.2,
-      this.boardH * 0.45,
-      this.boardH * 0.68,
+      this.boardH * 0.39,
+      this.boardH * 0.57,
+      this.boardH * 0.75,
+      this.boardH * 0.84,
     ];
     for (const ry of rows) {
       for (const cx of cols) {
-        const x = snap(cx - dim.w / 2);
-        const y = snap(clamp(ry - dim.h / 2, 24, this.boardH - dim.h - 24));
+        const x = snap(clamp(cx - dim.w / 2, RAIL_TRACK_W + 12, BOARD_W - RAIL_TRACK_W - dim.w - 12));
+        const y = snap(clamp(ry - dim.h / 2, 20, this.boardH - dim.h - 20));
         const overlaps = (this.circuit?.nodes || []).some((n) => {
           const nd = this.getChipDimensions(n.type);
           return Math.abs(n.x - x) < (dim.w + nd.w) * 0.48 && Math.abs(n.y - y) < (dim.h + nd.h) * 0.48;
@@ -173,32 +204,33 @@ export class WorkbenchCanvas {
       }
     }
     return {
-      x: snap(BOARD_W / 2 - dim.w / 2 + ((Math.random() * 48) | 0) - 24),
-      y: snap(this.boardH / 2 - dim.h / 2 + ((Math.random() * 48) | 0) - 24),
+      x: snap(BOARD_W / 2 - dim.w / 2 + ((Math.random() * 64) | 0) - 32),
+      y: snap(this.boardH / 2 - dim.h / 2 + ((Math.random() * 64) | 0) - 32),
     };
   }
 
   getChipDimensions(type) {
     const def = getChipDef(type, this.customChips);
-    if (!def) return { w: 78, h: 56, pinStep: 26 };
-    if (type === 'SW') return { w: 112, h: 70, pinStep: 30 };
-    if (type === 'PULL') return { w: 102, h: 64, pinStep: 28 };
-    if (type === 'CONST_1' || type === 'CONST_0') return { w: 80, h: 54, pinStep: 26 };
+    if (!def) return { w: 68, h: 48, pinStep: 24 };
+    if (type === 'SW') return { w: 88, h: 56, pinStep: 25 };
+    if (type === 'PULL') return { w: 82, h: 52, pinStep: 25 };
+    if (type === 'CONST_1' || type === 'CONST_0') return { w: 66, h: 44, pinStep: 22 };
     const maxPins = Math.max(def.inputs.length, def.outputs.length, 1);
-    const pinStep = maxPins >= 8 ? 22 : maxPins >= 5 ? 24 : 28;
-    const h = Math.max(54, maxPins * pinStep + 18);
+    const pinStep = maxPins >= 8 ? 20 : maxPins >= 5 ? 22 : 24;
+    const h = Math.max(46, maxPins * pinStep + 14);
     const labelLen = Math.max((def.name || type).length, 4);
-    const w = maxPins >= 6 ? 106 : Math.max(76, labelLen * 11 + 36);
+    const w = maxPins >= 6 ? 90 : Math.max(66, Math.round(labelLen * 9.5 + 26));
     return { w, h, pinStep };
   }
 
   _getInputRailPos(idx) {
     const n = this.stage?.inputs.length || 1;
-    const topPad = n <= 2 ? 96 : n <= 4 ? 66 : 50;
-    const bottomPad = n <= 2 ? 96 : n <= 4 ? 56 : 36;
-    const avail = this.boardH - topPad - bottomPad;
-    const step = n <= 1 ? 0 : avail / (n - 1);
-    const y = n <= 1 ? this.boardH / 2 : topPad + idx * step;
+    const idealStep = n <= 2 ? 155 : n <= 4 ? 125 : n <= 6 ? 98 : 78;
+    const maxAvail = Math.max(120, this.boardH - 110);
+    const totalSpan = n <= 1 ? 0 : Math.min(maxAvail, (n - 1) * idealStep);
+    const startY = this.boardH / 2 - totalSpan / 2;
+    const step = n <= 1 ? 0 : totalSpan / (n - 1);
+    const y = n <= 1 ? this.boardH / 2 : startY + idx * step;
     return {
       boxX: LEFT_X - RAIL_W / 2,
       boxY: y - RAIL_H / 2,
@@ -211,11 +243,12 @@ export class WorkbenchCanvas {
 
   _getOutputRailPos(idx) {
     const n = this.stage?.outputs.length || 1;
-    const topPad = n <= 2 ? 96 : n <= 4 ? 66 : 50;
-    const bottomPad = n <= 2 ? 96 : n <= 4 ? 56 : 36;
-    const avail = this.boardH - topPad - bottomPad;
-    const step = n <= 1 ? 0 : avail / (n - 1);
-    const y = n <= 1 ? this.boardH / 2 : topPad + idx * step;
+    const idealStep = n <= 2 ? 155 : n <= 4 ? 125 : n <= 6 ? 98 : 78;
+    const maxAvail = Math.max(120, this.boardH - 110);
+    const totalSpan = n <= 1 ? 0 : Math.min(maxAvail, (n - 1) * idealStep);
+    const startY = this.boardH / 2 - totalSpan / 2;
+    const step = n <= 1 ? 0 : totalSpan / (n - 1);
+    const y = n <= 1 ? this.boardH / 2 : startY + idx * step;
     return {
       boxX: RIGHT_X - RAIL_W / 2,
       boxY: y - RAIL_H / 2,
@@ -470,8 +503,8 @@ export class WorkbenchCanvas {
       // 1. Armed chip placement
       if (this.armedChipType) {
         const dim = this.getChipDimensions(this.armedChipType);
-        const x = snap(clamp(pt.x - dim.w / 2, LEFT_X + RAIL_W / 2 + 28, RIGHT_X - RAIL_W / 2 - dim.w - 28));
-        const y = snap(clamp(pt.y - dim.h / 2, 16, this.boardH - dim.h - 16));
+        const x = snap(clamp(pt.x - dim.w / 2, RAIL_TRACK_W + 8, BOARD_W - RAIL_TRACK_W - dim.w - 8));
+        const y = snap(clamp(pt.y - dim.h / 2, 14, this.boardH - dim.h - 14));
         const type = this.armedChipType;
         this.armedChipType = null;
         this.cb.onPlaceChip?.(type, x, y);
@@ -637,7 +670,7 @@ export class WorkbenchCanvas {
         const node = this.circuit?.nodes.find((n) => n.id === this.gesture.nodeId);
         if (node) {
           const dim = this.getChipDimensions(node.type);
-          node.x = snap(clamp(this.gesture.origX + dx, LEFT_X + RAIL_W / 2 + 24, RIGHT_X - RAIL_W / 2 - dim.w - 24));
+          node.x = snap(clamp(this.gesture.origX + dx, RAIL_TRACK_W + 8, BOARD_W - RAIL_TRACK_W - dim.w - 8));
           node.y = snap(clamp(this.gesture.origY + dy, 14, this.boardH - dim.h - 14));
         }
         return;
@@ -871,7 +904,7 @@ export class WorkbenchCanvas {
 
     // Subtle solder-dot grid
     ctx.fillStyle = 'rgba(130, 165, 195, 0.14)';
-    for (let x = 112; x <= 548; x += GRID * 2) {
+    for (let x = RAIL_TRACK_W + 14; x <= BOARD_W - RAIL_TRACK_W - 14; x += GRID * 2) {
       for (let y = 24; y <= this.boardH - 20; y += GRID * 2) {
         ctx.fillRect(x - 1, y - 1, 2, 2);
       }
@@ -879,25 +912,27 @@ export class WorkbenchCanvas {
 
     // Left / Right rail separation tracks
     ctx.fillStyle = 'rgba(8, 13, 18, 0.55)';
-    ctx.fillRect(10, 10, 96, this.boardH - 20);
-    ctx.fillRect(BOARD_W - 106, 10, 96, this.boardH - 20);
+    ctx.fillRect(8, 10, RAIL_TRACK_W - 8, this.boardH - 20);
+    ctx.fillRect(BOARD_W - RAIL_TRACK_W, 10, RAIL_TRACK_W - 8, this.boardH - 20);
 
     ctx.strokeStyle = 'rgba(220, 160, 75, 0.2)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(106, 12);
-    ctx.lineTo(106, this.boardH - 12);
-    ctx.moveTo(BOARD_W - 106, 12);
-    ctx.lineTo(BOARD_W - 106, this.boardH - 12);
+    ctx.moveTo(RAIL_TRACK_W, 12);
+    ctx.lineTo(RAIL_TRACK_W, this.boardH - 12);
+    ctx.moveTo(BOARD_W - RAIL_TRACK_W, 12);
+    ctx.lineTo(BOARD_W - RAIL_TRACK_W, this.boardH - 12);
     ctx.stroke();
 
-    // Rail headers
+    // Rail headers (positioned above the first pin or safely below top-left toolbar)
+    const firstInY = this._getInputRailPos(0).boxY;
+    const firstOutY = this._getOutputRailPos(0).boxY;
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(230, 175, 95, 0.6)';
-    ctx.fillText('INPUT', LEFT_X, 20);
-    ctx.fillStyle = 'rgba(82, 227, 182, 0.65)';
-    ctx.fillText('OUTPUT', RIGHT_X, 20);
+    ctx.fillStyle = 'rgba(230, 175, 95, 0.65)';
+    ctx.fillText('INPUT', LEFT_X, Math.max(92, firstInY - 12));
+    ctx.fillStyle = 'rgba(82, 227, 182, 0.7)';
+    ctx.fillText('OUTPUT', RIGHT_X, Math.max(24, firstOutY - 12));
 
     // Outer riveted border
     ctx.strokeStyle =
@@ -993,21 +1028,21 @@ export class WorkbenchCanvas {
 
       // LED dot
       ctx.beginPath();
-      ctx.arc(r.boxX + 12, r.pinY, 4.5, 0, Math.PI * 2);
+      ctx.arc(r.boxX + 10, r.pinY, 4, 0, Math.PI * 2);
       ctx.fillStyle = on ? (isClk ? '#d8a8ff' : '#ffb84d') : '#2b3947';
       ctx.fill();
 
       // Label + value
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 10.5px monospace';
       ctx.fillStyle = on ? '#fff1d0' : '#9fb3c8';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, r.boxX + 21, r.pinY);
+      ctx.fillText(label, r.boxX + 18, r.pinY, r.boxW - 31);
 
       ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'right';
       ctx.fillStyle = on ? '#ffd166' : '#5e7388';
-      ctx.fillText(on ? '1' : '0', r.boxX + r.boxW - 6, r.pinY);
+      ctx.fillText(on ? '1' : '0', r.boxX + r.boxW - 5, r.pinY);
 
       // Pin stem + pad
       this._drawPinPad(ctx, r.boxX + r.boxW, r.pinY, r.pinX, r.pinY, on, false);
@@ -1040,15 +1075,16 @@ export class WorkbenchCanvas {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = on ? '#8fffdc' : '#5e7388';
-      ctx.fillText(on ? '1' : '0', r.boxX + 7, r.pinY);
+      ctx.fillText(on ? '1' : '0', r.boxX + 5, r.pinY);
 
+      ctx.font = 'bold 10.5px monospace';
       ctx.textAlign = 'right';
       ctx.fillStyle = on ? '#eafff7' : '#9fb3c8';
-      ctx.fillText(label, r.boxX + r.boxW - 18, r.pinY);
+      ctx.fillText(label, r.boxX + r.boxW - 17, r.pinY, r.boxW - 31);
 
       // Lamp bulb
       ctx.beginPath();
-      ctx.arc(r.boxX + r.boxW - 10, r.pinY, 5, 0, Math.PI * 2);
+      ctx.arc(r.boxX + r.boxW - 9, r.pinY, 4.5, 0, Math.PI * 2);
       ctx.fillStyle = on ? '#52e3b6' : '#25323f';
       ctx.fill();
 

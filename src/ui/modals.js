@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=23';
-import { CODEX_ENTRIES } from '../data/codex.js?v=23';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=24';
+import { CODEX_ENTRIES } from '../data/codex.js?v=24';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=23';
+} from '../data/glossary.js?v=24';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=23';
-import { StoryDiagramGroup } from './storyDiagram.js?v=23';
-import { glossaryPopover } from './glossaryPopover.js?v=23';
+import { sound } from '../audio/sound.js?v=24';
+import { StoryDiagramGroup } from './storyDiagram.js?v=24';
+import { glossaryPopover } from './glossaryPopover.js?v=24';
 
 function esc(str) {
   return String(str ?? '')
@@ -1483,9 +1483,12 @@ export class ModalManager {
   }
 
   _renderMiniSchematicSvg(circuit, customChips) {
-    const w = 660;
+    const maxNodeX = circuit.nodes.reduce((m, n) => Math.max(m, (n.x || 0) + 110), 540);
+    const maxNodeY = circuit.nodes.reduce((m, n) => Math.max(m, (n.y || 0) + 100), 320);
+    const w = Math.max(660, maxNodeX + 105);
     const maxPins = Math.max(circuit.inputs.length, circuit.outputs.length);
-    const h = maxPins >= 8 ? 500 : maxPins >= 6 ? 430 : 360;
+    const baseH = maxPins >= 8 ? 500 : maxPins >= 6 ? 430 : 360;
+    const h = Math.max(baseH, maxNodeY + 36);
 
     const inPos = (idx) => {
       const n = circuit.inputs.length;
@@ -1495,7 +1498,7 @@ export class ModalManager {
     const outPos = (idx) => {
       const n = circuit.outputs.length;
       const y = n <= 1 ? h / 2 : 36 + (idx * (h - 72)) / (n - 1);
-      return { x: 574, y };
+      return { x: w - 86, y };
     };
     const nodePos = (node) => {
       const def = getChipDef(node.type, customChips) || PRIMITIVE_CHIPS.NAND;
@@ -1561,8 +1564,8 @@ export class ModalManager {
         const p = outPos(i);
         return `
           <g class="mini-out-pin">
-            <rect data-mini-out-rect="${i}" x="574" y="${p.y - 12}" width="76" height="24" rx="5" fill="#16222d" stroke="#3b5368" stroke-width="1.8"/>
-            <text data-mini-out-text="${i}" data-lbl="${esc(lbl)}" x="612" y="${p.y + 4}" text-anchor="middle" fill="#95acc2" font-size="11.5" font-family="monospace" font-weight="bold">${esc(lbl)}=0</text>
+            <rect data-mini-out-rect="${i}" x="${w - 86}" y="${p.y - 12}" width="76" height="24" rx="5" fill="#16222d" stroke="#3b5368" stroke-width="1.8"/>
+            <text data-mini-out-text="${i}" data-lbl="${esc(lbl)}" x="${w - 48}" y="${p.y + 4}" text-anchor="middle" fill="#95acc2" font-size="11.5" font-family="monospace" font-weight="bold">${esc(lbl)}=0</text>
           </g>
         `;
       })

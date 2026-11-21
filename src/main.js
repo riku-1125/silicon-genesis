@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=23';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=24';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,14 +16,14 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=23';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=23';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=23';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=23';
-import { DialogueController } from './ui/dialogue.js?v=23';
-import { ModalManager } from './ui/modals.js?v=23';
-import { PrologueOverlay } from './ui/prologue.js?v=23';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=23';
+import { sound } from './audio/sound.js?v=24';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=24';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=24';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=24';
+import { DialogueController } from './ui/dialogue.js?v=24';
+import { ModalManager } from './ui/modals.js?v=24';
+import { PrologueOverlay } from './ui/prologue.js?v=24';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=24';
 
 class SiliconGenesisApp {
   constructor() {
@@ -129,7 +129,9 @@ class SiliconGenesisApp {
       physicsLabCanvas: $('physics-lab-canvas'),
       selectionToolbar: $('selection-toolbar'),
       btnUndo: $('btn-undo'),
+      btnZoomOut: $('btn-zoom-out'),
       btnResetView: $('btn-reset-view'),
+      btnZoomIn: $('btn-zoom-in'),
       btnClearBoard: $('btn-clear-board'),
       btnClockPulse: $('btn-clock-pulse'),
       btnNextStageQuick: $('btn-next-stage-quick'),
@@ -264,9 +266,19 @@ class SiliconGenesisApp {
     });
 
     this.dom.btnUndo.addEventListener('click', () => this.undo());
+    this.dom.btnZoomOut?.addEventListener('click', () => {
+      if (this.stage?.mode === 'physics') return;
+      sound.playSwitch(false);
+      this.workbench.zoomBy(0.82);
+    });
     this.dom.btnResetView.addEventListener('click', () => {
       sound.playSwitch(true);
       this._fitActiveCanvas();
+    });
+    this.dom.btnZoomIn?.addEventListener('click', () => {
+      if (this.stage?.mode === 'physics') return;
+      sound.playSwitch(true);
+      this.workbench.zoomBy(1.22);
     });
     this.dom.btnClearBoard.addEventListener('click', () => {
       if (this.stage.mode === 'physics') {
@@ -1065,7 +1077,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=23', { updateViaCache: 'none' })
+        .register('./sw.js?v=24', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

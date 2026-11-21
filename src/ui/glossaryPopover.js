@@ -16,10 +16,10 @@ import {
   hasGlossaryTerms,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
-} from '../data/glossary.js?v=23';
+} from '../data/glossary.js?v=24';
 import { persistSaveData } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=23';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=23';
+import { sound } from '../audio/sound.js?v=24';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=24';
 
 let _saveProvider = null;
 
