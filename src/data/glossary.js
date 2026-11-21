@@ -711,7 +711,137 @@ export const GLOSSARY_TERMS = {
     summary:
       'ALU_4B（計算する手）・MUX_4B（道を選ぶ目）・REG_4B（覚える頭）をひとつのループに結んだアーク7の新中枢コア！ LDI（代入）・ADD（加算）・SUB（減算）・NOP（保持）のプログラムを連続実行します。',
     analogy: 'たった1粒の砂と1個のNANDから組み上げた、命令を読んで自律的に考え動く「機械の頭脳」。',
-    related: ['alu', 'mux_4bit', 'register', 'program_counter', 'cpu'],
+    related: ['alu', 'mux_4bit', 'register', 'program_counter', 'ark4_sys'],
+  },
+
+  // =========================================================================
+  // CHAPTER II (ACT VI & ACT VII) — AUTONOMOUS VON NEUMANN PC & ASSEMBLY
+  // =========================================================================
+  zero_flag: {
+    id: 'zero_flag',
+    title: '4ビット・ゼロ検知器（ZERO_4B）',
+    reading: '4-Bit Zero Flag Detector (NOR4)',
+    category: 'ACT VI · 分岐・命令制御モジュール',
+    act: 6,
+    stageId: 'stage_18',
+    unlockClearedStage: 'stage_18',
+    unlockLabel: 'STAGE 18 クリア',
+    codexIds: ['zero_flag_branch'],
+    chipId: 'ZERO_4BIT',
+    pins: { inputs: ['A0..3'], outputs: ['Z'] },
+    anim: 'zero_flag_4b',
+    summary:
+      '4ビットの数値（A0..A3）がすべて0（0000）になった瞬間だけ Z=1 を出力し、1本でも1があれば Z=0 を返す検知モジュール。OR×3で全ビットをまとめ、最後にNOTで反転して作ります。ALUの引き算（A−B）と組み合わせることで「2つの数が一致した（差が0）」ことを見抜くCPUの『目』になります。',
+    analogy: '気圧差やカウントダウンの残り時間が「ぴったりゼロ」になった瞬間だけ青ランプを灯す確認センサー。',
+    related: ['or_gate', 'not_gate', 'alu', 'cond_pc'],
+  },
+  conditional_branch: {
+    id: 'conditional_branch',
+    title: '条件分岐（if文・JZジャンプ）',
+    reading: 'Conditional Branch / Jump if Zero',
+    category: 'コンピュータ科学基礎',
+    unlockReachedStage: 'stage_19',
+    unlockLabel: 'STAGE 19 到達',
+    summary:
+      '「もし今の計算結果が0なら指定番地へ飛び、0でなければ次の行へ進む」という、状況に応じてプログラムの進む道を変える仕組み。プログラミングの if文 や whileループ はすべてこの条件分岐回路から生まれています。',
+    analogy: '「まだ氷が溶けていない（温度≠0）なら加熱へ戻り、溶け切った（温度＝0）ならハッチ開門へ進む」という自動判断！',
+    related: ['zero_flag', 'cond_pc', 'program_counter', 'assembly'],
+  },
+  cond_pc: {
+    id: 'cond_pc',
+    title: '条件分岐カウンタ（COND_PC）',
+    reading: 'Conditional Branch Program Counter',
+    category: 'ACT VI · 分岐・命令制御モジュール',
+    act: 6,
+    stageId: 'stage_19',
+    unlockClearedStage: 'stage_19',
+    unlockLabel: 'STAGE 19 クリア',
+    codexIds: ['zero_flag_branch'],
+    chipId: 'COND_PC',
+    pins: { inputs: ['V0..3', 'J0..3', 'BR', 'CLK'], outputs: ['PC0..3'] },
+    anim: 'cond_branch_pc',
+    summary:
+      'ZERO_4B（ゼロ検知の目）と AND と PC_4B（手順カウンタ）を合体させた自律司令塔モジュール。普段はクロックごとに「+1」ずつ次の行へ進みますが、分岐命令（BR=1）のときに計算結果 V がちょうど 0（Z=1）であれば、自動で指定番地 J へジャンプ（JZ）します！',
+    analogy: '「もし結果が0なら○番地へ飛べ！」という条件つきジャンプ命令（if文・ループ）を判断して実行する司令塔。',
+    related: ['zero_flag', 'program_counter', 'and_gate', 'conditional_branch', 'ark4_sys'],
+  },
+  machine_code: {
+    id: 'machine_code',
+    title: '機械語（マシン語 / オペコード）',
+    reading: 'Machine Code / Opcode',
+    category: 'アーキテクチャ・言語',
+    unlockReachedStage: 'stage_20',
+    unlockLabel: 'STAGE 20 到達',
+    summary:
+      'CPUに直接命令を伝えるための「0と1の番号」。ARK-4では2ビットの命令番号（00＝代入, 01＝加算, 10＝減算, 11＝ゼロなら飛べ）と4ビットの数値を合わせたビット列が機械語になり、これを命令デコーダ（INST_DEC）が翻訳してCPUを動かします。',
+    analogy: '食堂の厨房へ「00番＝カレー、01番＝スープ」と番号札で注文を伝える仕組み。',
+    related: ['inst_dec', 'assembly', 'decoder'],
+  },
+  inst_dec: {
+    id: 'inst_dec',
+    title: 'アセンブリ命令デコーダ（INST_DEC）',
+    reading: 'Instruction Decoder',
+    category: 'ACT VI · 分岐・命令制御モジュール',
+    act: 6,
+    stageId: 'stage_20',
+    unlockClearedStage: 'stage_20',
+    unlockLabel: 'STAGE 20 クリア',
+    codexIds: ['machine_code_asm'],
+    chipId: 'INST_DEC',
+    pins: { inputs: ['I0', 'I1'], outputs: ['OP', 'SET', 'WE', 'BR'] },
+    anim: 'inst_decoder',
+    summary:
+      '水耕栽培室で作った DEC2_4 と NOT を組み合わせ、2ビットの命令番号（00=LDI, 01=ADD, 10=SUB, 11=JZ）をCPUの4本の制御レバー（OP・SET・WE・BR）へ一発翻訳する通訳モジュール。0と1の機械語とアセンブリ言語を物理回路へ直結する要です。',
+    analogy: '「ADD（足せ）」という一言の命令を聞いて、CPU内部の4本のレバーを正しい組み合わせにガチャンと一斉セットしてくれる通訳係。',
+    related: ['decoder', 'machine_code', 'assembly', 'ark4_cpu', 'ark4_sys'],
+  },
+  ark4_sys: {
+    id: 'ark4_sys',
+    title: 'ノイマン型自律計算機（ARK4_SYS）',
+    reading: 'Complete Von Neumann Computer Core',
+    category: 'ACT VI · 分岐・命令制御モジュール',
+    act: 6,
+    stageId: 'stage_21',
+    unlockClearedStage: 'stage_21',
+    unlockLabel: 'STAGE 21 クリア',
+    codexIds: ['von_neumann_complete'],
+    chipId: 'ARK4_SYS',
+    pins: { inputs: ['I0..1', 'IMM0..3', 'CLK'], outputs: ['ACC0..3', 'PC0..3'] },
+    anim: 'ark4_von_neumann',
+    summary:
+      'INST_DEC（命令を翻訳する耳）・ARK4_CPU（計算して覚える頭脳）・COND_PC（結果が0か見て次の番地を決める足）の3大マイモジュールを1枚のボード上で統合した完全体ノイマン型コンピュータ！ 内部で280個以上のNANDが一斉に連動し、プログラムを自律実行します。',
+    analogy: '人間がいちいちレバーを動かさなくても、プログラム（命令表）を1行ずつ自分で読んで判断し続ける完全自律の電算機！',
+    related: ['inst_dec', 'ark4_cpu', 'cond_pc', 'assembly'],
+  },
+  assembly: {
+    id: 'assembly',
+    title: 'アセンブリ言語（LDI / ADD / SUB / JZ）',
+    reading: 'Assembly Language & Software',
+    category: 'ACT VII · ソフトウェア＆プログラム',
+    act: 7,
+    stageId: 'stage_22',
+    unlockClearedStage: 'stage_22',
+    unlockLabel: 'STAGE 22 クリア',
+    codexIds: ['machine_code_asm', 'software_algorithm'],
+    chipId: 'ASM_PROG',
+    pins: { inputs: ['ROM命令表 (0〜4番地)'], outputs: ['ACC (演算結果)', 'PC (実行番地)'] },
+    anim: 'asm_program_flow',
+    summary:
+      '0と1の機械語（00, 01, 10, 11）に、人間が読める名前「LDI（代入）・ADD（加算）・SUB（減算）・JZ（0ならジャンプ）」を1対1で対応させたプログラミング言語。ハードウェアの配線を1本も変えずに、命令の並び（ソフトウェア）だけで掛け算も自動ハッチ開門も実現します！',
+    analogy: '完成したオルゴール本体（ハードウェア）はそのままに、差し替えるだけでどんな曲でも奏でられる「楽譜シート（ソフトウェア）」。',
+    related: ['inst_dec', 'ark4_sys', 'machine_code', 'algorithm_loop'],
+  },
+  algorithm_loop: {
+    id: 'algorithm_loop',
+    title: 'ループとアルゴリズム（ソフトの知恵）',
+    reading: 'Loops & Algorithms',
+    category: 'コンピュータ科学基礎',
+    unlockReachedStage: 'stage_23',
+    unlockLabel: 'STAGE 23 到達',
+    summary:
+      'ハードウェア（ALU）に「足し算」と「引き算」しかなくても、命令の組み合わせと繰り返し（ループ・条件分岐 JZ）によって「掛け算（3×4＝3+3+3+3）」や「自動カウントダウン制御」を実現する手順の知恵。ハードの限界をソフトで超える計算機科学の真髄です。',
+    analogy: '掛け算ボタンのない電卓でも、「＋3」を4回繰り返す手順（レシピ）を書けば掛け算ができる仕組み！',
+    related: ['assembly', 'conditional_branch', 'ark4_sys'],
   },
 };
 
@@ -747,6 +877,13 @@ export const MODULE_ENCYCLOPEDIA_IDS = [
   'alu',
   'program_counter',
   'ark4_cpu',
+  // ACT VI: Conditional Branch, Instruction Decoder & Complete Von Neumann System
+  'zero_flag',
+  'cond_pc',
+  'inst_dec',
+  'ark4_sys',
+  // ACT VII: Assembly Language & Software
+  'assembly',
 ];
 
 /**
@@ -911,6 +1048,24 @@ const TERM_ALIASES = [
   ['プログラムカウンタ', 'program_counter'],
   ['PC_4B', 'program_counter'],
   ['ARK-4 CPUコア', 'ark4_cpu'],
+  ['ARK4_CPU', 'ark4_cpu'],
+  ['4ビット・ゼロ検知器', 'zero_flag'],
+  ['ゼロ検知器', 'zero_flag'],
+  ['ゼロフラグ', 'zero_flag'],
+  ['ZERO_4B', 'zero_flag'],
+  ['条件分岐カウンタ', 'cond_pc'],
+  ['COND_PC', 'cond_pc'],
+  ['条件分岐', 'conditional_branch'],
+  ['命令デコーダ', 'inst_dec'],
+  ['INST_DEC', 'inst_dec'],
+  ['機械語', 'machine_code'],
+  ['マシン語', 'machine_code'],
+  ['オペコード', 'machine_code'],
+  ['ノイマン型自律計算機', 'ark4_sys'],
+  ['ARK4_SYS', 'ark4_sys'],
+  ['アセンブリ言語', 'assembly'],
+  ['アセンブリ', 'assembly'],
+  ['アルゴリズム', 'algorithm_loop'],
   ['CPU', 'cpu'],
   ['アポロ11号', 'apollo11'],
   ['クロード・シャノン', 'shannon'],
@@ -1016,6 +1171,7 @@ const CHIP_TO_TERM_FALLBACK = {
  */
 export function getGlossaryTermForChip(chipId) {
   if (!chipId) return null;
+  if (String(chipId).startsWith('ASM_')) return GLOSSARY_TERMS.assembly || null;
   for (const term of Object.values(GLOSSARY_TERMS)) {
     if (term.chipId === chipId) return term;
   }

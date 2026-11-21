@@ -51,8 +51,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 20-stage campaign: circuit stages 00-C (NAND) through 17 (ARK-4 CPU) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 20);
+test('Full 27-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 21 (ARK4_SYS) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 27);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -534,6 +534,116 @@ test('Full 20-stage campaign: circuit stages 00-C (NAND) through 17 (ARK-4 CPU) 
     assert.equal(res.metrics.nandCount, 240);
     registerChip(customChips, st, c);
   }
+
+  // Stage 18: ZERO_4BIT (3 OR + 1 NOT = 10 NAND)
+  {
+    const st = getStageById('stage_18');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'o01', type: 'OR' },
+        { id: 'o23', type: 'OR' },
+        { id: 'oall', type: 'OR' },
+        { id: 'inv', type: 'NOT' },
+      ],
+      [
+        [inp(0), np('o01', 0)], [inp(1), np('o01', 1)],
+        [inp(2), np('o23', 0)], [inp(3), np('o23', 1)],
+        [np('o01', 0), np('oall', 0)], [np('o23', 0), np('oall', 1)],
+        [np('oall', 0), np('inv', 0)],
+        [np('inv', 0), out(0)],
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 18 (ZERO_4BIT) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 10);
+    registerChip(customChips, st, c);
+  }
+
+  // Stage 19: COND_PC (ZERO_4BIT + AND + PC_4BIT = 228 NAND)
+  {
+    const st = getStageById('stage_19');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'z4', type: 'ZERO_4BIT' },
+        { id: 'and', type: 'AND' },
+        { id: 'pc', type: 'PC_4BIT' },
+      ],
+      [
+        [inp(0), np('z4', 0)], [inp(1), np('z4', 1)], [inp(2), np('z4', 2)], [inp(3), np('z4', 3)],
+        [np('z4', 0), np('and', 0)], [inp(8), np('and', 1)],
+        [inp(4), np('pc', 0)], [inp(5), np('pc', 1)], [inp(6), np('pc', 2)], [inp(7), np('pc', 3)],
+        [np('and', 0), np('pc', 4)],
+        [inp(9), np('pc', 5)],
+        [np('pc', 0), out(0)], [np('pc', 1), out(1)], [np('pc', 2), out(2)], [np('pc', 3), out(3)],
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 19 (COND_PC) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 228);
+    registerChip(customChips, st, c);
+  }
+
+  // Stage 20: INST_DEC (DEC_2TO4 + NOT = 11 NAND)
+  {
+    const st = getStageById('stage_20');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'dec', type: 'DEC_2TO4' },
+        { id: 'not', type: 'NOT' },
+      ],
+      [
+        [inp(0), np('dec', 0)], [inp(1), np('dec', 1)],
+        [np('dec', 2), out(0)], // Y2 -> OP (SUB)
+        [np('dec', 0), out(1)], // Y0 -> SET (LDI)
+        [np('dec', 3), np('not', 0)], [np('not', 0), out(2)], // !Y3 -> WE
+        [np('dec', 3), out(3)], // Y3 -> BR (JZ)
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 20 (INST_DEC) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 11);
+    registerChip(customChips, st, c);
+  }
+
+  // Stage 21: ARK4_SYS (INST_DEC + ARK4_CORE + COND_PC = 479 NAND)
+  {
+    const st = getStageById('stage_21');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'idec', type: 'INST_DEC' },
+        { id: 'cpu', type: 'ARK4_CORE' },
+        { id: 'cpc', type: 'COND_PC' },
+      ],
+      [
+        // I0..1 -> INST_DEC
+        [inp(0), np('idec', 0)], [inp(1), np('idec', 1)],
+        // IMM0..3 -> ARK4_CORE.IMM0..3 & COND_PC.J0..3
+        [inp(2), np('cpu', 0)], [inp(3), np('cpu', 1)], [inp(4), np('cpu', 2)], [inp(5), np('cpu', 3)],
+        [inp(2), np('cpc', 4)], [inp(3), np('cpc', 5)], [inp(4), np('cpc', 6)], [inp(5), np('cpc', 7)],
+        // INST_DEC -> ARK4_CORE (OP, SET, WE) & COND_PC (BR)
+        [np('idec', 0), np('cpu', 4)],
+        [np('idec', 1), np('cpu', 5)],
+        [np('idec', 2), np('cpu', 6)],
+        [np('idec', 3), np('cpc', 8)],
+        // CLK -> ARK4_CORE.CLK & COND_PC.CLK
+        [inp(6), np('cpu', 7)],
+        [inp(6), np('cpc', 9)],
+        // ARK4_CORE.ACC0..3 -> out(0..3) & COND_PC.V0..3
+        [np('cpu', 0), out(0)], [np('cpu', 1), out(1)], [np('cpu', 2), out(2)], [np('cpu', 3), out(3)],
+        [np('cpu', 0), np('cpc', 0)], [np('cpu', 1), np('cpc', 1)], [np('cpu', 2), np('cpc', 2)], [np('cpu', 3), np('cpc', 3)],
+        // COND_PC.PC0..3 -> out(4..7)
+        [np('cpc', 0), out(4)], [np('cpc', 1), out(5)], [np('cpc', 2), out(6)], [np('cpc', 3), out(7)],
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 21 (ARK4_SYS) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 479);
+    registerChip(customChips, st, c);
+  }
 });
 
 test('Detects unstable ring oscillator (NAND output looped directly to both inputs)', () => {
@@ -640,7 +750,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 21);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 26);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);

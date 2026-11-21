@@ -3,27 +3,29 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=25';
-import { STAGES } from '../data/stages.js?v=25';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=25';
-import { sound } from '../audio/sound.js?v=25';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=26';
+import { STAGES } from '../data/stages.js?v=26';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=26';
+import { sound } from '../audio/sound.js?v=26';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=25';
+} from './glossaryPopover.js?v=26';
 
 export class PrologueOverlay {
-  constructor(rootEl, { onFinish, onContinue }) {
+  constructor(rootEl, { onFinish, onContinue, onStartChapter2 }) {
     this.root = rootEl;
     this.onFinish = onFinish;
     this.onContinue = onContinue;
+    this.onStartChapter2 = onStartChapter2;
 
     this.titleScreen = rootEl.querySelector('#title-screen');
     this.storyScreen = rootEl.querySelector('#prologue-story');
     this.btnStartNew = rootEl.querySelector('#btn-title-start');
     this.btnContinue = rootEl.querySelector('#btn-title-continue');
+    this.btnChapter2 = rootEl.querySelector('#btn-title-chapter2');
     this.btnReplayPrologue = rootEl.querySelector('#btn-title-prologue');
     this.titleProgressMeta = rootEl.querySelector('#title-progress-meta');
 
@@ -67,6 +69,12 @@ export class PrologueOverlay {
       sound.playSwitch(true);
       this.hide();
       this.onContinue?.();
+    });
+
+    this.btnChapter2?.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.hide();
+      this.onStartChapter2?.();
     });
 
     this.btnReplayPrologue.addEventListener('click', () => {
@@ -132,6 +140,17 @@ export class PrologueOverlay {
       this.btnContinue.classList.add('hidden');
       this.btnReplayPrologue.classList.add('hidden');
       this.titleProgressMeta.classList.add('hidden');
+    }
+
+    if (this.btnChapter2) {
+      const ch2Stages = STAGES.filter((s) => s.chapter === 2);
+      const clearedSet = new Set(save.clearedStages || []);
+      const anyCh2Cleared = ch2Stages.some((s) => clearedSet.has(s.id));
+      const nextCh2 = ch2Stages.find((s) => !clearedSet.has(s.id)) || ch2Stages[ch2Stages.length - 1];
+      this.btnChapter2.textContent =
+        anyCh2Cleared && nextCh2
+          ? `☀ 第二章：青空への帰還（STAGE ${nextCh2.code}〜）`
+          : '☀ 第二章：青空への帰還（STAGE 18〜）';
     }
   }
 

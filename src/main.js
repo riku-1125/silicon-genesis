@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=25';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=26';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,14 +16,14 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=25';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=25';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=25';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=25';
-import { DialogueController } from './ui/dialogue.js?v=25';
-import { ModalManager } from './ui/modals.js?v=25';
-import { PrologueOverlay } from './ui/prologue.js?v=25';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=25';
+import { sound } from './audio/sound.js?v=26';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=26';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=26';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=26';
+import { DialogueController } from './ui/dialogue.js?v=26';
+import { ModalManager } from './ui/modals.js?v=26';
+import { PrologueOverlay } from './ui/prologue.js?v=26';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=26';
 
 class SiliconGenesisApp {
   constructor() {
@@ -60,6 +60,9 @@ class SiliconGenesisApp {
       onContinue: () => {
         this.loadStage(this.save.currentStageId || 'stage_00a', { autoIntro: true });
         requestAnimationFrame(() => this._fitActiveCanvas());
+      },
+      onStartChapter2: () => {
+        this.startChapter2();
       },
     });
     this.workbench = new WorkbenchCanvas(this.dom.workbenchCanvas, {
@@ -152,6 +155,12 @@ class SiliconGenesisApp {
       sound.playSwitch(true);
       this.modals.openMap(this.save, this.stage.id, {
         onSelectStage: (sid) => this.loadStage(sid, { autoIntro: true }),
+        onGoHome: () => {
+          this._saveDraft();
+          this.dialogue.close();
+          sound.playSwitch(false);
+          this.prologue.showTitle(this.save);
+        },
         onReplayPrologue: () => {
           sound.playPowerUp();
           this.prologue.startStory();
@@ -258,7 +267,12 @@ class SiliconGenesisApp {
         incidentBrief: this.stage.incidentBrief || null,
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
-        endLabel: this.stage.mode === 'physics' ? '実験台へ ▶' : '回路を組む ▶',
+        endLabel:
+          this.stage.kind === 'assembly_program'
+            ? 'プログラムを組む ▶'
+            : this.stage.mode === 'physics'
+              ? '実験台へ ▶'
+              : '回路を組む ▶',
         onComplete: () => {
           sound.setBgmTrack(this._getStageWorkBgm(this.stage));
         },
@@ -397,7 +411,7 @@ class SiliconGenesisApp {
     this.dom.stageTitleText.textContent = isCleared ? this.stage.revealedTitle : this.stage.title;
 
     // Clock pulse & quick next-stage button visibility
-    const hasClk = this.stage.inputs.includes('CLK');
+    const hasClk = this.stage.inputs.includes('CLK') && this.stage.mode !== 'physics';
     this.dom.btnClockPulse.classList.toggle('hidden', !hasClk);
     this._syncNextStageQuickBtn();
 
@@ -416,7 +430,12 @@ class SiliconGenesisApp {
         incidentBrief: this.stage.incidentBrief || null,
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
-        endLabel: this.stage.mode === 'physics' ? '実験台へ ▶' : '回路を組む ▶',
+        endLabel:
+          this.stage.kind === 'assembly_program'
+            ? 'プログラムを組む ▶'
+            : this.stage.mode === 'physics'
+              ? '実験台へ ▶'
+              : '回路を組む ▶',
         onComplete: () => {
           if (this.dom.prologueOverlay.classList.contains('hidden')) {
             sound.setBgmTrack(this._getStageWorkBgm(this.stage));
@@ -434,6 +453,8 @@ class SiliconGenesisApp {
     this.dom.workbenchCanvas.classList.toggle('hidden', isPhysics);
     this.dom.physicsLabCanvas.classList.toggle('hidden', !isPhysics);
     this.dom.btnUndo.classList.toggle('hidden', isPhysics);
+    this.dom.btnZoomOut?.classList.toggle('hidden', isPhysics);
+    this.dom.btnZoomIn?.classList.toggle('hidden', isPhysics);
     this.selection = { nodeId: null, wireId: null, pendingPin: null, armedChipType: null };
     this._renderSelectionToolbar();
 
@@ -918,13 +939,17 @@ class SiliconGenesisApp {
     this.dom.btnRunTest.disabled = true;
     this.dom.testProgressBar.classList.remove('hidden');
 
+    const isAsm = this.stage.kind === 'assembly_program';
+    const prefix = isAsm ? 'プログラム実行' : '物理検証';
+    const stepDelay = evalResult.results.length > 5 ? 300 : 520;
+
     for (let i = 0; i < evalResult.results.length; i++) {
       if (token !== this._testRunToken) return;
       const step = evalResult.results[i];
-      this.dom.testProgressLabel.textContent = `物理検証 ${i + 1}/${evalResult.results.length}: ${step.label}`;
+      this.dom.testProgressLabel.textContent = `${prefix} ${i + 1}/${evalResult.results.length}: ${step.label}`;
       this.physicsLab.setControlBit(step.input[0]);
       sound.playTestStep(i, step.passed);
-      await new Promise((r) => setTimeout(r, 520));
+      await new Promise((r) => setTimeout(r, stepDelay));
     }
 
     if (token !== this._testRunToken) return;
@@ -1049,12 +1074,381 @@ class SiliconGenesisApp {
         fallbackGoal: `✔ クリア済：${this.stage.revealedTitle}`,
         sceneKey: this.stage.scene,
         stageBadge: `✔ CLEAR · ${act.roman} ${this.stage.code}`,
-        endLabel: 'チップ登録へ ▶',
+        endLabel: this.stage.kind === 'assembly_program' ? '実行結果へ ▶' : 'チップ登録へ ▶',
         onComplete: openCeremony,
       });
     } else {
       openCeremony();
     }
+  }
+
+  // ===========================================================================
+  // CHAPTER 2 DIRECT LAUNCH & STANDARD CHAPTER 1 CHIP AUTO-PROVISIONING
+  // ===========================================================================
+  startChapter2() {
+    this._ensureChapter1ChipsForChapter2();
+    const ch2Stages = STAGES.filter((s) => s.chapter === 2);
+    const clearedSet = new Set(this.save.clearedStages || []);
+    const curIsCh2 = ch2Stages.some((s) => s.id === this.save.currentStageId);
+    const firstUnclearedCh2 = ch2Stages.find((s) => !clearedSet.has(s.id));
+    const targetId = curIsCh2
+      ? this.save.currentStageId
+      : firstUnclearedCh2
+        ? firstUnclearedCh2.id
+        : 'stage_18';
+
+    this.loadStage(targetId, { autoIntro: true });
+    requestAnimationFrame(() => this._fitActiveCanvas());
+  }
+
+  _ensureChapter1ChipsForChapter2() {
+    const inp = (pin) => ({ kind: 'input', pin });
+    const out = (pin) => ({ kind: 'output', pin });
+    const np = (nodeId, pin) => ({ kind: 'node', nodeId, pin });
+
+    const buildStandard = (stage, nodes, wireSpecs) => {
+      let c = createEmptyCircuit(stage.inputs, stage.outputs);
+      c.nodes = nodes.map((n, idx) => ({
+        id: n.id,
+        type: n.type,
+        x: n.x ?? 180 + (idx % 3) * 145,
+        y: n.y ?? 90 + Math.floor(idx / 3) * 110,
+      }));
+      let wid = 1;
+      for (const [from, to] of wireSpecs) {
+        c = connectWire(c, from, to, () => `w${wid++}`);
+      }
+      return c;
+    };
+
+    const ch1Blueprints = {
+      stage_00: [
+        [
+          { id: 'vcc', type: 'CONST_1' },
+          { id: 'sw1', type: 'SW' },
+          { id: 'sw2', type: 'SW' },
+          { id: 'pull', type: 'PULL' },
+        ],
+        [
+          [np('vcc', 0), np('sw1', 0)],
+          [inp(0), np('sw1', 1)],
+          [np('sw1', 0), np('sw2', 0)],
+          [inp(1), np('sw2', 1)],
+          [np('sw2', 0), np('pull', 0)],
+          [np('pull', 0), out(0)],
+        ],
+      ],
+      stage_01: [
+        [{ id: 'g1', type: 'NAND' }],
+        [
+          [inp(0), np('g1', 0)],
+          [inp(0), np('g1', 1)],
+          [np('g1', 0), out(0)],
+        ],
+      ],
+      stage_02: [
+        [
+          { id: 'n1', type: 'NAND' },
+          { id: 'i1', type: 'NOT' },
+        ],
+        [
+          [inp(0), np('n1', 0)],
+          [inp(1), np('n1', 1)],
+          [np('n1', 0), np('i1', 0)],
+          [np('i1', 0), out(0)],
+        ],
+      ],
+      stage_03: [
+        [
+          { id: 'na', type: 'NOT' },
+          { id: 'nb', type: 'NOT' },
+          { id: 'g', type: 'NAND' },
+        ],
+        [
+          [inp(0), np('na', 0)],
+          [inp(1), np('nb', 0)],
+          [np('na', 0), np('g', 0)],
+          [np('nb', 0), np('g', 1)],
+          [np('g', 0), out(0)],
+        ],
+      ],
+      stage_04: [
+        [
+          { id: 'o1', type: 'OR' },
+          { id: 'n1', type: 'NAND' },
+          { id: 'a1', type: 'AND' },
+        ],
+        [
+          [inp(0), np('o1', 0)],
+          [inp(1), np('o1', 1)],
+          [inp(0), np('n1', 0)],
+          [inp(1), np('n1', 1)],
+          [np('o1', 0), np('a1', 0)],
+          [np('n1', 0), np('a1', 1)],
+          [np('a1', 0), out(0)],
+        ],
+      ],
+      stage_05: [
+        [
+          { id: 'x1', type: 'XOR' },
+          { id: 'a1', type: 'AND' },
+        ],
+        [
+          [inp(0), np('x1', 0)],
+          [inp(1), np('x1', 1)],
+          [inp(0), np('a1', 0)],
+          [inp(1), np('a1', 1)],
+          [np('x1', 0), out(0)],
+          [np('a1', 0), out(1)],
+        ],
+      ],
+      stage_06: [
+        [
+          { id: 'ha1', type: 'HALF_ADDER' },
+          { id: 'ha2', type: 'HALF_ADDER' },
+          { id: 'o1', type: 'OR' },
+        ],
+        [
+          [inp(0), np('ha1', 0)],
+          [inp(1), np('ha1', 1)],
+          [np('ha1', 0), np('ha2', 0)],
+          [inp(2), np('ha2', 1)],
+          [np('ha2', 0), out(0)],
+          [np('ha1', 1), np('o1', 0)],
+          [np('ha2', 1), np('o1', 1)],
+          [np('o1', 0), out(1)],
+        ],
+      ],
+      stage_07: [
+        [
+          { id: 'fa0', type: 'FULL_ADDER' },
+          { id: 'fa1', type: 'FULL_ADDER' },
+          { id: 'fa2', type: 'FULL_ADDER' },
+          { id: 'fa3', type: 'FULL_ADDER' },
+        ],
+        [
+          [inp(0), np('fa0', 0)], [inp(4), np('fa0', 1)], [inp(8), np('fa0', 2)], [np('fa0', 0), out(0)],
+          [inp(1), np('fa1', 0)], [inp(5), np('fa1', 1)], [np('fa0', 1), np('fa1', 2)], [np('fa1', 0), out(1)],
+          [inp(2), np('fa2', 0)], [inp(6), np('fa2', 1)], [np('fa1', 1), np('fa2', 2)], [np('fa2', 0), out(2)],
+          [inp(3), np('fa3', 0)], [inp(7), np('fa3', 1)], [np('fa2', 1), np('fa3', 2)], [np('fa3', 0), out(3)],
+          [np('fa3', 1), out(4)],
+        ],
+      ],
+      stage_08: [
+        [
+          { id: 'ns', type: 'NOT' },
+          { id: 'a0', type: 'AND' },
+          { id: 'a1', type: 'AND' },
+          { id: 'o1', type: 'OR' },
+        ],
+        [
+          [inp(2), np('ns', 0)],
+          [inp(0), np('a0', 0)], [np('ns', 0), np('a0', 1)],
+          [inp(1), np('a1', 0)], [inp(2), np('a1', 1)],
+          [np('a0', 0), np('o1', 0)], [np('a1', 0), np('o1', 1)],
+          [np('o1', 0), out(0)],
+        ],
+      ],
+      stage_09: [
+        [
+          { id: 'm0', type: 'MUX' },
+          { id: 'm1', type: 'MUX' },
+          { id: 'm2', type: 'MUX' },
+          { id: 'm3', type: 'MUX' },
+        ],
+        [
+          [inp(0), np('m0', 0)], [inp(4), np('m0', 1)], [inp(8), np('m0', 2)], [np('m0', 0), out(0)],
+          [inp(1), np('m1', 0)], [inp(5), np('m1', 1)], [inp(8), np('m1', 2)], [np('m1', 0), out(1)],
+          [inp(2), np('m2', 0)], [inp(6), np('m2', 1)], [inp(8), np('m2', 2)], [np('m2', 0), out(2)],
+          [inp(3), np('m3', 0)], [inp(7), np('m3', 1)], [inp(8), np('m3', 2)], [np('m3', 0), out(3)],
+        ],
+      ],
+      stage_10: [
+        [
+          { id: 'n0', type: 'NOT' },
+          { id: 'n1', type: 'NOT' },
+          { id: 'y0', type: 'AND' },
+          { id: 'y1', type: 'AND' },
+          { id: 'y2', type: 'AND' },
+          { id: 'y3', type: 'AND' },
+        ],
+        [
+          [inp(0), np('n0', 0)],
+          [inp(1), np('n1', 0)],
+          [np('n0', 0), np('y0', 0)], [np('n1', 0), np('y0', 1)], [np('y0', 0), out(0)],
+          [inp(0), np('y1', 0)], [np('n1', 0), np('y1', 1)], [np('y1', 0), out(1)],
+          [np('n0', 0), np('y2', 0)], [inp(1), np('y2', 1)], [np('y2', 0), out(2)],
+          [inp(0), np('y3', 0)], [inp(1), np('y3', 1)], [np('y3', 0), out(3)],
+        ],
+      ],
+      stage_11: [
+        [
+          { id: 'ns', type: 'NOT' },
+          { id: 'nr', type: 'NOT' },
+          { id: 'q', type: 'NAND' },
+          { id: 'qn', type: 'NAND' },
+        ],
+        [
+          [inp(0), np('ns', 0)],
+          [inp(1), np('nr', 0)],
+          [np('ns', 0), np('q', 0)],
+          [np('qn', 0), np('q', 1)],
+          [np('nr', 0), np('qn', 0)],
+          [np('q', 0), np('qn', 1)],
+          [np('q', 0), out(0)],
+          [np('qn', 0), out(1)],
+        ],
+      ],
+      stage_12: [
+        [
+          { id: 'nd', type: 'NOT' },
+          { id: 'as', type: 'AND' },
+          { id: 'ar', type: 'AND' },
+          { id: 'sr', type: 'SR_LATCH' },
+        ],
+        [
+          [inp(0), np('nd', 0)],
+          [inp(0), np('as', 0)], [inp(1), np('as', 1)],
+          [np('nd', 0), np('ar', 0)], [inp(1), np('ar', 1)],
+          [np('as', 0), np('sr', 0)],
+          [np('ar', 0), np('sr', 1)],
+          [np('sr', 0), out(0)],
+        ],
+      ],
+      stage_13: [
+        [
+          { id: 'nc', type: 'NOT' },
+          { id: 'm', type: 'D_LATCH' },
+          { id: 's', type: 'D_LATCH' },
+        ],
+        [
+          [inp(1), np('nc', 0)],
+          [inp(0), np('m', 0)], [np('nc', 0), np('m', 1)],
+          [np('m', 0), np('s', 0)], [inp(1), np('s', 1)],
+          [np('s', 0), out(0)],
+        ],
+      ],
+      stage_14: [
+        [
+          { id: 'mx', type: 'MUX_4BIT' },
+          { id: 'f0', type: 'D_FF' },
+          { id: 'f1', type: 'D_FF' },
+          { id: 'f2', type: 'D_FF' },
+          { id: 'f3', type: 'D_FF' },
+        ],
+        [
+          [np('f0', 0), np('mx', 0)],
+          [np('f1', 0), np('mx', 1)],
+          [np('f2', 0), np('mx', 2)],
+          [np('f3', 0), np('mx', 3)],
+          [inp(0), np('mx', 4)],
+          [inp(1), np('mx', 5)],
+          [inp(2), np('mx', 6)],
+          [inp(3), np('mx', 7)],
+          [inp(4), np('mx', 8)],
+          [np('mx', 0), np('f0', 0)], [inp(5), np('f0', 1)], [np('f0', 0), out(0)],
+          [np('mx', 1), np('f1', 0)], [inp(5), np('f1', 1)], [np('f1', 0), out(1)],
+          [np('mx', 2), np('f2', 0)], [inp(5), np('f2', 1)], [np('f2', 0), out(2)],
+          [np('mx', 3), np('f3', 0)], [inp(5), np('f3', 1)], [np('f3', 0), out(3)],
+        ],
+      ],
+      stage_15: [
+        [
+          { id: 'x0', type: 'XOR' },
+          { id: 'x1', type: 'XOR' },
+          { id: 'x2', type: 'XOR' },
+          { id: 'x3', type: 'XOR' },
+          { id: 'add', type: 'ADD_4BIT' },
+        ],
+        [
+          [inp(0), np('add', 0)], [inp(1), np('add', 1)], [inp(2), np('add', 2)], [inp(3), np('add', 3)],
+          [inp(4), np('x0', 0)], [inp(8), np('x0', 1)], [np('x0', 0), np('add', 4)],
+          [inp(5), np('x1', 0)], [inp(8), np('x1', 1)], [np('x1', 0), np('add', 5)],
+          [inp(6), np('x2', 0)], [inp(8), np('x2', 1)], [np('x2', 0), np('add', 6)],
+          [inp(7), np('x3', 0)], [inp(8), np('x3', 1)], [np('x3', 0), np('add', 7)],
+          [inp(8), np('add', 8)],
+          [np('add', 0), out(0)], [np('add', 1), out(1)], [np('add', 2), out(2)], [np('add', 3), out(3)],
+          [np('add', 4), out(4)],
+        ],
+      ],
+      stage_16: [
+        [
+          { id: 'c0', type: 'CONST_0' },
+          { id: 'c1', type: 'CONST_1' },
+          { id: 'add', type: 'ADD_4BIT' },
+          { id: 'mx', type: 'MUX_4BIT' },
+          { id: 'reg', type: 'REG_4BIT' },
+        ],
+        [
+          [np('reg', 0), np('add', 0)], [np('reg', 1), np('add', 1)], [np('reg', 2), np('add', 2)], [np('reg', 3), np('add', 3)],
+          [np('c0', 0), np('add', 4)], [np('c0', 0), np('add', 5)], [np('c0', 0), np('add', 6)], [np('c0', 0), np('add', 7)],
+          [np('c1', 0), np('add', 8)],
+          [np('add', 0), np('mx', 0)], [np('add', 1), np('mx', 1)], [np('add', 2), np('mx', 2)], [np('add', 3), np('mx', 3)],
+          [inp(0), np('mx', 4)], [inp(1), np('mx', 5)], [inp(2), np('mx', 6)], [inp(3), np('mx', 7)],
+          [inp(4), np('mx', 8)],
+          [np('mx', 0), np('reg', 0)], [np('mx', 1), np('reg', 1)], [np('mx', 2), np('reg', 2)], [np('mx', 3), np('reg', 3)],
+          [np('c1', 0), np('reg', 4)],
+          [inp(5), np('reg', 5)],
+          [np('reg', 0), out(0)], [np('reg', 1), out(1)], [np('reg', 2), out(2)], [np('reg', 3), out(3)],
+        ],
+      ],
+      stage_17: [
+        [
+          { id: 'alu', type: 'ALU_4BIT' },
+          { id: 'mx', type: 'MUX_4BIT' },
+          { id: 'reg', type: 'REG_4BIT' },
+        ],
+        [
+          [np('reg', 0), np('alu', 0)], [np('reg', 1), np('alu', 1)], [np('reg', 2), np('alu', 2)], [np('reg', 3), np('alu', 3)],
+          [inp(0), np('alu', 4)], [inp(1), np('alu', 5)], [inp(2), np('alu', 6)], [inp(3), np('alu', 7)],
+          [inp(4), np('alu', 8)],
+          [np('alu', 0), np('mx', 0)], [np('alu', 1), np('mx', 1)], [np('alu', 2), np('mx', 2)], [np('alu', 3), np('mx', 3)],
+          [inp(0), np('mx', 4)], [inp(1), np('mx', 5)], [inp(2), np('mx', 6)], [inp(3), np('mx', 7)],
+          [inp(5), np('mx', 8)],
+          [np('mx', 0), np('reg', 0)], [np('mx', 1), np('reg', 1)], [np('mx', 2), np('reg', 2)], [np('mx', 3), np('reg', 3)],
+          [inp(6), np('reg', 4)],
+          [inp(7), np('reg', 5)],
+          [np('reg', 0), out(0)], [np('reg', 1), out(1)], [np('reg', 2), out(2)], [np('reg', 3), out(3)],
+        ],
+      ],
+    };
+
+    this.save.seenPrologue = true;
+    const ch1Stages = STAGES.filter((s) => s.chapter !== 2);
+
+    for (const st of ch1Stages) {
+      if (!this.save.clearedStages.includes(st.id)) {
+        this.save.clearedStages.push(st.id);
+      }
+      for (const cid of st.codexUnlock || []) {
+        if (!this.save.unlockedCodex.includes(cid)) {
+          this.save.unlockedCodex.push(cid);
+        }
+      }
+      const reward = st.rewardChip;
+      if (reward && !reward.isLabReward && !this.save.customChips[reward.id]) {
+        const bp = ch1Blueprints[st.id];
+        if (bp) {
+          const circuit = buildStandard(st, bp[0], bp[1]);
+          const metrics = computeCircuitMetrics(circuit, this.save.customChips);
+          this.save.customChips[reward.id] = {
+            ...reward,
+            inputs: reward.inputs ? [...reward.inputs] : [...st.inputs],
+            outputs: reward.outputs ? [...reward.outputs] : [...st.outputs],
+            circuit,
+            nandCount: metrics.nandCount,
+            depth: metrics.depth,
+            stageId: st.id,
+            createdAt: Date.now(),
+          };
+          if (this.save.bestNandCounts[st.id] === undefined) {
+            this.save.bestNandCounts[st.id] = metrics.nandCount;
+          }
+        }
+      }
+    }
+
+    persistSaveData(this.save);
   }
 
   showToast(message) {
@@ -1077,7 +1471,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=25', { updateViaCache: 'none' })
+        .register('./sw.js?v=26', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

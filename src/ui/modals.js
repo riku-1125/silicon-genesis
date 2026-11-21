@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=25';
-import { CODEX_ENTRIES } from '../data/codex.js?v=25';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=26';
+import { CODEX_ENTRIES } from '../data/codex.js?v=26';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=25';
+} from '../data/glossary.js?v=26';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=25';
-import { StoryDiagramGroup } from './storyDiagram.js?v=25';
-import { glossaryPopover } from './glossaryPopover.js?v=25';
+import { sound } from '../audio/sound.js?v=26';
+import { StoryDiagramGroup } from './storyDiagram.js?v=26';
+import { glossaryPopover } from './glossaryPopover.js?v=26';
 
 function esc(str) {
   return String(str ?? '')
@@ -103,7 +103,7 @@ export class ModalManager {
       stage.mode === 'physics' && Array.isArray(stage.physicsParts)
         ? `
       <div class="callout callout-amber">
-        <div class="callout-title">使う材料・物理部品</div>
+        <div class="callout-title">${stage.kind === 'assembly_program' ? '使うアセンブリ命令カード（ROM）' : '使う材料・物理部品'}</div>
         <ul style="margin:4px 0 0;padding-left:16px;font-size:12px;line-height:1.6;">
           ${stage.physicsParts
             .map((p) => `<li><b>${esc(p.name)}（${esc(p.meta)}）</b>：${esc(p.rule)}</li>`)
@@ -323,12 +323,17 @@ export class ModalManager {
       )
       .join('');
 
-    const finaleBanner = stage.isFinale
+    const finaleBanner = stage.isChapter2Finale
       ? `<div class="callout callout-emerald">
-          <b>🎉 文明再起動達成 — ARK-4 稼働開始！</b><br>
-          地上ビーコンから <code>"HELLO, WORLD."</code> が発信されました！ 自由実験室（FREE LAB）で全カスタムチップを使った自由設計も楽しめます。
+          <b>☀ 第二章完結 — 42年ぶりの青空への帰還！！</b><br>
+          砂（シリコン）と1個のスイッチから始まったあなたの計算機 <code>ARK4_SYS</code> とアセンブリ・プログラムが、ついにアーク7の地上大ハッチを全開にし、118人の生存者を青空の下へ導きました！
         </div>`
-      : '';
+      : stage.isFinale
+        ? `<div class="callout callout-emerald">
+            <b>🎉 第一章完結 — 自作CPU『ARK-4』稼働開始！</b><br>
+            地上ビーコンから <code>"HELLO, WORLD."</code> が発信され、さらに <b>☀ 第二章「青空への帰還」（STAGE 18〜24）</b> が解放されました！
+          </div>`
+        : '';
 
     const metaText =
       stage.id === 'stage_00a'
@@ -337,7 +342,9 @@ export class ModalManager {
           ? `物理回路：<b>プルアップ抵抗 ＋ 接地スイッチ</b>`
           : stage.id === 'stage_00'
             ? `物理スイッチ(TR): <b>${metrics.nodeCount}</b>部品`
-            : `実効NAND: <b>${metrics.nandCount}</b>個 <span class="dim">(TR換算 ${metrics.nandCount * 2}個)</span>`;
+            : stage.kind === 'assembly_program'
+              ? `ROM命令数: <b>${metrics.nodeCount}行</b> <span class="dim">(ARK4_SYS 実効 ${metrics.nandCount} NAND)</span>`
+              : `実効NAND: <b>${metrics.nandCount}</b>個 <span class="dim">(TR換算 ${metrics.nandCount * 2}個)</span>`;
 
     const forgedCaption =
       stage.id === 'stage_00a'
@@ -346,10 +353,21 @@ export class ModalManager {
           ? `ショートを防ぎ安全に反転する <b>[はいすい（プルアップ抵抗）]</b> の製法を習得しました！ いよいよNANDを組もう！`
           : stage.id === 'stage_00'
             ? `物理スイッチから組み上げた原板 <b>[NAND]</b> をB4焼付け機へセットしました！ これ以降はこの <b>NAND</b> だけを量産して上位回路を創り上げます。`
-            : `あなたの回路をカスタムICチップ <b>[${esc(chipDef.name)}]</b> としてパレットに永続登録しました！`;
+            : stage.kind === 'assembly_program'
+              ? `あなたのノイマン型計算機 <b>[ARK4_SYS]</b> の上で、アセンブリ言語プログラム <b>[${esc(chipDef.name)}]</b> が完全動作しました！`
+              : `あなたの回路をカスタムICチップ <b>[${esc(chipDef.name)}]</b> としてパレットに永続登録しました！`;
+
+    const nextBtnLabel =
+      stage.id === 'stage_17'
+        ? '☀ 第二章「青空への帰還」(STAGE 18) へ進む ▶'
+        : '次のミッションへ進む ▶';
 
     this.open({
-      title: stage.isFinale ? '★ SILICON GENESIS — 文明再起動完了！' : `✔ STAGE ${stage.code} クリア！`,
+      title: stage.isChapter2Finale
+        ? '☀ SILICON GENESIS — 第二章・青空への帰還 完結！！'
+        : stage.isFinale
+          ? '★ 第一章完結 — 文明再起動完了！'
+          : `✔ STAGE ${stage.code} クリア！`,
       bodyHtml: `
         ${finaleBanner}
         <div class="victory-chip-stage">
@@ -376,7 +394,7 @@ export class ModalManager {
       footerHtml: `
         ${
           hasNextStage
-            ? `<button class="btn btn-emerald" id="btn-victory-next">次のミッションへ進む ▶</button>`
+            ? `<button class="btn btn-emerald" id="btn-victory-next">${nextBtnLabel}</button>`
             : `<button class="btn btn-emerald" id="btn-victory-sandbox">自由実験室（FREE LAB）へ ▶</button>`
         }
         <button class="btn btn-amber" id="btn-victory-codex">📖 CS図鑑を読む</button>
@@ -405,9 +423,16 @@ export class ModalManager {
   // ===========================================================================
   // 5. CAMPAIGN STAGE MAP & SAVE MANAGEMENT MODAL
   // ===========================================================================
-  openMap(save, currentStageId, { onSelectStage, onReplayPrologue, onResetSave }) {
+  openMap(save, currentStageId, { onSelectStage, onReplayPrologue, onGoHome, onResetSave }) {
     const actsHtml = ACTS.map((act) => {
       const stagesInAct = STAGES.filter((s) => s.act === act.id);
+      const chapterBannerHtml =
+        act.id === 6
+          ? `<div class="map-chapter-banner">
+              <span>☀ 第二章：青空への帰還（ノイマン型計算機＆アセンブリ編）</span>
+              <span class="mono" style="font-size:11px;opacity:0.85;">STAGE 18〜24</span>
+            </div>`
+          : '';
       const cards = stagesInAct
         .map((st) => {
           const unlocked = isStageUnlocked(save, st.id);
@@ -432,7 +457,9 @@ export class ModalManager {
                           ? `✔ 構造体得 [はいすい / プルアップ抵抗]`
                           : st.id === 'stage_00'
                             ? `✔ 原板登録済 [NAND] · 物理スイッチ`
-                            : `✔ チップ登録済 [${st.rewardChip.name}] · ${nandBest ?? '?'} NAND`
+                            : st.kind === 'assembly_program'
+                              ? `✔ プログラム稼働済 [${st.rewardChip?.name || 'ASM'}] · ROM制御`
+                              : `✔ チップ登録済 [${st.rewardChip?.name || st.code}] · ${nandBest ?? '?'} NAND`
                       : unlocked
                         ? '挑戦可能'
                         : '🔒 前のステージをクリアで解放'
@@ -445,6 +472,7 @@ export class ModalManager {
         .join('');
 
       return `
+        ${chapterBannerHtml}
         <div class="map-act-group">
           <div class="map-act-header" style="border-left-color:${act.color}">
             <span class="map-act-roman" style="color:${act.color}">${act.roman}</span>
@@ -462,6 +490,15 @@ export class ModalManager {
     this.open({
       title: `ミッションマップ（進捗 ${clearedTotal} / ${STAGES.length}）`,
       bodyHtml: `
+        <div class="map-sandbox-wrap">
+          <button class="map-stage-btn prologue-replay-btn" id="btn-map-home">
+            <span class="map-code">HOME</span>
+            <span class="map-info">
+              <span class="map-name">🏠 タイトル画面（ホーム）へ戻る</span>
+              <span class="map-sub">第一章・第二章の選択やプロローグ再生へ戻る</span>
+            </span>
+          </button>
+        </div>
         <div class="map-sandbox-wrap">
           <button class="map-stage-btn prologue-replay-btn" id="btn-map-prologue">
             <span class="map-code">PRO</span>
@@ -486,6 +523,11 @@ export class ModalManager {
         </div>
       `,
       footerHtml: `<button class="btn btn-ghost" data-close-modal>閉じる</button>`,
+    });
+
+    this.bodyEl.querySelector('#btn-map-home')?.addEventListener('click', () => {
+      this.close();
+      onGoHome?.();
     });
 
     this.bodyEl.querySelector('#btn-map-prologue')?.addEventListener('click', () => {

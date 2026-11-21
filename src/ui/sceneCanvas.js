@@ -361,7 +361,13 @@ export class SceneCanvas {
       ctx.font = 'bold 10px monospace';
       ctx.fillStyle = '#6ec3ff';
       const label =
-        widget === 'hydroponics' ? 'CHAMBER SELECT' : widget === 'data_bus' ? '4-BIT BUS MUX' : 'ROUTE SELECT';
+        this.stage?.id === 'stage_20'
+          ? 'OP / SET / WE / BR'
+          : widget === 'hydroponics'
+            ? 'CHAMBER SELECT'
+            : widget === 'data_bus'
+              ? '4-BIT BUS MUX'
+              : 'ROUTE SELECT';
       ctx.fillText(label, bx + 10, by + 17);
 
       const n = this.outputs.length;
@@ -382,7 +388,15 @@ export class SceneCanvas {
       // Live scrolling oscilloscope trace!
       ctx.font = 'bold 10px monospace';
       ctx.fillStyle = '#c89bff';
-      ctx.fillText(widget === 'clock_pulse' ? 'CLOCK SYNC Q' : 'MEMORY STATE Q', bx + 10, by + 16);
+      const traceTitle =
+        this.stage?.id === 'stage_18'
+          ? 'ZERO FLAG Z (ΔP=0)'
+          : this.stage?.kind === 'assembly_program'
+            ? 'ROM ASM MONITOR'
+            : widget === 'clock_pulse'
+              ? 'CLOCK SYNC Q'
+              : 'MEMORY STATE Q';
+      ctx.fillText(traceTitle, bx + 10, by + 16);
 
       const gx = bx + 10;
       const gy = by + 23;
@@ -410,11 +424,15 @@ export class SceneCanvas {
       ctx.font = 'bold 10px monospace';
       ctx.fillStyle = this.cleared ? '#52e3b6' : '#ff9f6b';
       const title =
-        widget === 'ark4_finale'
-          ? (this.cleared ? 'BEACON: HELLO WORLD' : 'ARK-4 CPU ACC')
-          : widget === 'program_counter'
-            ? 'PC ADDRESS'
-            : 'REG_4BIT MEM';
+        this.stage?.isChapter2Finale
+          ? (this.cleared ? 'HATCH: BLUE SKY!' : 'ARK4_SYS HATCH ACC')
+          : this.stage?.chapter === 2 && widget === 'ark4_finale'
+            ? (this.cleared ? 'ARK4_SYS READY' : 'ARK4_SYS CPU ACC')
+            : widget === 'ark4_finale'
+              ? (this.cleared ? 'BEACON: HELLO WORLD' : 'ARK-4 CPU ACC')
+              : widget === 'program_counter'
+                ? 'PC ADDRESS'
+                : 'REG_4BIT MEM';
       ctx.fillText(title, bx + 10, by + 17);
 
       ctx.font = 'bold 18px monospace';
