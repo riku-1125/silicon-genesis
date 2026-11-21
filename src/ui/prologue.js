@@ -32,7 +32,8 @@ export class PrologueOverlay {
     this.speakerName = rootEl.querySelector('#pro-speaker');
     this.speakerRole = rootEl.querySelector('#pro-role');
     this.textEl = rootEl.querySelector('#pro-text');
-    this.nextCue = rootEl.querySelector('#pro-next-cue');
+    this.btnPrev = rootEl.querySelector('#btn-pro-prev');
+    this.btnNext = rootEl.querySelector('#btn-pro-next');
     this.choicesWrap = rootEl.querySelector('#pro-choices');
     this.storyTapArea = rootEl.querySelector('#pro-tap-area');
 
@@ -68,6 +69,17 @@ export class PrologueOverlay {
       e.stopPropagation();
       sound.playSwitch(false);
       this._finishStory();
+    });
+
+    this.btnPrev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._goBack();
+    });
+
+    this.btnNext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.awaitingChoice) return;
+      this._advance();
     });
 
     this.storyTapArea.addEventListener('click', (e) => {
@@ -121,7 +133,7 @@ export class PrologueOverlay {
     this.root.classList.add('hidden');
   }
 
-  _renderStep(idx) {
+  _renderStep(idx, { instant = false } = {}) {
     const step = PROLOGUE_STEPS[idx];
     if (!step) {
       this._finishStory();
@@ -129,8 +141,11 @@ export class PrologueOverlay {
     }
 
     this.awaitingChoice = false;
+    this.pendingReply = false;
     this.choicesWrap.classList.add('hidden');
     this.choicesWrap.innerHTML = '';
+    this.btnPrev.disabled = idx <= 0;
+    this.btnNext.disabled = false;
 
     // Backdrop transition
     if (this.bgImg.getAttribute('src') !== step.scene) {
@@ -143,7 +158,7 @@ export class PrologueOverlay {
     // Mood lighting & optional screen shake
     this.moodLayer.className = `pro-mood mood-${step.mood || 'dim'}`;
     this.storyScreen.classList.remove('pro-shake');
-    if (step.fx === 'shake') {
+    if (step.fx === 'shake' && !instant) {
       void this.storyScreen.offsetWidth;
       this.storyScreen.classList.add('pro-shake');
     }
@@ -153,8 +168,10 @@ export class PrologueOverlay {
     else if (step.mood === 'amber') sound.setBgmTrack('finale');
     else if (step.mood === 'ash' || step.mood === 'calm') sound.setBgmTrack('title');
 
-    if (step.sfx === 'alarm') sound.playAlarm();
-    else if (step.sfx === 'powerup') sound.playPowerUp();
+    if (!instant) {
+      if (step.sfx === 'alarm') sound.playAlarm();
+      else if (step.sfx === 'powerup') sound.playPowerUp();
+    }
 
     // Dateline & step counter
     this.datelineEl.textContent = step.dateline || '';
@@ -180,11 +197,22 @@ export class PrologueOverlay {
 
     // Speaker & portrait
     this._applySpeaker(step.speaker);
-    this._typeText(step.text, step.speaker, () => {
+    const afterText = () => {
       if (step.choices && step.choices.length > 0) {
         this._showChoices(step.choices);
       }
-    });
+    };
+    if (instant) {
+      this._stopTimer();
+      this.fullText = step.text;
+      this.textEl.textContent = step.text;
+      this.typing = false;
+      this.btnNext.textContent =
+        this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
+      afterText();
+    } else {
+      this._typeText(step.text, step.speaker, afterText);
+    }
   }
 
   _applySpeaker(speakerKey) {
@@ -212,7 +240,8 @@ export class PrologueOverlay {
     this.charIdx = 0;
     this.typing = true;
     this.textEl.textContent = '';
-    this.nextCue.textContent = '…';
+    this.btnNext.textContent =
+      this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
     this._onTypeDone = onDone;
 
     const pitch =
@@ -224,7 +253,6 @@ export class PrologueOverlay {
         this.textEl.textContent = this.fullText;
         this.typing = false;
         this._stopTimer();
-        this.nextCue.textContent = this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'タップでミッション開始 ▶' : 'タップで次へ ▶';
         if (this._onTypeDone) {
           const cb = this._onTypeDone;
           this._onTypeDone = null;
@@ -239,7 +267,8 @@ export class PrologueOverlay {
 
   _showChoices(choices) {
     this.awaitingChoice = true;
-    this.nextCue.textContent = '返答を選んでください';
+    this.btnNext.disabled = true;
+    this.btnNext.textContent = '返答を選択';
     this.choicesWrap.innerHTML = '';
     this.choicesWrap.classList.remove('hidden');
 
@@ -251,6 +280,7 @@ export class PrologueOverlay {
         e.stopPropagation();
         sound.playWireConnect();
         this.awaitingChoice = false;
+        this.btnNext.disabled = false;
         this.choicesWrap.classList.add('hidden');
         this.pendingReply = true;
         this._applySpeaker(choice.replySpeaker);
@@ -260,12 +290,25 @@ export class PrologueOverlay {
     });
   }
 
+  _goBack() {
+    this._stopTimer();
+    if (this.pendingReply) {
+      // Return from choice reaction back to the choice prompt cleanly!
+      sound.playSwitch(false);
+      this._renderStep(this.stepIdx, { instant: true });
+      return;
+    }
+    if (this.stepIdx <= 0) return;
+    sound.playSwitch(false);
+    this.stepIdx--;
+    this._renderStep(this.stepIdx, { instant: true });
+  }
+
   _advance() {
     if (this.typing) {
       this._stopTimer();
       this.textEl.textContent = this.fullText;
       this.typing = false;
-      this.nextCue.textContent = this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'タップでミッション開始 ▶' : 'タップで次へ ▶';
       if (this._onTypeDone) {
         const cb = this._onTypeDone;
         this._onTypeDone = null;

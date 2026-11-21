@@ -32,6 +32,7 @@ export class DialogueController {
     this.stSpeaker = theaterEl.querySelector('#st-speaker');
     this.stRole = theaterEl.querySelector('#st-role');
     this.stText = theaterEl.querySelector('#st-text');
+    this.btnPrev = theaterEl.querySelector('#btn-st-prev');
     this.btnNext = theaterEl.querySelector('#btn-st-next');
 
     this.lines = [];
@@ -57,6 +58,10 @@ export class DialogueController {
       e.stopPropagation();
       sound.playSwitch(false);
       this._finishLines();
+    });
+    this.btnPrev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.goBack();
     });
     this.btnNext.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -126,7 +131,7 @@ export class DialogueController {
     this.theater.classList.add('hidden');
   }
 
-  _showLine(idx) {
+  _showLine(idx, { instant = false } = {}) {
     const line = this.lines[idx];
     if (!line) return;
     const ch = CHARACTERS[line.speaker] || CHARACTERS.kagari;
@@ -137,6 +142,7 @@ export class DialogueController {
     this.stSpeaker.style.color = ch.color;
     this.stRole.textContent = ch.role;
     this.theater.style.setProperty('--pro-accent', ch.color);
+    this.btnPrev.disabled = idx <= 0;
 
     // Optional illustrated guide card OR automatic Incident Trouble Summary Card!
     if (this.stVisualCard) {
@@ -167,14 +173,21 @@ export class DialogueController {
     }
 
     this.fullText = line.text;
-    this.charIdx = 0;
-    this.typing = true;
-    this.stText.textContent = '';
     this.stProgress.textContent = `${idx + 1} / ${this.lines.length}`;
     this.btnNext.textContent = idx < this.lines.length - 1 ? '次へ ▶' : this.endBtnLabel;
 
-    const pitch = line.speaker === 'mina' ? 560 : line.speaker === 'kagari' ? 420 : 320;
     this._stopTimer();
+    if (instant) {
+      this.stText.textContent = this.fullText;
+      this.typing = false;
+      return;
+    }
+
+    this.charIdx = 0;
+    this.typing = true;
+    this.stText.textContent = '';
+
+    const pitch = line.speaker === 'mina' ? 560 : line.speaker === 'kagari' ? 420 : 320;
     this._timer = setInterval(() => {
       this.charIdx += 2;
       if (this.charIdx >= this.fullText.length) {
@@ -186,6 +199,13 @@ export class DialogueController {
         if (this.charIdx % 6 === 0) sound.playBlip(pitch);
       }
     }, 22);
+  }
+
+  goBack() {
+    if (this.lines.length === 0 || this.index <= 0) return;
+    sound.playSwitch(false);
+    this.index--;
+    this._showLine(this.index, { instant: true });
   }
 
   advance() {

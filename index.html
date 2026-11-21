@@ -157,7 +157,10 @@
           </div>
           <p id="pro-text" class="pro-text"></p>
           <div id="pro-choices" class="pro-choices hidden"></div>
-          <div id="pro-next-cue" class="pro-next-cue">タップで次へ ▶</div>
+          <div class="pro-footer">
+            <button id="btn-pro-prev" class="st-prev-btn" type="button" disabled>◀ 戻る</button>
+            <button id="btn-pro-next" class="st-next-btn" type="button">次へ ▶</button>
+          </div>
         </div>
       </div>
     </section>
@@ -194,7 +197,8 @@
         <p id="st-text" class="st-text"></p>
       </div>
       <div class="st-footer">
-        <span class="st-tap-hint">画面タップでも進みます</span>
+        <button id="btn-st-prev" class="st-prev-btn" type="button" disabled>◀ 戻る</button>
+        <span class="st-tap-hint">タップでも進む</span>
         <button id="btn-st-next" class="st-next-btn" type="button">次へ ▶</button>
       </div>
     </div>
