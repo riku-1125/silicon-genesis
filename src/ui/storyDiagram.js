@@ -9,11 +9,138 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=18';
+import { sound } from '../audio/sound.js?v=19';
 
 const W = 340;
 const H = 126;
 const STEP_PERIOD_SEC = 2.15;
+
+const GOAL_SPECS = {
+  goal_not: {
+    boxTitle: '？ 逆転スイッチ',
+    boxSub: '空気清浄・警報',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['IN=0 (酸欠!)', 0]], outs: [['OUT=1 (警報!)', 1]], msg: '① IN=0（危険）のとき ▶ 逆転して OUT=1（警報ON）を出したい！' },
+      { ins: [['IN=1 (正常)', 1]], outs: [['OUT=0 (静穏)', 0]], msg: '② IN=1（正常）のとき ▶ 逆転して OUT=0（静か）にしたい！' },
+    ],
+  },
+  goal_and: {
+    boxTitle: '？ 二重ロック',
+    boxSub: '両方1で開錠',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['鍵A = 0', 0], ['気圧B = 1', 1]], outs: [['OUT = 0 (施錠)', 0]], msg: '① 片方だけ 1 のとき ▶ まだ危険なので OUT=0（閉じたまま）' },
+      { ins: [['鍵A = 1', 1], ['気圧B = 0', 0]], outs: [['OUT = 0 (施錠)', 0]], msg: '② もう片方だけ 1 ▶ やはり OUT=0（閉じたまま）' },
+      { ins: [['鍵A = 1', 1], ['気圧B = 1', 1]], outs: [['OUT = 1 (開錠!)', 1]], msg: '③ AとBの両方が 1 のときだけ ▶ OUT=1（隔壁オープン！）' },
+    ],
+  },
+  goal_or: {
+    boxTitle: '？ 火災報知網',
+    boxSub: '片方でも1で警報',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['北A = 0', 0], ['南B = 0', 0]], outs: [['OUT = 0 (正常)', 0]], msg: '① 北も南も 0（煙なし）▶ このときだけ OUT=0（静か）' },
+      { ins: [['北A = 1', 1], ['南B = 0', 0]], outs: [['OUT = 1 (警報!)', 1]], msg: '② 片方でも煙(1)を検知したら ▶ すぐ OUT=1（サイレン！）' },
+      { ins: [['北A = 1', 1], ['南B = 1', 1]], outs: [['OUT = 1 (警報!)', 1]], msg: '③ 両方とも煙(1)のときも ▶ もちろん OUT=1（サイレン！）' },
+    ],
+  },
+  goal_xor: {
+    boxTitle: '？ 階段スイッチ',
+    boxSub: '違うときだけ1',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['上A = 0', 0], ['下B = 0', 0]], outs: [['OUT = 0 (消灯)', 0]], msg: '① 両方 0（同じ向き）▶ 階段の照明は OUT=0（消灯）' },
+      { ins: [['上A = 1', 1], ['下B = 0', 0]], outs: [['OUT = 1 (点灯!)', 1]], msg: '② AとBが「ちがう値」のとき ▶ 階段の照明が OUT=1（点灯！）' },
+      { ins: [['上A = 1', 1], ['下B = 1', 1]], outs: [['OUT = 0 (消灯)', 0]], msg: '③ 両方 1（同じ向き）▶ 下のスイッチで消せて OUT=0（消灯）！' },
+    ],
+  },
+  goal_half_adder: {
+    boxTitle: '？ 2進数の足し算',
+    boxSub: 'A + B を計算',
+    accent: '#5ce0a8',
+    steps: [
+      { ins: [['A = 0', 0], ['B = 0', 0]], outs: [['SUM(1の位)=0', 0], ['CARRY(2の位)=0', 0]], msg: '① 0 + 0 = 00（くり上がり 0、1の位 0）' },
+      { ins: [['A = 1', 1], ['B = 0', 0]], outs: [['SUM(1の位)=1', 1], ['CARRY(2の位)=0', 0]], msg: '② 1 + 0 = 01（くり上がり 0、1の位 1）' },
+      { ins: [['A = 1', 1], ['B = 1', 1]], outs: [['SUM(1の位)=0', 0], ['CARRY(2の位)=1', 1]], msg: '③ 1 + 1 = 10（2進数で「2」＝くり上がり 1、1の位 0！）' },
+    ],
+  },
+  goal_full_adder: {
+    boxTitle: '？ 3入力の足し算',
+    boxSub: 'A + B + CIN',
+    accent: '#5ce0a8',
+    steps: [
+      { ins: [['A = 1', 1], ['B = 0', 0], ['CIN = 1', 1]], outs: [['SUM(1の位)=0', 0], ['COUT(次へ)=1', 1]], msg: '① 1 + 0 + くり上がり1 = 2（COUT=1, SUM=0）' },
+      { ins: [['A = 1', 1], ['B = 1', 1], ['CIN = 1', 1]], outs: [['SUM(1の位)=1', 1], ['COUT(次へ)=1', 1]], msg: '② 1 + 1 + くり上がり1 = 3（COUT=1, SUM=1）' },
+    ],
+  },
+  goal_sr_latch: {
+    boxTitle: '？ 記憶する警報灯',
+    boxSub: '手を離しても保持',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['地震 S = 1', 1], ['解除 R = 0', 0]], outs: [['警報 Q = 1', 1]], msg: '① S=1（地震発生!）▶ 警報ランプ Q=1 が点灯！' },
+      { ins: [['地震 S = 0', 0], ['解除 R = 0', 0]], outs: [['警報 Q = 1 (記憶!)', 1]], msg: '② 揺れが収まり S=0 に戻っても ▶ Q=1 をずっと覚え続ける！' },
+      { ins: [['地震 S = 0', 0], ['解除 R = 1', 1]], outs: [['警報 Q = 0 (解除)', 0]], msg: '③ R=1（解除ボタン）を押したときだけ ▶ Q=0 に戻る！' },
+    ],
+  },
+  goal_d_latch: {
+    boxTitle: '？ ロック付き金庫',
+    boxSub: 'WE=1のときだけ保存',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['D = 1', 1], ['保存 WE = 1', 1]], outs: [['金庫 Q = 1', 1]], msg: '① WE=1（保存ボタンON）▶ データ D=1 を金庫へ書き込む！' },
+      { ins: [['D = 0 (ノイズ!)', 0], ['保存 WE = 0', 0]], outs: [['金庫 Q = 1 (死守!)', 1]], msg: '② WE=0（ロック中）▶ 外のDが0に変わっても Q=1 を死守！' },
+    ],
+  },
+  goal_dff: {
+    boxTitle: '？ 鼓動で1拍更新',
+    boxSub: 'CLK 0→1 の一瞬だけ',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['D = 1', 1], ['CLK = 0 (準備)', 0]], outs: [['出力 Q = 0', 0]], msg: '① CLK=0 のあいだ ▶ まだ出口 Q は変わらない（扉の手前で待機）' },
+      { ins: [['D = 1', 1], ['CLK 0→1 (鼓動!)', 1]], outs: [['出力 Q = 1 (更新!)', 1]], msg: '② CLK が 0→1 に立ち上がった一瞬だけ ▶ D=1 を Q へ取り込む！' },
+      { ins: [['D = 0 (変化!)', 0], ['CLK = 1 (維持)', 1]], outs: [['出力 Q = 1 (不変!)', 1]], msg: '③ CLK=1 のまま D が変わっても ▶ 筒抜けにならず Q=1 を維持！' },
+    ],
+  },
+  goal_reg4: {
+    boxTitle: '？ 4ビット作業机',
+    boxSub: 'LOAD=1で4桁保存',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['D = 9 (1001)', 1], ['LOAD = 1', 1], ['CLK ↑', 1]], outs: [['記憶 Q = 9', 1]], msg: '① LOAD=1 でクロックが鳴ると ▶ 新しい4桁「9」を作業机に保存！' },
+      { ins: [['D = 3 (0011)', 0], ['LOAD = 0', 0], ['CLK ↑', 1]], outs: [['記憶 Q = 9 (保持!)', 1]], msg: '② LOAD=0 ならクロックが鳴っても ▶ 今の「9」を忘れずキープ！' },
+    ],
+  },
+  goal_alu: {
+    boxTitle: '？ 加減算ユニット',
+    boxSub: 'SUBで足し算/引き算',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['A = 7', 1], ['B = 2', 1], ['SUB = 0 (加算)', 0]], outs: [['答え Y = 9', 1]], msg: '① SUB=0 のとき ▶ 足し算 A + B（7 + 2 = 9）を計算！' },
+      { ins: [['A = 7', 1], ['B = 2', 1], ['SUB = 1 (減算!)', 1]], outs: [['答え Y = 5', 1]], msg: '② SUB=1 のとき ▶ 引き算 A − B（7 − 2 = 5）を1台で計算！' },
+    ],
+  },
+  goal_pc: {
+    boxTitle: '？ 手順カウンタ',
+    boxSub: '毎拍+1 ＆ JMP',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['J = 0', 0], ['JMP = 0 (通常)', 0], ['CLK ↑', 1]], outs: [['番地 Q: 0→1→2', 1]], msg: '① JMP=0 のとき ▶ クロックごとに自動で「+1」ずつ進む！' },
+      { ins: [['J = 10', 1], ['JMP = 1 (飛べ!)', 1], ['CLK ↑', 1]], outs: [['番地 Q → 10!', 1]], msg: '② JMP=1 のとき ▶ 指定されたジャンプ先 J=10 番地へワープ！' },
+    ],
+  },
+  goal_ark4: {
+    boxTitle: '？ ARK-4 CPUコア',
+    boxSub: '命令を連続実行',
+    accent: '#ffbe76',
+    steps: [
+      { ins: [['IMM = 5', 1], ['SET = 1 (LDI)', 1], ['CLK ↑', 1]], outs: [['ACC ← 5', 1]], msg: '① LDI 5 ▶ 数値 5 をアキュムレータ(ACC)へ初期セット！' },
+      { ins: [['IMM = 3', 1], ['OP = 0 (ADD)', 0], ['CLK ↑', 1]], outs: [['ACC ← 8 (5+3)', 1]], msg: '② ADD 3 ▶ 今の ACC(5) に +3 を足して ACC=8 に更新！' },
+      { ins: [['IMM = 2', 1], ['OP = 1 (SUB)', 1], ['CLK ↑', 1]], outs: [['ACC ← 6 (8−2)', 1]], msg: '③ SUB 2 ▶ 今の ACC(8) から −2 を引いて ACC=6 に更新！' },
+    ],
+  },
+};
 
 export class StoryDiagramPlayer {
   constructor() {
@@ -170,6 +297,9 @@ export class StoryDiagramPlayer {
         this._drawArk4Cpu(ctx);
         break;
       default:
+        if (GOAL_SPECS[this.kind]) {
+          this._drawBlackBoxGoal(ctx, GOAL_SPECS[this.kind]);
+        }
         break;
     }
 
@@ -314,6 +444,35 @@ export class StoryDiagramPlayer {
   // =========================================================================
   // 17 LIVE ANIMATED DIAGRAMS
   // =========================================================================
+
+  // =========================================================================
+  // SPOILER-FREE BLACK-BOX GOAL ANIMATION (Used in Stage Intros 01..17!)
+  // =========================================================================
+  _drawBlackBoxGoal(ctx, spec) {
+    const step = spec.steps[this.stepIdx % spec.steps.length];
+    const inCount = step.ins.length;
+    const outCount = step.outs.length;
+
+    // Left input pills & animated wires into central mystery box
+    step.ins.forEach(([label, active], idx) => {
+      const y = inCount === 1 ? 42 : inCount === 2 ? 22 + idx * 42 : 12 + idx * 30;
+      const h = inCount === 3 ? 22 : 24;
+      this._pill(ctx, 8, y, 92, h, label, Boolean(active), '#ffd166');
+      this._wire(ctx, [[100, y + h / 2], [126, y + h / 2]], Boolean(active), '#ffd166');
+    });
+
+    // Central Black-Box Target Module
+    this._chip(ctx, 126, 20, 92, 66, spec.boxTitle, spec.boxSub, spec.accent, true);
+
+    // Right output wires & expected output pills
+    step.outs.forEach(([label, active], idx) => {
+      const y = outCount === 1 ? 42 : 22 + idx * 42;
+      this._wire(ctx, [[218, y + 12], [238, y + 12]], Boolean(active), spec.accent);
+      this._pill(ctx, 238, y, 94, 24, label, Boolean(active), spec.accent);
+    });
+
+    this._caption(ctx, step.msg, this.stepIdx, spec.steps.length, spec.accent);
+  }
 
   // 00-A: MOSFET Transistor Electron Bridge
   _drawMosfet(ctx) {

@@ -8,14 +8,14 @@
  */
 
 import { CHARACTERS, SCENES } from '../data/characters.js';
-import { sound } from '../audio/sound.js?v=18';
+import { sound } from '../audio/sound.js?v=19';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=18';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=18';
+} from './glossaryPopover.js?v=19';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=19';
 
 export class DialogueController {
   constructor(stripEl, theaterEl) {

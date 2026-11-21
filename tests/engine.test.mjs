@@ -7,6 +7,9 @@ import {
   MODULE_ENCYCLOPEDIA_IDS,
   tokenizeGlossaryText,
   getGlossaryTerm,
+  isGlossaryTermUnlocked,
+  isGlossaryDiagramUnlocked,
+  isModuleEncyclopediaUnlocked,
 } from '../src/data/glossary.js';
 import { loadSaveData } from '../src/state/storage.js';
 import { createEmptyCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
@@ -628,7 +631,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
     }
   }
   assert.ok(totalTermsHighlighted >= 60, `Expected rich glossary coverage, got ${totalTermsHighlighted}`);
-  assert.equal(animKeys.size, 20, `Expected 20 distinct live story diagrams across all 20 stages, got ${animKeys.size}`);
+  assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
   assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 21);
@@ -643,7 +646,35 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   const linkedIds = selfExcluded.filter((t) => t.type === 'term').map((t) => t.termId);
   assert.deepEqual(linkedIds, ['nand', 'not_gate']);
 
-  // 6. Every related term link resolves cleanly
+  // 6. Progression lock: unacquired modules & diagrams stay locked until their stage is cleared!
+  const freshSave = { currentStageId: 'stage_00a', clearedStages: [] };
+  assert.equal(isGlossaryTermUnlocked('p_silicon', freshSave), true);   // Needed in 00-A intro
+  assert.equal(isGlossaryTermUnlocked('transistor', freshSave), false); // Locked until 00-A cleared
+  assert.equal(isGlossaryTermUnlocked('not_gate', freshSave), false);   // Locked until 01 cleared
+  assert.equal(isGlossaryDiagramUnlocked('nand', freshSave), false);    // NAND diagram locked until 00-C cleared
+  for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
+    assert.equal(isModuleEncyclopediaUnlocked(modId, freshSave), false, `Module '${modId}' should be locked on fresh save`);
+  }
+
+  // Tokenizer with freshSave only links unlocked terms (no spoilers!)
+  const lockedToks = tokenizeGlossaryText('P型シリコンでMOSFETトランジスタとNOTゲートを作る', null, freshSave);
+  assert.deepEqual(
+    lockedToks.filter((t) => t.type === 'term').map((t) => t.termId),
+    ['p_silicon']
+  );
+
+  // After clearing 00-A, 00-B, 00-C, 01: those modules unlock while Stage 02 (AND) remains locked!
+  const midSave = {
+    currentStageId: 'stage_02',
+    clearedStages: ['stage_00a', 'stage_00b', 'stage_00', 'stage_01'],
+  };
+  assert.equal(isModuleEncyclopediaUnlocked('transistor', midSave), true);
+  assert.equal(isModuleEncyclopediaUnlocked('nand', midSave), true);
+  assert.equal(isModuleEncyclopediaUnlocked('not_gate', midSave), true);
+  assert.equal(isModuleEncyclopediaUnlocked('and_gate', midSave), false); // Current stage target still locked!
+  assert.equal(isGlossaryTermUnlocked('and_gate', midSave), false);
+
+  // 7. Every related term link resolves cleanly
   for (const term of Object.values(GLOSSARY_TERMS)) {
     for (const relId of term.related || []) {
       assert.ok(getGlossaryTerm(relId), `Missing related glossary term '${relId}' in '${term.id}'`);

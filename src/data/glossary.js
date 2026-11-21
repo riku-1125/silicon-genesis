@@ -1,14 +1,19 @@
 /**
- * SILICON GENESIS — Interactive Story Glossary & Module Encyclopedia Catalog
+ * SILICON GENESIS — Progression-Aware Story Glossary & Module Encyclopedia Catalog
  *
- * Designed for complete CS beginners (knowledge = 0):
- *   1) Every technical term in Opening Prologue or Story Theater is tappable
- *      to open an everyday-language explanation card (with live animated diagrams
- *      whenever the term is a module, gate, physics element, or circuit structure!).
- *   2) Powers the '⚡ モジュール図鑑（動的図解付き）' tab inside the Encyclopedia modal.
+ * Progression Locking Philosophy:
+ *   - Basic world/story/physics/math vocabulary needed to understand the current conversation
+ *     is unlocked when the player reaches that stage (and NEVER contains puzzle solution diagrams).
+ *   - Modules and CS concepts that have an acquisition path (clearing a stage) are STRICTLY LOCKED
+ *     until the player clears that stage, preventing any spoilers or puzzle-answer leaks!
  */
 
+import { isStageUnlocked } from '../state/storage.js';
+
 export const GLOSSARY_TERMS = {
+  // =========================================================================
+  // WORLD & PROLOGUE VOCABULARY (No puzzle answers, unlocked from start)
+  // =========================================================================
   emp: {
     id: 'emp',
     title: 'EMP（電磁パルス）',
@@ -27,18 +32,17 @@ export const GLOSSARY_TERMS = {
     summary:
       '電気を流すと電磁石が金属のレバーを「カチッ」と引っ張って別の回路をつなぐ、昔ながらの物理スイッチ。大きくて遅いぶん頑丈なので、最先端チップが全滅したEMPでも生き残りました。',
     analogy: 'ハコの正体でもある、古いエレベーターや鉄道信号機で使われていた頑丈な「鉄のパチパチスイッチ」。',
-    related: ['transistor', 'emp'],
+    related: ['emp', 'transistor'],
   },
   insulator: {
     id: 'insulator',
     title: '絶縁層（絶縁体・ガラスの壁）',
     reading: 'Insulator / Oxide Layer',
     category: '物理・半導体',
-    anim: 'mosfet_bridge',
     summary:
-      'ガラスやゴム、プラスチックのように「電気をまったく通さない素材」のこと。隣り合う配線どうしが勝手に触れてショート（焼損）しないよう、電気の壁として仕切る大事な役割を持ちます。',
+      'ガラスやゴム、プラスチックのように「電気をまったく通さない素材」のこと。隣り合う配線どうしが勝手に触れて焼損しないよう、電気の壁として仕切る大事な役割を持ちます。',
     analogy: '電線のまわりに巻かれているゴム被覆や、水を通さないガラスの仕切り板。',
-    related: ['short_circuit', 'transistor', 'electrostatic'],
+    related: ['silicon', 'electrostatic', 'transistor'],
   },
   wafer_press: {
     id: 'wafer_press',
@@ -55,7 +59,6 @@ export const GLOSSARY_TERMS = {
     title: 'シリコン（ケイ素）',
     reading: 'Silicon (Si)',
     category: '物理・半導体',
-    anim: 'mosfet_bridge',
     summary:
       '実は海岸の砂や水晶にたっぷり含まれている身近な元素。普段は電気を通しにくいのに、ほんの少し別の元素を混ぜるだけで「条件つきで電気を通す（半導体）」に化ける、コンピュータ文明の主役です。',
     analogy: 'ただの「砂」を極限までピカピカに精製して作る、電子の運動場。',
@@ -66,21 +69,23 @@ export const GLOSSARY_TERMS = {
     title: 'P型シリコン',
     reading: 'P-Type Semiconductor',
     category: '物理・半導体',
-    anim: 'mosfet_bridge',
+    unlockReachedStage: 'stage_00a',
+    unlockLabel: 'STAGE 00-A 到達',
     summary:
-      'シリコンに微量のホウ素を混ぜた半導体。電子がすこし足りない「プラス（Positive）の穴」が多く、左右をN型シリコンに挟まれると、普段は電子を通さない「見えない壁」になります。',
-    analogy: '普段は通行止めになっている川幅。上に静電気をかけると橋が架かって渡れるようになる！',
-    related: ['n_silicon', 'silicon', 'transistor'],
+      'シリコンに微量のホウ素を混ぜた半導体。電子がすこし足りない「プラス（Positive）の穴」が多く、そのままでは電子が通り抜けられない「見えない壁（土台）」の役割をします。',
+    analogy: '普段は通行止めになっている川幅。上に静電気の力をかけると電子の橋が架かって渡れるようになる！',
+    related: ['n_silicon', 'silicon', 'electrostatic', 'transistor'],
   },
   n_silicon: {
     id: 'n_silicon',
     title: 'N型シリコン',
     reading: 'N-Type Semiconductor',
     category: '物理・半導体',
-    anim: 'mosfet_bridge',
+    unlockReachedStage: 'stage_00a',
+    unlockLabel: 'STAGE 00-A 到達',
     summary:
-      'シリコンに微量のリンを混ぜた半導体。自由に動き回れるマイナスの電子（Negative）がたっぷり余っていて、電気を流すための「電子の池」の役割をします。',
-    analogy: '電子がぎっしり待機している左右の貯水池。真ん中に橋が架かると一気に反対側へ渡り始める！',
+      'シリコンに微量のリンを混ぜた半導体。自由に動き回れるマイナスの電子（Negative）がたっぷり余っていて、電気を流すための「電子の池（入口と出口）」の役割をします。',
+    analogy: '電子がぎっしり待機している貯水池。真ん中に橋が架かると一気に反対側へ渡り始める！',
     related: ['p_silicon', 'silicon', 'transistor'],
   },
   electrostatic: {
@@ -88,12 +93,74 @@ export const GLOSSARY_TERMS = {
     title: '静電気（電界の引力）',
     reading: 'Electrostatic Force',
     category: '物理・半導体',
-    anim: 'mosfet_bridge',
+    unlockReachedStage: 'stage_00a',
+    unlockLabel: 'STAGE 00-A 到達',
     summary:
       'プラスとマイナスが離れていても引き合う目に見えない力。下敷きで髪が逆立つのと同じ力で、金属にプラスの電気をかけると、ガラスの壁を隔てた下側へマイナスの電子をギュッと吸い寄せます。',
     analogy: 'ガラスの向こうにある砂鉄を、磁石でスッと引き寄せるような「触れないリモコン力」。',
-    related: ['transistor', 'insulator'],
+    related: ['insulator', 'p_silicon', 'transistor'],
   },
+  resistor: {
+    id: 'resistor',
+    title: '抵抗器（ていこう）',
+    reading: 'Resistor',
+    category: '物理・電気回路',
+    summary:
+      'わざと電気を通しにくくした「細い道」の部品。電池と地面のあいだに挟むことで、電気が一気に暴走してショート（焼損）するのを防ぎ、電流を安全な量にコントロールします。',
+    analogy: '太い水道管の途中に挟む「細いストロー」。水が勢いよく飛び出しすぎるのを防ぐブレーキ役。',
+    related: ['short_circuit', 'earth', 'pullup'],
+  },
+  short_circuit: {
+    id: 'short_circuit',
+    title: 'ショート（短絡）',
+    reading: 'Short Circuit',
+    category: 'ACT 0 · 電気物理',
+    act: 0,
+    unlockReachedStage: 'stage_00b',
+    unlockClearedStageForDiagram: 'stage_00b',
+    unlockLabel: 'STAGE 00-B クリア',
+    anim: 'short_spark',
+    summary:
+      '電池のプラス（高い電圧）と地面アース（0V）が、抵抗なしで太い線どうし直結してしまう事故。ブレーキのない大電流が一気に流れ、火花が散って部品が焼け切れてしまいます。',
+    analogy: 'ダムの水門を全開にして細い町へそのまま流し込み、大洪水を起こしてしまう状態。',
+    related: ['resistor', 'earth', 'pullup'],
+  },
+  earth: {
+    id: 'earth',
+    title: '地面アース（0V・接地）',
+    reading: 'Ground / Earth (GND)',
+    category: '物理・電気回路',
+    unlockReachedStage: 'stage_00b',
+    unlockLabel: 'STAGE 00-B 到達',
+    summary:
+      '電気の「基準となる高さ0（0ボルト）」であり、余った電気の逃げ場。ここへ道が開くと電圧がストンと0に落ち、デジタル回路の「0（OFF）」がはっきり決まります。',
+    analogy: '水路でいう「海面（高さ0メートル）」。水は高いところから必ず海へ流れ落ちる。',
+    related: ['resistor', 'short_circuit', 'pullup'],
+  },
+  apollo11: {
+    id: 'apollo11',
+    title: 'アポロ11号（誘導コンピュータ AGC）',
+    reading: 'Apollo Guidance Computer (1969)',
+    category: '歴史・人物',
+    summary:
+      '1969年に人類を月面へ着陸させた宇宙船のコンピュータ。実はNANDの双子である「NORゲート」たった1種類を約5,600個組み合わせただけで、地球から38万kmの軌道を計算し切りました！',
+    analogy: 'シンプルな基本パーツだけでも、正しく積み上げれば人類を月まで運べることの証明。',
+    related: ['nand'],
+  },
+  cpu: {
+    id: 'cpu',
+    title: 'CPU（中央処理装置）',
+    reading: 'Central Processing Unit',
+    category: 'コンピュータ基礎',
+    summary:
+      'コンピュータの中で「計算」「判断」「記憶の読み書き」「命令の実行」をまとめて指揮する頭脳装置のこと。アーク7では壊れたエーテル9に代わる新しい4ビットCPU『ARK-4』をゼロから創り上げます。',
+    analogy: '人間でいう「脳みそ」。最初はたった1個のスイッチから始まり、少しずつ知性を獲得していく。',
+    related: ['nand', 'ark4_cpu'],
+  },
+
+  // =========================================================================
+  // ACT 0 — PHYSICAL MODULES (Unlocked upon clearing each ACT 0 stage!)
+  // =========================================================================
   transistor: {
     id: 'transistor',
     title: 'MOSFETトランジスタ（じゃぐち）',
@@ -101,35 +168,15 @@ export const GLOSSARY_TERMS = {
     category: 'ACT 0 · 物理素子',
     act: 0,
     stageId: 'stage_00a',
+    unlockClearedStage: 'stage_00a',
+    unlockLabel: 'STAGE 00-A クリア',
     chipId: 'SW',
     pins: { inputs: ['いり', 'ひねり(Gate)'], outputs: ['でぐち'] },
     anim: 'mosfet_bridge',
     summary:
-      '「動く部品ゼロ」で電気のON/OFFを切り替える超極小スイッチ。ひねり（ゲート）に1をかけるとガラスの下に電子の橋が架かって電気が流れ、0にすると遮断されます。人類史上もっとも大量に作られた人工物です。',
+      '「動く部品ゼロ」で電気のON/OFFを切り替える超極小スイッチ。P型シリコン土台の左右にN型シリコンを埋め、ガラスの壁の上に金属ゲートを乗せた構造です。ゲートに1をかけると電子の橋が架かって導通します。',
     analogy: '指でひねる代わりに「電気の信号」で開閉できる、顕微鏡サイズの電気のじゃぐち。',
-    related: ['silicon', 'electrostatic', 'pullup', 'nand'],
-  },
-  short_circuit: {
-    id: 'short_circuit',
-    title: 'ショート（短絡）',
-    reading: 'Short Circuit',
-    category: '物理・電気回路',
-    anim: 'short_spark',
-    summary:
-      '電池のプラス（高い電圧）と地面アース（0V）が、抵抗なしで太い線どうし直結してしまう事故。ブレーキのない大電流が一気に流れ、火花が散って部品が焼け切れてしまいます。',
-    analogy: 'ダムの水門を全開にして細い町へそのまま流し込み、大洪水を起こしてしまう状態。',
-    related: ['resistor', 'pullup', 'earth'],
-  },
-  resistor: {
-    id: 'resistor',
-    title: '抵抗器（ていこう）',
-    reading: 'Resistor',
-    category: '物理・電気回路',
-    anim: 'short_spark',
-    summary:
-      'わざと電気を通しにくくした「細い道」の部品。電池と地面のあいだに挟むことで、電気が一気に暴走してショート（焼損）するのを防ぎ、電流を安全な量にコントロールします。',
-    analogy: '太い水道管の途中に挟む「細いストロー」。水が勢いよく飛び出しすぎるのを防ぐブレーキ役。',
-    related: ['short_circuit', 'earth', 'pullup'],
+    related: ['silicon', 'p_silicon', 'n_silicon', 'electrostatic', 'pullup', 'nand'],
   },
   pullup: {
     id: 'pullup',
@@ -138,24 +185,15 @@ export const GLOSSARY_TERMS = {
     category: 'ACT 0 · 物理素子',
     act: 0,
     stageId: 'stage_00b',
+    unlockClearedStage: 'stage_00b',
+    unlockLabel: 'STAGE 00-B クリア',
     chipId: 'PULL',
     pins: { inputs: ['ぬけ(Drain)'], outputs: ['でぐち'] },
     anim: 'pullup_drain',
     summary:
-      '電池側に電気を通しにくい「細い道（抵抗）」を挟んでおく知恵。普段は出力を1（5V）へ引っ張り上げつつ、下の排水スイッチが開いた瞬間だけショートさせず安全に0（0V）へ落とせます。',
+      '電池側に電気を通しにくい「細い道（抵抗）」を挟んでおく回路。普段は出力を1（5V）へ引っ張り上げつつ、下の排水スイッチが開いた瞬間だけショートさせず安全に0（0V）へ落とせます。',
     analogy: '細い蛇口から少しずつ水をためておき、底の大きな栓を抜いた瞬間だけ水圧をゼロにする水槽の仕組み。',
-    related: ['resistor', 'short_circuit', 'earth', 'nand'],
-  },
-  earth: {
-    id: 'earth',
-    title: '地面アース（0V・接地）',
-    reading: 'Ground / Earth (GND)',
-    category: '物理・電気回路',
-    anim: 'pullup_drain',
-    summary:
-      '電気の「基準となる高さ0（0ボルト）」であり、余った電気の逃げ場。ここへ道が開くと電圧がストンと0に落ち、デジタル回路の「0（OFF）」がはっきり決まります。',
-    analogy: '水路でいう「海面（高さ0メートル）」。水は高いところから必ず海へ流れ落ちる。',
-    related: ['pullup', 'short_circuit'],
+    related: ['resistor', 'short_circuit', 'earth', 'transistor', 'nand'],
   },
   nand: {
     id: 'nand',
@@ -164,24 +202,23 @@ export const GLOSSARY_TERMS = {
     category: 'ACT 0 · 基本論理素子',
     act: 0,
     stageId: 'stage_00',
+    // Word meaning is readable from Prologue, but full module diagram unlocks on Stage 00-C clear!
+    unlockClearedStageForDiagram: 'stage_00',
+    unlockLabel: 'STAGE 00-C クリア',
     chipId: 'NAND',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'nand_series',
+    preClearSummary:
+      '「AとBの両方が1のときだけ0、それ以外は全部1」を返すあまのじゃく素子。驚くべきことに、この1種類の部品さえあれば、足し算も記憶もCPUも世界中のすべての計算機を作り出せます（機能完全性）。',
     summary:
-      '「AとBの両方が1のときだけ0、それ以外は全部1」を返すあまのじゃく部品。2個のトランジスタ（じゃぐち）を直列に並べてプルアップ抵抗（はいすい）へ繋ぐと誕生します。この1種類から全コンピュータが作れます！',
+      '「AとBの両方が1のときだけ0、それ以外は全部1」を返す万能論理素子。電源（でんち）から2個のトランジスタ（じゃぐち）を直列に通してプルアップ抵抗（はいすい）へ繋ぐことで物理的に誕生します。',
     analogy: 'たった1種類のブロックなのに、組み合わせ次第でお城も宇宙船もぜんぶ作れてしまう「魔法の万能レゴ」。',
     related: ['transistor', 'pullup', 'not_gate', 'apollo11'],
   },
-  ic_chip: {
-    id: 'ic_chip',
-    title: 'ICチップ（集積回路）',
-    reading: 'Integrated Circuit',
-    category: 'ハードウェア',
-    summary:
-      'たくさんのトランジスタや論理回路を小さな1枚の箱にぎゅっと閉じ込めて、「中身を気にせず1個の部品として再利用」できるようにしたもの。この「部品化（抽象化）」のおかげで巨大なCPUも作れます。',
-    analogy: '毎回バラバラの小麦粉から作るのではなく、「完成済みパーツ」として箱詰めして使い回す仕組み。',
-    related: ['wafer_press', 'nand'],
-  },
+
+  // =========================================================================
+  // ACT I — BASIC LOGIC GATES (Strictly locked until each stage is CLEARED!)
+  // =========================================================================
   not_gate: {
     id: 'not_gate',
     title: 'NOTゲート（インバーター）',
@@ -189,13 +226,27 @@ export const GLOSSARY_TERMS = {
     category: 'ACT I · 論理ゲート',
     act: 1,
     stageId: 'stage_01',
+    unlockClearedStage: 'stage_01',
+    unlockLabel: 'STAGE 01 クリア',
     chipId: 'NOT',
     pins: { inputs: ['IN'], outputs: ['OUT'] },
     anim: 'not_branch',
     summary:
       '入力をそのままひっくり返す最小の論理モジュール。0が入れば1、1が入れば0を出します。NANDの2つの入口（AとB）に同じ信号線を分岐してつなぐだけで完成します。',
     analogy: '「はい」と言われたら「いいえ」、「ON」なら「OFF」と必ず逆を返すあまのじゃく通訳。',
-    related: ['nand', 'and_gate', 'or_gate'],
+    related: ['nand', 'ic_chip', 'and_gate', 'or_gate'],
+  },
+  ic_chip: {
+    id: 'ic_chip',
+    title: 'ICチップ（集積回路）',
+    reading: 'Integrated Circuit',
+    category: 'ハードウェア',
+    unlockClearedStage: 'stage_01',
+    unlockLabel: 'STAGE 01 クリア',
+    summary:
+      'たくさんのトランジスタや論理回路を小さな1枚の箱にぎゅっと閉じ込めて、「中身を気にせず1個の部品として再利用」できるようにしたもの。この「部品化（抽象化）」のおかげで巨大なCPUも作れます。',
+    analogy: '毎回バラバラの小麦粉から作るのではなく、「完成済みパーツ」として箱詰めして使い回す仕組み。',
+    related: ['wafer_press', 'nand', 'not_gate'],
   },
   and_gate: {
     id: 'and_gate',
@@ -204,13 +255,27 @@ export const GLOSSARY_TERMS = {
     category: 'ACT I · 論理ゲート',
     act: 1,
     stageId: 'stage_02',
+    unlockClearedStage: 'stage_02',
+    unlockLabel: 'STAGE 02 クリア',
     chipId: 'AND',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'and_invert',
     summary:
       '「Aも1、かつBも1」のように、条件がぜんぶ揃ったときだけ1を出すモジュール。NANDの後ろにNOTをつないでひっくり返すと完成します。安全装置や二重ロックの基本です。',
     analogy: '銀行の金庫のように「2本のカギを同時に回したときだけ開く」二重チェック機構。',
-    related: ['nand', 'not_gate', 'or_gate', 'shannon'],
+    related: ['nand', 'not_gate', 'shannon', 'or_gate'],
+  },
+  shannon: {
+    id: 'shannon',
+    title: 'クロード・シャノン',
+    reading: 'Claude Shannon (1916–2001)',
+    category: '歴史・人物',
+    unlockClearedStage: 'stage_02',
+    unlockLabel: 'STAGE 02 クリア',
+    summary:
+      '1937年、弱冠21歳の修士論文で「論理の数学（ブール代数）と電気スイッチ回路は完全に同じものだ」と証明した情報時代の父。この論文がデジタルコンピュータの扉を開きました。',
+    analogy: '「電気のON/OFFで人間の論理思考をそのまま計算できる！」と最初に見抜いた天才。',
+    related: ['and_gate', 'relay'],
   },
   or_gate: {
     id: 'or_gate',
@@ -219,6 +284,8 @@ export const GLOSSARY_TERMS = {
     category: 'ACT I · 論理ゲート',
     act: 1,
     stageId: 'stage_03',
+    unlockClearedStage: 'stage_03',
+    unlockLabel: 'STAGE 03 クリア',
     chipId: 'OR',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'or_demorgan',
@@ -232,11 +299,13 @@ export const GLOSSARY_TERMS = {
     title: 'ド・モルガンの法則',
     reading: "De Morgan's Laws (1847)",
     category: '数学・歴史',
+    unlockClearedStage: 'stage_03',
+    unlockLabel: 'STAGE 03 クリア',
     anim: 'or_demorgan',
     summary:
       '「AでもBでもない（両方0）」の裏返しは「AかBのどちらか（OR）」になる、という論理の変換ルール。19世紀の数学者ド・モルガンが発見し、NANDだけでORを作る鍵になります。',
     analogy: '「雨も降ってない、かつ風も吹いてない」をひっくり返すと「雨か風のどちらかが来てる」になる言葉のパズル。',
-    related: ['or_gate', 'nand'],
+    related: ['or_gate', 'nand', 'not_gate'],
   },
   xor_gate: {
     id: 'xor_gate',
@@ -245,24 +314,31 @@ export const GLOSSARY_TERMS = {
     category: 'ACT I · 論理ゲート',
     act: 1,
     stageId: 'stage_04',
+    unlockClearedStage: 'stage_04',
+    unlockLabel: 'STAGE 04 クリア',
     chipId: 'XOR',
     pins: { inputs: ['A', 'B'], outputs: ['OUT'] },
     anim: 'xor_diff',
     summary:
       '2つの入力が「ちがう値（0と1、または1と0）」のときだけ1になり、同じ値なら0になるモジュール。「片方は1（OR）」かつ「両方1ではない（NAND）」をANDで合体させて作ります。',
     analogy: '階段の上と下にある照明スイッチ。また2進数の「1の位の足し算」そのものでもあります！',
-    related: ['or_gate', 'and_gate', 'half_adder', 'alu'],
+    related: ['or_gate', 'and_gate', 'nand', 'half_adder'],
   },
+
+  // =========================================================================
+  // ACT II — BINARY & ADDERS
+  // =========================================================================
   binary: {
     id: 'binary',
     title: '2進数（にしんすう）',
     reading: 'Binary Number System',
     category: '数学・計算',
-    anim: 'half_adder',
+    unlockReachedStage: 'stage_05',
+    unlockLabel: 'STAGE 05 到達',
     summary:
-      '0と1のたった2つの数字だけであらゆる数を表す数え方。普段の10進数は「10」で桁が上がりますが、2進数は「2」で次の桁へくり上がります（0, 1, 10, 11, 100…）。右から1・2・4・8の位になります。',
-    analogy: '指が10本ある人間は10進数、ON/OFFの2本しかない電気スイッチは2進数で数える！',
-    related: ['bit', 'half_adder', 'twos_comp'],
+      '0と1のたった2つの数字だけであらゆる数を表す数え方。普段の10進数は「10」で桁が上がりますが、2進数は「2」で次の桁へくり上がります（0=00, 1=01, 2=10, 3=11, 4=100…）。右から1・2・4・8の位になります。',
+    analogy: '指が10本ある人間は10進数、ON/OFFの2種類しかない電気スイッチは2進数で数える！',
+    related: ['half_adder', 'bit', 'twos_comp'],
   },
   half_adder: {
     id: 'half_adder',
@@ -271,13 +347,15 @@ export const GLOSSARY_TERMS = {
     category: 'ACT II · 演算モジュール',
     act: 2,
     stageId: 'stage_05',
+    unlockClearedStage: 'stage_05',
+    unlockLabel: 'STAGE 05 クリア',
     chipId: 'HALF_ADDER',
     pins: { inputs: ['A', 'B'], outputs: ['SUM', 'CARRY'] },
     anim: 'half_adder',
     summary:
       '1ビットどうしの足し算「A＋B」をして、1の位（SUM＝XOR）と2の位へのくり上がり（CARRY＝AND）を出すモジュール。無生物の電気が初めて「算数」を始める記念すべき回路です。',
     analogy: '筆算の一番右の桁（1の位）だけを計算する小さな足し算係。',
-    related: ['full_adder', 'binary', 'xor_gate', 'and_gate'],
+    related: ['binary', 'xor_gate', 'and_gate', 'full_adder'],
   },
   full_adder: {
     id: 'full_adder',
@@ -286,13 +364,15 @@ export const GLOSSARY_TERMS = {
     category: 'ACT II · 演算モジュール',
     act: 2,
     stageId: 'stage_06',
+    unlockClearedStage: 'stage_06',
+    unlockLabel: 'STAGE 06 クリア',
     chipId: 'FULL_ADDER',
     pins: { inputs: ['A', 'B', 'CIN'], outputs: ['SUM', 'COUT'] },
     anim: 'full_adder',
     summary:
       'A・Bに加えて「下の桁からのくり上がり（CIN）」も一緒に3つ足し、答え（SUM）と次の桁へのくり上がり（COUT）を出せる完全な1桁加算モジュール。半加算器2個とOR1個で組めます。',
     analogy: '下の位から渡された「くり上がりのバトン」を受け取って、次の位へ渡せる筆算のプロ。',
-    related: ['half_adder', 'ripple_adder', 'or_gate'],
+    related: ['half_adder', 'or_gate', 'ripple_adder'],
   },
   ripple_adder: {
     id: 'ripple_adder',
@@ -301,6 +381,8 @@ export const GLOSSARY_TERMS = {
     category: 'ACT II · 演算モジュール',
     act: 2,
     stageId: 'stage_07',
+    unlockClearedStage: 'stage_07',
+    unlockLabel: 'STAGE 07 クリア',
     chipId: 'ADD_4BIT',
     pins: { inputs: ['A0..3', 'B0..3', 'CIN'], outputs: ['S0..3', 'COUT'] },
     anim: 'ripple_4bit',
@@ -309,6 +391,22 @@ export const GLOSSARY_TERMS = {
     analogy: 'ドミノ倒しやバケツリレーのように、隣の桁へ次々とくり上がりを運ぶ計算ライン。',
     related: ['full_adder', 'zuse', 'alu', 'program_counter'],
   },
+  zuse: {
+    id: 'zuse',
+    title: 'コンラート・ツーゼ',
+    reading: 'Konrad Zuse (1910–1995)',
+    category: '歴史・人物',
+    unlockClearedStage: 'stage_07',
+    unlockLabel: 'STAGE 07 クリア',
+    summary:
+      '1941年、ベルリンの自宅リビングでリレー部品を組み立て、世界初のプログラム制御・2進数計算機「Z3」を完成させたドイツの技術者。',
+    analogy: '自宅の作業台から「2進数で動く自動計算機」を現実にした先駆者。',
+    related: ['ripple_adder', 'binary', 'relay'],
+  },
+
+  // =========================================================================
+  // ACT III — ROUTING, BUS & DECODER
+  // =========================================================================
   mux: {
     id: 'mux',
     title: 'マルチプレクサ（MUX）',
@@ -316,49 +414,68 @@ export const GLOSSARY_TERMS = {
     category: 'ACT III · 経路制御モジュール',
     act: 3,
     stageId: 'stage_08',
+    unlockClearedStage: 'stage_08',
+    unlockLabel: 'STAGE 08 クリア',
     chipId: 'MUX',
     pins: { inputs: ['D0', 'D1', 'SEL'], outputs: ['OUT'] },
     anim: 'mux_rail',
     summary:
-      '切替信号（SEL）が0ならD0、1ならD1のデータを選んで出力へ流す「信号の進路切替モジュール」。プログラミングの「if（もし〜なら）」を電気回路で実現する要の部品です。',
+      '切替信号（SEL）が0ならD0、1ならD1のデータを選んで出力へ流す「信号の進路切替モジュール」。ANDの門番2個とNOT、ORを組み合わせて「もし〜なら」を電気回路で実現します。',
     analogy: '線路のレバーをガチャンと倒して列車の行き先を切り替える、鉄道の「ポイント切替器」。',
-    related: ['bus', 'register', 'and_gate', 'or_gate'],
+    related: ['and_gate', 'or_gate', 'not_gate', 'mux_4bit'],
   },
   bus: {
     id: 'bus',
-    title: '4ビット切替バス（MUX_4B）',
-    reading: '4-Bit Data Bus Multiplexer',
-    category: 'ACT III · 経路制御モジュール',
-    act: 3,
-    stageId: 'stage_09',
-    chipId: 'MUX_4BIT',
-    pins: { inputs: ['A0..3', 'B0..3', 'SEL'], outputs: ['Y0..3'] },
-    anim: 'data_bus_4bit',
+    title: 'バス（データバス）',
+    reading: 'Data Bus',
+    category: 'アーキテクチャ基礎',
+    unlockReachedStage: 'stage_09',
+    unlockLabel: 'STAGE 09 到達',
     summary:
-      '4本の信号線を1つの「束（バス）」にまとめて、4桁の数値AとBをSEL信号ひとつで丸ごと一気に切り替えるモジュール。レジスタやCPU内部の大動脈になります。',
-    analogy: '1車線の小道ではなく、4車線の高速道路をまるごと切り替えてデータを一斉に運ぶ仕組み。',
-    related: ['mux', 'bit', 'register', 'cpu'],
+      '複数本の信号線を1つの「束」にまとめて、大きな数字やデータを一気に運ぶコンピュータ内部の幹線道路。語源はたくさんの乗客をまとめて運ぶ「乗合バス（Omnibus）」です。',
+    analogy: '1車線の細い小道ではなく、4車線・64車線でデータを一斉に運ぶ高速道路。',
+    related: ['bit', 'microprocessor', 'mux_4bit'],
   },
   bit: {
     id: 'bit',
     title: 'ビット（bit）とビット幅',
     reading: 'Binary Digit (bit)',
     category: 'コンピュータ基礎',
-    anim: 'data_bus_4bit',
+    unlockReachedStage: 'stage_09',
+    unlockLabel: 'STAGE 09 到達',
     summary:
-      '0か1の「たった1桁」の情報単位。4ビットなら 0〜15（16通り）、8ビットなら 0〜255（256通り）、64ビットなら約1844京通りもの数字を1回でまとめて計算できます！',
+      '0か1の「たった1桁」の情報単位。4ビットなら 0〜15（16通り）、8ビットなら 0〜255（256通り）、64ビットなら約1844京通りもの数字を1回でまとめて扱えます！',
     analogy: '1個のランプで表せるON/OFFが「1ビット」。ランプの数が増えるほど表現できる数字が倍々で増える！',
-    related: ['binary', 'bus', 'gigabyte'],
+    related: ['binary', 'bus', 'microprocessor', 'gigabyte'],
   },
   microprocessor: {
     id: 'microprocessor',
     title: 'マイクロプロセッサ',
     reading: 'Microprocessor (1971)',
     category: '歴史・ハードウェア',
+    unlockReachedStage: 'stage_09',
+    unlockLabel: 'STAGE 09 到達',
     summary:
       '部屋いっぱいあった巨大なコンピュータの頭脳（CPU）を、たった1枚の小さなシリコンチップに収めた革命的部品。1971年の世界初マイクロプロセッサ「Intel 4004」も、このゲームと同じ4ビット幅でした！',
     analogy: '冷蔵庫サイズの計算機を、爪の先ほどの1枚のチップにギュッと縮めた技術革命。',
     related: ['cpu', 'bit', 'ic_chip'],
+  },
+  mux_4bit: {
+    id: 'mux_4bit',
+    title: '4ビット切替バス（MUX_4B）',
+    reading: '4-Bit Data Bus Multiplexer',
+    category: 'ACT III · 経路制御モジュール',
+    act: 3,
+    stageId: 'stage_09',
+    unlockClearedStage: 'stage_09',
+    unlockLabel: 'STAGE 09 クリア',
+    chipId: 'MUX_4BIT',
+    pins: { inputs: ['A0..3', 'B0..3', 'SEL'], outputs: ['Y0..3'] },
+    anim: 'data_bus_4bit',
+    summary:
+      'MUXを4個並べて共通のSELで束ね、4桁の数値AとBを丸ごと一気に切り替えるバスモジュール。レジスタやCPU内部の大動脈になります。',
+    analogy: '4車線の高速道路の本線とバイパスを、レバー1本で一斉に切り替える巨大ジャンクション。',
+    related: ['mux', 'bus', 'bit', 'register'],
   },
   decoder: {
     id: 'decoder',
@@ -367,20 +484,27 @@ export const GLOSSARY_TERMS = {
     category: 'ACT III · 経路制御モジュール',
     act: 3,
     stageId: 'stage_10',
+    unlockClearedStage: 'stage_10',
+    unlockLabel: 'STAGE 10 クリア',
     chipId: 'DEC_2TO4',
     pins: { inputs: ['A0', 'A1'], outputs: ['Y0', 'Y1', 'Y2', 'Y3'] },
     anim: 'decoder_2to4',
     summary:
-      '2ビットの番号（00=0番, 01=1番, 10=2番, 11=3番）を読み解いて、4本の出力線のうち対応する1本だけをONにする翻訳モジュール。メモリの番地指定やCPUの命令解読に使われます。',
+      '2ビットの番号（00=0番, 01=1番, 10=2番, 11=3番）を読み解いて、4本の出力線のうち対応する1本だけをONにする翻訳モジュール。NOT2個とAND4個で全4パターンを判定します。',
     analogy: '番号札「2番」を見せると、4つの部屋のうち2号室の扉だけを自動でパッと開けてくれる案内係。',
-    related: ['binary', 'not_gate', 'and_gate', 'cpu'],
+    related: ['binary', 'not_gate', 'and_gate'],
   },
+
+  // =========================================================================
+  // ACT IV — MEMORY & CLOCK
+  // =========================================================================
   feedback: {
     id: 'feedback',
     title: 'フィードバック（輪っか配線）',
     reading: 'Feedback Loop',
     category: '記憶・順序回路',
-    anim: 'sr_latch_loop',
+    unlockReachedStage: 'stage_11',
+    unlockLabel: 'STAGE 11 到達',
     summary:
       '回路の「出口」の線をぐるっと自分の「入口」へ戻す配線。これによって電気信号が輪の中を回り続け、入力スイッチから手を離しても過去の情報を覚え続けられるようになります。',
     analogy: '一度ささやいた言葉を2人でずっと言い合い続けることで、忘れないように記憶を保つ輪っか。',
@@ -393,13 +517,15 @@ export const GLOSSARY_TERMS = {
     category: 'ACT IV · 記憶モジュール',
     act: 4,
     stageId: 'stage_11',
+    unlockClearedStage: 'stage_11',
+    unlockLabel: 'STAGE 11 クリア',
     chipId: 'SR_LATCH',
     pins: { inputs: ['S (セット)', 'R (リセット)'], outputs: ['Q', 'QN'] },
     anim: 'sr_latch_loop',
     summary:
-      '2個のNANDをたすき掛けに繋いだ世界最小の記憶モジュール。S=1で「1」を記憶してS=0に戻しても光り続け、R=1で「0」にリセットされます。1918年に発見された全RAM・メモリの祖先です。',
+      '2個のNANDの出力をお互いの入口へたすき掛けに戻した世界最小の記憶モジュール。S=1で「1」を記憶してS=0に戻しても保持し続け、R=1で「0」にリセットされます。1918年に発見された全メモリの祖先です。',
     analogy: '一度倒すと反対から押し戻すまでそのまま傾き続ける「シーソー」のような記憶スイッチ。',
-    related: ['feedback', 'd_latch', 'nand'],
+    related: ['feedback', 'nand', 'd_latch'],
   },
   d_latch: {
     id: 'd_latch',
@@ -408,19 +534,23 @@ export const GLOSSARY_TERMS = {
     category: 'ACT IV · 記憶モジュール',
     act: 4,
     stageId: 'stage_12',
+    unlockClearedStage: 'stage_12',
+    unlockLabel: 'STAGE 12 クリア',
     chipId: 'D_LATCH',
     pins: { inputs: ['D (データ)', 'WE (書込許可)'], outputs: ['Q'] },
     anim: 'd_latch_vault',
     summary:
-      'SRラッチの前にANDの門番をつけた安全な1ビット記憶モジュール。WE=1のときだけデータDを保存し、WE=0の間は外の配線がノイズで揺れても中身Qを絶対に守ります。',
+      'SRラッチの前にANDの門番2個とNOTをつけた安全な1ビット記憶モジュール。WE=1のときだけデータDを保存し、WE=0の間は外の配線がノイズで揺れても中身Qを絶対に守ります。',
     analogy: '「保存ボタン(WE)」を押している間だけ中身を書き換えられる、カギ付きの1マス金庫。',
-    related: ['sr_latch', 'gigabyte', 'd_ff'],
+    related: ['sr_latch', 'and_gate', 'gigabyte', 'd_ff'],
   },
   gigabyte: {
     id: 'gigabyte',
     title: '1ギガバイト（1GB）',
     reading: '1 Gigabyte ≈ 8.5 Billion Bits',
     category: 'コンピュータ基礎',
+    unlockClearedStage: 'stage_12',
+    unlockLabel: 'STAGE 12 クリア',
     summary:
       '8ビット＝1バイトの約10億倍（正確には約85億9千万ビット！）。かつてのスマホやPCのメモリは、あなたが作った「1ビット金庫（Dラッチ）」が何十億個も整然と並んだ巨大なロッカー室です。',
     analogy: '1マスに0か1しか入らない小さなコインロッカーを、地球の人口と同じ数だけズラッと並べた倉庫。',
@@ -431,7 +561,8 @@ export const GLOSSARY_TERMS = {
     title: 'クロック（心臓の鼓動）',
     reading: 'System Clock Signal (CLK)',
     category: '同期・タイミング',
-    anim: 'dff_airlock',
+    unlockReachedStage: 'stage_13',
+    unlockLabel: 'STAGE 13 到達',
     summary:
       '0と1を一定のリズムで「ドクン、ドクン」と繰り返し送り続ける基準信号。回路じゅうの計算と記憶がバラバラに暴走しないよう、全員の歩調をピタッと揃えるオーケストラの指揮者です。',
     analogy: '運動会の行進で全員の足並みを揃える「イチ、ニ、イチ、ニ」のメトロノーム。',
@@ -444,19 +575,23 @@ export const GLOSSARY_TERMS = {
     category: 'ACT IV · 記憶モジュール',
     act: 4,
     stageId: 'stage_13',
+    unlockClearedStage: 'stage_13',
+    unlockLabel: 'STAGE 13 クリア',
     chipId: 'D_FF',
     pins: { inputs: ['D', 'CLK'], outputs: ['Q'] },
     anim: 'dff_airlock',
     summary:
       'Dラッチを2つ直列につなぎ、前室（CLK=0で開）と後室（CLK=1で開）の扉を交互に開閉する二重エアロック構造。クロックが0→1へ立ち上がる「その一瞬」だけ値を取り込み、信号の筒抜け暴走を防ぎます。',
     analogy: '外扉を閉めてから内扉を開く「潜水艦の二重エアロック」で、1拍につき1回だけデータを通す仕組み。',
-    related: ['clock', 'd_latch', 'register', 'ghz'],
+    related: ['clock', 'd_latch', 'ghz', 'register'],
   },
   ghz: {
     id: 'ghz',
     title: 'GHz（ギガヘルツ）',
     reading: 'Gigahertz (Billion Cycles / Sec)',
     category: 'コンピュータ基礎',
+    unlockClearedStage: 'stage_13',
+    unlockLabel: 'STAGE 13 クリア',
     summary:
       '1秒間にクロックの鼓動を何回打てるかを表す速さの単位。「1GHz」は1秒間に10億回、「3GHz」ならなんと1秒間に30億回も「計算して記憶を更新する」ステップを繰り返しています！',
     analogy: '人間の心臓は1秒に約1回（1Hz）。戦前のスマホCPUはその30億倍の超高速で脈打っていた！',
@@ -469,22 +604,29 @@ export const GLOSSARY_TERMS = {
     category: 'ACT IV · 記憶モジュール',
     act: 4,
     stageId: 'stage_14',
+    unlockClearedStage: 'stage_14',
+    unlockLabel: 'STAGE 14 クリア',
     chipId: 'REG_4BIT',
     pins: { inputs: ['D0..3', 'LOAD', 'CLK'], outputs: ['Q0..3'] },
     anim: 'reg_4bit',
     summary:
       'MUX_4BとD_FF×4を組み合わせ、4桁の数字（0〜15）を丸ごと保存・保持できるCPU直結の作業机モジュール。LOAD=1ならクロックで新データDを保存し、LOAD=0なら今の値Qを循環させて保持し続けます。',
     analogy: '遠くの倉庫（メインメモリ）まで取りに行かずに済む、CPUの手元にある超高速の作業机。',
-    related: ['d_ff', 'bus', 'program_counter', 'cpu'],
+    related: ['d_ff', 'mux_4bit', 'program_counter', 'ark4_cpu'],
   },
+
+  // =========================================================================
+  // ACT V — ALU, PROGRAM COUNTER & ARK-4 CPU CORE
+  // =========================================================================
   twos_comp: {
     id: 'twos_comp',
-    title: '2の補数（引き算を足し算にする魔法）',
+    title: '2の補数（引き算の数学原理）',
     reading: "Two's Complement",
     category: '数学・計算',
-    anim: 'alu_twos_comp',
+    unlockClearedStage: 'stage_15',
+    unlockLabel: 'STAGE 15 クリア',
     summary:
-      '2進数の0と1を全部ひっくり返して「+1」すると、足し算器にそのまま入れるだけで「引き算」になる美しい数学トリック。4ビットなら「-2」は「+14」と同じ場所（16で1周する時計の針）を指します。',
+      '2進数の0と1を全部ひっくり返して「+1」すると、足し算器にそのまま入れるだけで「引き算」になる美しい数学原理。4ビット（16で1周する時計）では「-2」は「+14 (1110)」と同じ場所を指します。',
     analogy: '12時間時計で「2時間戻す（-2）」ことと「10時間進める（+10）」ことが同じ針の位置になる仕組み！',
     related: ['alu', 'binary', 'neumann'],
   },
@@ -495,13 +637,27 @@ export const GLOSSARY_TERMS = {
     category: 'ACT V · CPU中枢モジュール',
     act: 5,
     stageId: 'stage_15',
+    unlockClearedStage: 'stage_15',
+    unlockLabel: 'STAGE 15 クリア',
     chipId: 'ALU_4BIT',
     pins: { inputs: ['A0..3', 'B0..3', 'SUB'], outputs: ['Y0..3', 'COUT'] },
     anim: 'alu_twos_comp',
     summary:
       'SUB=0なら足し算（A+B）、SUB=1なら2の補数で引き算（A−B）をこなすCPUの演算心臓モジュール。XOR×4でBを条件反転し、ADD_4BのCINにSUBを入れるだけで実現します。',
     analogy: 'CPUの中で足し算も引き算も1台でこなす「万能そろばん職人」。',
-    related: ['twos_comp', 'ripple_adder', 'xor_gate', 'cpu'],
+    related: ['twos_comp', 'ripple_adder', 'xor_gate', 'neumann', 'ark4_cpu'],
+  },
+  neumann: {
+    id: 'neumann',
+    title: 'ジョン・フォン・ノイマン',
+    reading: 'John von Neumann (1903–1957)',
+    category: '歴史・人物',
+    unlockClearedStage: 'stage_15',
+    unlockLabel: 'STAGE 15 クリア',
+    summary:
+      '1945年に「プログラム（命令）とデータを同じメモリに置いてCPUが順に実行する」という現代コンピュータの基本設計（ノイマン型アーキテクチャ）をまとめた20世紀屈指の天才数学者。',
+    analogy: '今のほぼすべてのPC・スマホの設計図の原点を作った「コンピュータの設計の父」。',
+    related: ['alu', 'twos_comp', 'ark4_cpu'],
   },
   program_counter: {
     id: 'program_counter',
@@ -510,74 +666,38 @@ export const GLOSSARY_TERMS = {
     category: 'ACT V · CPU中枢モジュール',
     act: 5,
     stageId: 'stage_16',
+    unlockClearedStage: 'stage_16',
+    unlockLabel: 'STAGE 16 クリア',
     chipId: 'PC_4BIT',
     pins: { inputs: ['J0..3', 'JMP', 'CLK'], outputs: ['Q0..3'] },
     anim: 'pc_loop',
     summary:
       '「今は何行目の命令を実行しているか」を記憶し、クロックごとにADD_4Bで自動+1して次の番地へ進み、JMP=1ならMUX_4Bで指定番地JへジャンプするCPUの司令塔モジュールです。',
     analogy: '楽譜を1小節ずつ指で追いかけ、リピート記号が来たら指定ページへ飛び移る指揮者の指。',
-    related: ['register', 'ripple_adder', 'bus', 'cpu'],
+    related: ['register', 'ripple_adder', 'mux_4bit', 'ark4_cpu'],
   },
-  cpu: {
-    id: 'cpu',
-    title: 'ARK-4 CPUコア（中央処理装置）',
-    reading: 'Central Processing Unit (ARK-4)',
+  ark4_cpu: {
+    id: 'ark4_cpu',
+    title: 'ARK-4 CPUコア（中枢回路）',
+    reading: 'ARK-4 Accumulator CPU Core',
     category: 'ACT V · CPU中枢モジュール',
     act: 5,
     stageId: 'stage_17',
+    unlockClearedStage: 'stage_17',
+    unlockLabel: 'STAGE 17 クリア',
     chipId: 'ARK4_CORE',
     pins: { inputs: ['IMM0..3', 'OP', 'SET', 'WE', 'CLK'], outputs: ['ACC0..3'] },
     anim: 'ark4_cpu',
     summary:
-      'ALU_4B（計算する手）・MUX_4B（道を選ぶ目）・REG_4B（覚える頭）をひとつのループに結んだコンピュータの頭脳本体！ LDI（代入）・ADD（加算）・SUB（減算）・NOP（保持）のプログラムを連続実行します。',
+      'ALU_4B（計算する手）・MUX_4B（道を選ぶ目）・REG_4B（覚える頭）をひとつのループに結んだアーク7の新中枢コア！ LDI（代入）・ADD（加算）・SUB（減算）・NOP（保持）のプログラムを連続実行します。',
     analogy: 'たった1粒の砂と1個のNANDから組み上げた、命令を読んで自律的に考え動く「機械の頭脳」。',
-    related: ['alu', 'bus', 'register', 'program_counter', 'neumann'],
-  },
-  apollo11: {
-    id: 'apollo11',
-    title: 'アポロ11号（誘導コンピュータ AGC）',
-    reading: 'Apollo Guidance Computer (1969)',
-    category: '歴史・人物',
-    summary:
-      '1969年に人類を月面へ着陸させた宇宙船のコンピュータ。実はNANDの双子である「NORゲート」たった1種類を約5,600個組み合わせただけで、地球から38万kmの軌道を計算し切りました！',
-    analogy: 'シンプルな基本パーツだけでも、正しく積み上げれば人類を月まで運べることの証明。',
-    related: ['nand'],
-  },
-  shannon: {
-    id: 'shannon',
-    title: 'クロード・シャノン',
-    reading: 'Claude Shannon (1916–2001)',
-    category: '歴史・人物',
-    summary:
-      '1937年、弱冠21歳の修士論文で「論理の数学（ブール代数）と電気スイッチ回路は完全に同じものだ」と証明した情報時代の父。この論文がデジタルコンピュータの扉を開きました。',
-    analogy: '「電気のON/OFFで人間の論理思考をそのまま計算できる！」と最初に見抜いた天才。',
-    related: ['and_gate', 'relay'],
-  },
-  zuse: {
-    id: 'zuse',
-    title: 'コンラート・ツーゼ',
-    reading: 'Konrad Zuse (1910–1995)',
-    category: '歴史・人物',
-    summary:
-      '1941年、ベルリンの自宅リビングでリレー部品を組み立て、世界初のプログラム制御・2進数計算機「Z3」を完成させたドイツの技術者。',
-    analogy: '自宅の作業台から「2進数で動く自動計算機」を現実にした先駆者。',
-    related: ['ripple_adder', 'binary', 'relay'],
-  },
-  neumann: {
-    id: 'neumann',
-    title: 'ジョン・フォン・ノイマン',
-    reading: 'John von Neumann (1903–1957)',
-    category: '歴史・人物',
-    summary:
-      '1945年に「プログラム（命令）とデータを同じメモリに置いてCPUが順に実行する」という現代コンピュータの基本設計（ノイマン型アーキテクチャ）をまとめた20世紀屈指の天才数学者。',
-    analogy: '今のほぼすべてのPC・スマホの設計図の原点を作った「コンピュータの設計の父」。',
-    related: ['cpu', 'twos_comp', 'program_counter'],
+    related: ['alu', 'mux_4bit', 'register', 'program_counter', 'cpu'],
   },
 };
 
 /**
- * Ordered list of term IDs featured in the '⚡ モジュール図鑑（動的図解付き）' tab
- * inside the Encyclopedia modal, grouped naturally by Act.
+ * Ordered list of module IDs featured in the '⚡ モジュール図鑑（動的図解付き）' tab.
+ * Every module here is unlocked ONLY when its acquisition stage is cleared!
  */
 export const MODULE_ENCYCLOPEDIA_IDS = [
   // ACT 0: Physical & Silicon Foundation
@@ -596,7 +716,7 @@ export const MODULE_ENCYCLOPEDIA_IDS = [
   'ripple_adder',
   // ACT III: Routing & Bus
   'mux',
-  'bus',
+  'mux_4bit',
   'decoder',
   // ACT IV: Memory & Clock
   'sr_latch',
@@ -606,12 +726,64 @@ export const MODULE_ENCYCLOPEDIA_IDS = [
   // ACT V: ALU & CPU Core
   'alu',
   'program_counter',
-  'cpu',
+  'ark4_cpu',
 ];
 
 /**
+ * Checks whether a glossary explanation is unlocked at the player's current progression.
+ * - If `term.unlockClearedStage` is set: requires that stage to be in `save.clearedStages`.
+ * - If `term.unlockReachedStage` is set: requires that stage to be unlocked or cleared.
+ * - If no `save` is provided (e.g. unit test without save filter): returns true.
+ */
+export function isGlossaryTermUnlocked(termId, save = null) {
+  const term = GLOSSARY_TERMS[termId];
+  if (!term) return false;
+  if (!save) return true;
+  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
+  if (term.unlockClearedStage) {
+    return cleared.includes(term.unlockClearedStage);
+  }
+  if (term.unlockReachedStage) {
+    return cleared.includes(term.unlockReachedStage) || isStageUnlocked(save, term.unlockReachedStage);
+  }
+  return true;
+}
+
+/**
+ * Checks whether a term's live circuit diagram (`anim`) is unlocked.
+ * For example, 'nand' is readable as a word in Prologue, but its physical switch schematic
+ * (`nand_series`) unlocks only after clearing Stage 00-C (`stage_00`).
+ */
+export function isGlossaryDiagramUnlocked(termId, save = null) {
+  const term = GLOSSARY_TERMS[termId];
+  if (!term || !term.anim) return false;
+  if (!save) return true;
+  if (!isGlossaryTermUnlocked(termId, save)) return false;
+  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
+  if (term.unlockClearedStageForDiagram) {
+    return cleared.includes(term.unlockClearedStageForDiagram);
+  }
+  return true;
+}
+
+/**
+ * Checks whether a module card in the '⚡ モジュール図鑑' tab is unlocked.
+ * In the Module Encyclopedia, every module requires its stage to be CLEARED!
+ */
+export function isModuleEncyclopediaUnlocked(termId, save = null) {
+  const term = GLOSSARY_TERMS[termId];
+  if (!term) return false;
+  if (!save) return true;
+  const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
+  const reqStage = term.unlockClearedStage || term.unlockClearedStageForDiagram || term.stageId;
+  if (reqStage) {
+    return cleared.includes(reqStage);
+  }
+  return isGlossaryTermUnlocked(termId, save);
+}
+
+/**
  * Alias -> termId mapping table.
- * Sorted longest-first automatically so compound terms match cleanly before substrings.
  */
 const TERM_ALIASES = [
   ['電磁パルス（EMP）', 'emp'],
@@ -665,10 +837,11 @@ const TERM_ALIASES = [
   ['リップルキャリー加算器', 'ripple_adder'],
   ['4ビット加算器', 'ripple_adder'],
   ['ADD_4B', 'ripple_adder'],
-  ['4ビット・マルチプレクサ', 'bus'],
+  ['4ビット・マルチプレクサ', 'mux_4bit'],
+  ['4ビット切替バス', 'mux_4bit'],
+  ['MUX_4B', 'mux_4bit'],
   ['マルチプレクサ（MUX）', 'mux'],
   ['マルチプレクサ', 'mux'],
-  ['MUX_4B', 'bus'],
   ['MUX', 'mux'],
   ['バス（Bus）', 'bus'],
   ['データバス', 'bus'],
@@ -705,7 +878,7 @@ const TERM_ALIASES = [
   ['プログラムカウンタ（PC）', 'program_counter'],
   ['プログラムカウンタ', 'program_counter'],
   ['PC_4B', 'program_counter'],
-  ['ARK-4 CPUコア', 'cpu'],
+  ['ARK-4 CPUコア', 'ark4_cpu'],
   ['CPU', 'cpu'],
   ['アポロ11号', 'apollo11'],
   ['クロード・シャノン', 'shannon'],
@@ -731,11 +904,15 @@ const COMBINED_PATTERN = new RegExp(
 
 /**
  * Splits a dialogue string into plain-text and tappable-glossary tokens.
+ * When `save` is provided, unacquired terms (`!isGlossaryTermUnlocked(termId, save)`)
+ * are NOT turned into links so unacquired explanations/solutions stay locked!
+ *
  * @param {string} text
- * @param {string|null} excludeTermId Optional termId to exclude (e.g. when rendering inside that term's own card)
+ * @param {string|null} excludeTermId
+ * @param {object|null} save
  * @returns {Array<{ type: 'text'|'term', text: string, termId?: string }>}
  */
-export function tokenizeGlossaryText(text, excludeTermId = null) {
+export function tokenizeGlossaryText(text, excludeTermId = null, save = null) {
   const str = String(text ?? '');
   if (!str) return [];
 
@@ -753,6 +930,7 @@ export function tokenizeGlossaryText(text, excludeTermId = null) {
     const termId = ALIAS_MAP.get(matchedText);
 
     if (!termId || seenTermIds.has(termId)) continue;
+    if (save && !isGlossaryTermUnlocked(termId, save)) continue;
 
     // ASCII boundary guard for aliases starting/ending with ASCII alphanumerics
     const startsAscii = isAsciiWord(matchedText[0]);

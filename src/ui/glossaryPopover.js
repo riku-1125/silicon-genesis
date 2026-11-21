@@ -1,24 +1,33 @@
 /**
- * SILICON GENESIS — Tappable Story Glossary Popover (with Live Module Diagrams & Back History)
+ * SILICON GENESIS — Progression-Locked Story Glossary Popover & Rich-Text Typewriter
  *
- * Features:
- *   - Stable DOM-node typewriter (`mountRichText` / `updateRichTextProgress`) so tapping
- *     a highlighted term never drops clicks mid-typing and never advances the story.
- *   - Live interactive animated diagram (`StoryDiagramPlayer`) embedded directly inside
- *     the popover whenever the term represents a module, gate, or physical circuit!
- *   - History stack (`◀ ひとつ戻る`) when jumping across related terms or inline term links.
+ * Enforces strict spoiler/answer protection:
+ *   - Unacquired terms (modules/concepts whose stage hasn't been cleared/reached yet)
+ *     are NOT linked in dialogue and appear as locked badges (`🔒 未取得（STAGE XX クリアで解放）`)
+ *     in related-term lists so players never get puzzle answers spoiled!
+ *   - Supports embedded live animated module diagrams (`StoryDiagramPlayer`) once unlocked,
+ *     and a browsing history stack (`◀ ひとつ戻る`) across related terms.
  */
 
-import { getGlossaryTerm, tokenizeGlossaryText, hasGlossaryTerms } from '../data/glossary.js?v=18';
-import { sound } from '../audio/sound.js?v=18';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=18';
+import {
+  getGlossaryTerm,
+  tokenizeGlossaryText,
+  hasGlossaryTerms,
+  isGlossaryTermUnlocked,
+  isGlossaryDiagramUnlocked,
+} from '../data/glossary.js?v=19';
+import { sound } from '../audio/sound.js?v=19';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=19';
+
+let _saveProvider = null;
 
 /**
  * Populates containerEl with one stable DOM node per token (all initially empty for typing,
- * or full when instant=true). Returns node metadata for zero-thrash typewriter updates.
+ * or full when instant=true). Only terms unlocked in the current save become tappable buttons.
  */
-export function mountRichText(containerEl, text, { instant = false, excludeTermId = null } = {}) {
-  const tokens = tokenizeGlossaryText(text, excludeTermId);
+export function mountRichText(containerEl, text, { instant = false, excludeTermId = null, save = null } = {}) {
+  const activeSave = save || (_saveProvider ? _saveProvider() : null);
+  const tokens = tokenizeGlossaryText(text, excludeTermId, activeSave);
   containerEl.textContent = '';
 
   const nodes = tokens.map((tok) => {
@@ -79,6 +88,7 @@ class GlossaryPopoverController {
     this.readingEl = null;
     this.pinsWrap = null;
     this.diagramWrap = null;
+    this.diagramHint = null;
     this.diagramCanvas = null;
     this.summaryEl = null;
     this.analogyWrap = null;
@@ -92,6 +102,14 @@ class GlossaryPopoverController {
     this.history = [];
     this.diagramPlayer = new StoryDiagramPlayer();
     this._bound = false;
+  }
+
+  setSaveProvider(fn) {
+    _saveProvider = fn;
+  }
+
+  getSave() {
+    return _saveProvider ? _saveProvider() : null;
   }
 
   _ensureBound() {
@@ -109,6 +127,7 @@ class GlossaryPopoverController {
     this.readingEl = root.querySelector('#gp-reading');
     this.pinsWrap = root.querySelector('#gp-pins-wrap');
     this.diagramWrap = root.querySelector('#gp-diagram-wrap');
+    this.diagramHint = root.querySelector('.gp-diagram-hint');
     this.diagramCanvas = root.querySelector('#gp-live-canvas');
     this.summaryEl = root.querySelector('#gp-summary');
     this.analogyWrap = root.querySelector('#gp-analogy-wrap');
@@ -133,7 +152,6 @@ class GlossaryPopoverController {
     this.backTopBtn?.addEventListener('click', backHandler);
     this.backBottomBtn?.addEventListener('click', backHandler);
 
-    // Allow tapping inline highlighted terms inside the popover's own summary text!
     this.summaryEl?.addEventListener('click', (e) => {
       const btn = e.target.closest?.('.term-link[data-term-id]');
       if (!btn) return;
@@ -167,11 +185,15 @@ class GlossaryPopoverController {
     return Boolean(this.root && !this.root.classList.contains('hidden'));
   }
 
-  /** Opens a term fresh (resets history stack unless pushHistory=true). */
   open(termId, { pushHistory = false } = {}) {
     if (!this._ensureBound()) return;
     const term = getGlossaryTerm(termId);
     if (!term) return;
+
+    const save = this.getSave();
+    if (save && !isGlossaryTermUnlocked(termId, save)) {
+      return;
+    }
 
     if (pushHistory && this.currentTermId && this.currentTermId !== termId) {
       this.history.push(this.currentTermId);
@@ -184,13 +206,13 @@ class GlossaryPopoverController {
     this.root.classList.remove('hidden');
   }
 
-  /** Navigates to another term from inside the popover, pushing current onto history. */
   navigateTo(termId) {
     if (!termId || termId === this.currentTermId) return;
+    const save = this.getSave();
+    if (save && !isGlossaryTermUnlocked(termId, save)) return;
     this.open(termId, { pushHistory: true });
   }
 
-  /** Steps back to the previous term in the browsing history stack. */
   goBack() {
     if (this.history.length === 0) return;
     sound.playSwitch(false);
@@ -203,15 +225,17 @@ class GlossaryPopoverController {
 
   _renderTerm(term) {
     this.diagramPlayer.unmount();
+    const save = this.getSave();
+    const diagramUnlocked = isGlossaryDiagramUnlocked(term.id, save);
 
     this.categoryEl.textContent = `📖 用語解説 // ${term.category}`;
     this.titleEl.textContent = term.title;
     this.readingEl.textContent = term.reading || '';
     this.readingEl.classList.toggle('hidden', !term.reading);
 
-    // Optional module input/output pin spec badges
+    // Module input/output pin spec badges (only shown once diagram/module is unlocked)
     if (this.pinsWrap) {
-      if (term.pins) {
+      if (term.pins && diagramUnlocked) {
         const ins = (term.pins.inputs || []).join(', ');
         const outs = (term.pins.outputs || []).join(', ');
         this.pinsWrap.innerHTML = `
@@ -225,22 +249,34 @@ class GlossaryPopoverController {
       }
     }
 
-    // Embedded Live Interactive Diagram for Modules & Circuit Concepts!
+    // Embedded Live Interactive Diagram (ONLY if diagram is unlocked!)
     if (this.diagramWrap && this.diagramCanvas) {
-      if (term.anim) {
+      if (term.anim && diagramUnlocked) {
         this.diagramWrap.classList.remove('hidden');
+        this.diagramCanvas.classList.remove('hidden');
+        if (this.diagramHint) {
+          this.diagramHint.textContent = '⚡ 動くモジュール図解（タップで状態切替）';
+        }
         requestAnimationFrame(() => {
           if (this.isOpen() && this.currentTermId === term.id) {
             this.diagramPlayer.mount(this.diagramCanvas, term.anim);
           }
         });
+      } else if (term.anim && !diagramUnlocked) {
+        // Show non-spoiler locked diagram banner (e.g. NAND in Prologue before 00-C is cleared)
+        this.diagramWrap.classList.remove('hidden');
+        this.diagramCanvas.classList.add('hidden');
+        if (this.diagramHint) {
+          this.diagramHint.textContent = `🔒 内部構造の動的図解は ${term.unlockLabel || 'ステージクリア'} で解放されます`;
+        }
       } else {
         this.diagramWrap.classList.add('hidden');
       }
     }
 
-    // Summary with inline tappable terms (excluding current term)
-    mountRichText(this.summaryEl, term.summary, { instant: true, excludeTermId: term.id });
+    // Use preClearSummary if diagram/stage not cleared yet (e.g. NAND in Prologue)
+    const summaryText = !diagramUnlocked && term.preClearSummary ? term.preClearSummary : term.summary;
+    mountRichText(this.summaryEl, summaryText, { instant: true, excludeTermId: term.id, save });
 
     if (term.analogy) {
       this.analogyEl.textContent = term.analogy;
@@ -249,7 +285,7 @@ class GlossaryPopoverController {
       this.analogyWrap.classList.add('hidden');
     }
 
-    // Related tappable term pills
+    // Related term pills: unlocked terms are clickable, unacquired terms are locked (`🔒 未取得`)!
     this.relatedList.textContent = '';
     const relatedEntries = (term.related || [])
       .map((id) => getGlossaryTerm(id))
@@ -257,16 +293,25 @@ class GlossaryPopoverController {
 
     if (relatedEntries.length > 0) {
       for (const rel of relatedEntries) {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'gp-related-chip';
-        chip.textContent = `${rel.anim ? '⚡ ' : ''}${rel.title.split('（')[0]}`;
-        chip.addEventListener('click', (e) => {
-          e.stopPropagation();
-          sound.playSwitch(true);
-          this.navigateTo(rel.id);
-        });
-        this.relatedList.appendChild(chip);
+        const relUnlocked = isGlossaryTermUnlocked(rel.id, save);
+        if (relUnlocked) {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'gp-related-chip';
+          const hasDiag = isGlossaryDiagramUnlocked(rel.id, save);
+          chip.textContent = `${hasDiag ? '⚡ ' : ''}${rel.title.split('（')[0]}`;
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playSwitch(true);
+            this.navigateTo(rel.id);
+          });
+          this.relatedList.appendChild(chip);
+        } else {
+          const lockedBadge = document.createElement('span');
+          lockedBadge.className = 'gp-related-chip locked';
+          lockedBadge.textContent = `🔒 未取得（${rel.unlockLabel || 'クリアで解放'}）`;
+          this.relatedList.appendChild(lockedBadge);
+        }
       }
       this.relatedWrap.classList.remove('hidden');
     } else {
@@ -280,7 +325,7 @@ class GlossaryPopoverController {
 
     if (this.backTopBtn) {
       this.backTopBtn.classList.toggle('hidden', !hasHistory);
-      if (hasHistory) this.backTopBtn.textContent = `◀ 戻る`;
+      if (hasHistory) this.backTopBtn.textContent = '◀ 戻る';
     }
     if (this.backBottomBtn) {
       this.backBottomBtn.classList.toggle('hidden', !hasHistory);

@@ -2511,6 +2511,13 @@ button:disabled {
 .gp-related-chip:active {
   background: rgba(111, 214, 255, 0.28);
 }
+.gp-related-chip.locked {
+  color: #7c90a5;
+  background: rgba(18, 27, 36, 0.78);
+  border: 1px dashed rgba(130, 155, 180, 0.35);
+  cursor: default;
+  user-select: none;
+}
 .gp-footer {
   margin-top: 16px;
   display: flex;

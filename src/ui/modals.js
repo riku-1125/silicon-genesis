@@ -4,18 +4,20 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=18';
-import { CODEX_ENTRIES } from '../data/codex.js?v=18';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=19';
+import { CODEX_ENTRIES } from '../data/codex.js?v=19';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   getGlossaryTerm,
-} from '../data/glossary.js?v=18';
+  isGlossaryTermUnlocked,
+  isModuleEncyclopediaUnlocked,
+} from '../data/glossary.js?v=19';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=18';
-import { StoryDiagramGroup } from './storyDiagram.js?v=18';
-import { glossaryPopover } from './glossaryPopover.js?v=18';
+import { sound } from '../audio/sound.js?v=19';
+import { StoryDiagramGroup } from './storyDiagram.js?v=19';
+import { glossaryPopover } from './glossaryPopover.js?v=19';
 
 function esc(str) {
   return String(str ?? '')
@@ -527,23 +529,18 @@ export class ModalManager {
     const unlockedHistoryCount = allHistoryEntries.filter((e) => unlockedSet.has(e.id)).length;
 
     const moduleEntries = MODULE_ENCYCLOPEDIA_IDS.map((id) => getGlossaryTerm(id)).filter(Boolean);
-    const isModuleUnlocked = (term) => {
-      if (!term.stageId) return true;
-      if (!isSaveObj) return true;
-      return isStageUnlocked(save, term.stageId) || clearedSet.has(term.stageId);
-    };
+    const isModuleUnlocked = (term) => isModuleEncyclopediaUnlocked(term.id, isSaveObj ? save : null);
     const unlockedModuleCount = moduleEntries.filter((m) => isModuleUnlocked(m)).length;
 
     let activeTab = initialTab || (highlightIds.length > 0 ? 'history' : 'modules');
-    let previewAll = Boolean(showAllModules);
     const moduleHistory = []; // Stack of module termIds for "◀ ひとつ戻る" navigation
 
     const renderModalContent = (scrollTargetModuleId = null) => {
-      // 1. Build Module Encyclopedia HTML
+      // 1. Build Module Encyclopedia HTML (strictly locked until each stage is cleared!)
       const moduleCardsHtml = moduleEntries
         .map((term) => {
-          const unlocked = previewAll || isModuleUnlocked(term);
-          const cleared = term.stageId ? clearedSet.has(term.stageId) : true;
+          const unlocked = isModuleUnlocked(term);
+          const cleared = term.stageId ? clearedSet.has(term.stageId) : unlocked;
           const forged = term.chipId ? customChips[term.chipId] : null;
 
           if (!unlocked) {
@@ -551,16 +548,16 @@ export class ModalManager {
               <div class="codex-entry locked" data-module-id="${esc(term.id)}">
                 <div class="codex-entry-head">
                   <span class="codex-act">${esc(term.category)}</span>
-                  <span class="codex-title">🔒 未到達モジュール</span>
+                  <span class="codex-title">🔒 未取得モジュール（${esc(term.unlockLabel || 'クリアで解放')}）</span>
                 </div>
-                <p class="dim">物語を進めてステージに到達すると解放されます（上の「予習表示」ボタンで今すぐ見ることもできます）。</p>
+                <p class="dim">対応するステージを自力でクリアすると、モジュールの解説と動的図解が登録されます。</p>
               </div>
             `;
           }
 
           const statusBadge = forged
             ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
-            : cleared && term.stageId
+            : cleared
               ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
               : `<span class="mod-status-badge">📖 動的図解</span>`;
 
@@ -591,13 +588,20 @@ export class ModalManager {
                 <div class="codex-related-row">
                   <span class="codex-related-lbl">関連解説：</span>
                   ${relatedTerms
-                    .map(
-                      (rel) => `
+                    .map((rel) => {
+                      const isMod = MODULE_ENCYCLOPEDIA_IDS.includes(rel.id);
+                      const relOpen = isMod
+                        ? isModuleUnlocked(rel)
+                        : isGlossaryTermUnlocked(rel.id, isSaveObj ? save : null);
+                      if (!relOpen) {
+                        return `<span class="gp-related-chip locked">🔒 未取得（${esc(rel.unlockLabel || 'クリアで解放')}）</span>`;
+                      }
+                      return `
                         <button type="button" class="gp-related-chip" data-jump-term="${esc(rel.id)}" data-from-module="${esc(term.id)}">
-                          ${MODULE_ENCYCLOPEDIA_IDS.includes(rel.id) ? '⚡ ' : '📖 '}${esc(rel.title.split('（')[0])}
+                          ${isMod ? '⚡ ' : '📖 '}${esc(rel.title.split('（')[0])}
                         </button>
-                      `
-                    )
+                      `;
+                    })
                     .join('')}
                 </div>
               `
@@ -676,7 +680,7 @@ export class ModalManager {
       const bodyHtml = `
         <div class="codex-tabs-bar">
           <button type="button" class="codex-tab-btn ${activeTab === 'modules' ? 'active' : ''}" data-codex-tab="modules">
-            ⚡ モジュール図鑑 (${previewAll ? moduleEntries.length : unlockedModuleCount}/${moduleEntries.length})
+            ⚡ モジュール図鑑 (${unlockedModuleCount}/${moduleEntries.length})
           </button>
           <button type="button" class="codex-tab-btn ${activeTab === 'history' ? 'active' : ''}" data-codex-tab="history">
             📜 CS歴史図鑑 (${unlockedHistoryCount}/${allHistoryEntries.length})
@@ -687,14 +691,7 @@ export class ModalManager {
           activeTab === 'modules'
             ? `
               <div class="codex-module-toolbar">
-                <span class="codex-toolbar-note">👆 図解をタップすると入力パターンを切り替えられます</span>
-                ${
-                  unlockedModuleCount < moduleEntries.length
-                    ? `<button type="button" class="codex-preview-toggle" id="btn-codex-preview-all">
-                        ${previewAll ? '🔒 進行状況に合わせる' : '👁 未到達もすべて表示'}
-                      </button>`
-                    : ''
-                }
+                <span class="codex-toolbar-note">👆 解放済みの動的図解はタップで入力パターンを切り替えられます</span>
               </div>
               <div id="codex-back-bar" class="codex-back-bar ${prevModuleTerm ? '' : 'hidden'}">
                 <button type="button" id="btn-codex-history-back" class="btn btn-amber codex-history-back-btn">
@@ -737,13 +734,6 @@ export class ModalManager {
         });
       });
 
-      // Bind preview-all toggle
-      this.bodyEl.querySelector('#btn-codex-preview-all')?.addEventListener('click', () => {
-        sound.playSwitch(true);
-        previewAll = !previewAll;
-        renderModalContent();
-      });
-
       // Bind "◀ ひとつ前の解説へ戻る" button
       this.bodyEl.querySelector('#btn-codex-history-back')?.addEventListener('click', () => {
         if (moduleHistory.length === 0) return;
@@ -752,7 +742,7 @@ export class ModalManager {
         renderModalContent(targetId);
       });
 
-      // Bind related module/term jump chips
+      // Bind related module/term jump chips (only unlocked chips have data-jump-term)
       this.bodyEl.querySelectorAll('[data-jump-term]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const targetId = btn.dataset.jumpTerm;
@@ -761,16 +751,14 @@ export class ModalManager {
           sound.playSwitch(true);
 
           if (MODULE_ENCYCLOPEDIA_IDS.includes(targetId)) {
+            const targetTerm = getGlossaryTerm(targetId);
+            if (!targetTerm || !isModuleUnlocked(targetTerm)) return;
             if (fromId && fromId !== targetId) {
               moduleHistory.push(fromId);
             }
-            const targetTerm = getGlossaryTerm(targetId);
-            if (targetTerm && !isModuleUnlocked(targetTerm)) {
-              previewAll = true;
-            }
             renderModalContent(targetId);
           } else {
-            // General glossary term (e.g., 静電気, アポロ11号, シャノン) -> open popover on top!
+            if (!isGlossaryTermUnlocked(targetId, isSaveObj ? save : null)) return;
             glossaryPopover.open(targetId);
           }
         });
@@ -787,7 +775,6 @@ export class ModalManager {
               this.openCodex(saveOrUnlockedIds, {
                 highlightIds,
                 initialTab: 'modules',
-                showAllModules: previewAll,
                 onNextStage,
                 nextStageLabel,
                 onBackToVictory,
