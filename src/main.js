@@ -17,12 +17,12 @@ import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage } from './engine/evaluator.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
 import { sound } from './audio/sound.js';
-import { SceneCanvas } from './ui/sceneCanvas.js';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js';
-import { PhysicsLabCanvas } from './ui/physicsLab.js';
-import { DialogueController } from './ui/dialogue.js';
-import { ModalManager } from './ui/modals.js';
-import { PrologueOverlay } from './ui/prologue.js';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=15';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=15';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=15';
+import { DialogueController } from './ui/dialogue.js?v=15';
+import { ModalManager } from './ui/modals.js?v=15';
+import { PrologueOverlay } from './ui/prologue.js?v=15';
 
 class SiliconGenesisApp {
   constructor() {

@@ -1,10 +1,10 @@
-const CACHE_NAME = 'silicon-genesis-v14';
+const CACHE_NAME = 'silicon-genesis-v15';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './styles/main.css',
-  './src/main.js',
+  './styles/main.css?v=15',
+  './src/main.js?v=15',
   './src/engine/circuit.js',
   './src/engine/simulator.js',
   './src/engine/evaluator.js',
@@ -14,12 +14,12 @@ const ASSETS = [
   './src/data/stages.js',
   './src/state/storage.js',
   './src/audio/sound.js',
-  './src/ui/prologue.js',
-  './src/ui/physicsLab.js',
-  './src/ui/sceneCanvas.js',
-  './src/ui/workbenchCanvas.js',
-  './src/ui/dialogue.js',
-  './src/ui/modals.js',
+  './src/ui/prologue.js?v=15',
+  './src/ui/physicsLab.js?v=15',
+  './src/ui/sceneCanvas.js?v=15',
+  './src/ui/workbenchCanvas.js?v=15',
+  './src/ui/dialogue.js?v=15',
+  './src/ui/modals.js?v=15',
   './assets/icon.svg',
   './assets/portrait_kagari.jpg',
   './assets/portrait_mina.jpg',
@@ -32,13 +32,25 @@ const ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) =>
+        Promise.all(
+          ASSETS.map((url) =>
+            fetch(new Request(url, { cache: 'reload' }))
+              .then((resp) => (resp.ok ? cache.put(url, resp) : null))
+              .catch(() => null)
+          )
+        )
+      )
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
@@ -67,9 +79,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Code & HTML: network-first with offline cache fallback
+  // Code & HTML: always revalidate with server (bypass GitHub Pages 10-min HTTP disk cache!)
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((resp) => {
         if (resp && resp.status === 200) {
           const clone = resp.clone();
