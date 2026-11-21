@@ -150,10 +150,11 @@ export class SceneCanvas {
       ctx.fillRect(0, y, w, 1);
     }
 
-    // 4. Location tag (top-left)
+    // 4. Location tag (top-left, synced to the current mission location!)
     const sceneMeta = SCENES[sceneKey] || SCENES.shelter_hub;
+    const locLabel = this.stage?.incidentBrief?.where?.split('・')[0] || sceneMeta.label;
     ctx.font = 'bold 10px monospace';
-    const tagText = `● ${sceneMeta.label}`;
+    const tagText = `● ${locLabel}`;
     const tagW = ctx.measureText(tagText).width + 14;
     ctx.fillStyle = 'rgba(13, 18, 24, 0.78)';
     ctx.fillRect(8, 7, tagW, 18);

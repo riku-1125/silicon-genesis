@@ -503,7 +503,7 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['A0', 'A1'], outputs: ['Y0', 'Y1', 'Y2', 'Y3'] },
     anim: 'decoder_2to4',
     summary:
-      '2ビットの番号（00=0番, 01=1番, 10=2番, 11=3番）を読み解いて、4本の出力線のうち対応する1本だけをONにする翻訳モジュール。NOT2個とAND4個で全4パターンを判定します。',
+      '2ビットの番号（0番:A0=0,A1=0 ／ 1番:A0=1,A1=0 ／ 2番:A0=0,A1=1 ／ 3番:A0=1,A1=1）を読み解いて、4本の出力線のうち対応する1本だけをONにする翻訳モジュール。NOT2個とAND4個で全4パターンを判定します。',
     analogy: '番号札「2番」を見せると、4つの部屋のうち2号室の扉だけを自動でパッと開けてくれる案内係。',
     related: ['binary', 'not_gate', 'and_gate'],
   },
@@ -674,7 +674,7 @@ export const GLOSSARY_TERMS = {
     unlockLabel: 'STAGE 15 クリア',
     summary:
       '1945年に「プログラム（命令）とデータを同じメモリに置いてCPUが順に実行する」という現代コンピュータの基本設計（ノイマン型アーキテクチャ）をまとめた20世紀屈指の天才数学者。',
-    analogy: '今のほぼすべてのPC・スマホの設計図の原点を作った「コンピュータの設計の父」。',
+    analogy: '戦前のPC・スマホからAETHER-IX、そしてARK-4まで、あらゆるコンピュータの設計図の原点を作った「コンピュータ設計の父」。',
     related: ['alu', 'twos_comp', 'ark4_cpu'],
   },
   program_counter: {
@@ -838,6 +838,7 @@ const TERM_ALIASES = [
   ['抵抗器', 'resistor'],
   ['抵抗', 'resistor'],
   ['地面アース', 'earth'],
+  ['アース0', 'earth'],
   ['アース', 'earth'],
   ['NANDゲート', 'nand'],
   ['NAND（ナンド）', 'nand'],
@@ -881,6 +882,7 @@ const TERM_ALIASES = [
   ['4ビット', 'bit'],
   ['2ビット', 'bit'],
   ['1ビット・メモリセル', 'd_latch'],
+  ['1ビット金庫', 'd_latch'],
   ['1ビット', 'bit'],
   ['マイクロプロセッサ', 'microprocessor'],
   ['2→4デコーダ', 'decoder'],
@@ -960,6 +962,11 @@ export function tokenizeGlossaryText(text, excludeTermId = null, save = null) {
     const termId = ALIAS_MAP.get(matchedText);
 
     if (!termId || seenTermIds.has(termId)) continue;
+    // Prevent matching 'リレー' (Electromechanical Relay) inside 'バトンリレー' or 'バケツリレー'
+    if (matchedText === 'リレー' && start >= 3) {
+      const prev3 = str.slice(start - 3, start);
+      if (prev3 === 'バトン' || prev3 === 'バケツ') continue;
+    }
     if (save && !isGlossaryTermLinkableInLine(termId, save)) continue;
 
     // ASCII boundary guard for aliases starting/ending with ASCII alphanumerics

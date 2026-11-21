@@ -3,16 +3,16 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=24';
-import { STAGES } from '../data/stages.js?v=24';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=24';
-import { sound } from '../audio/sound.js?v=24';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=25';
+import { STAGES } from '../data/stages.js?v=25';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=25';
+import { sound } from '../audio/sound.js?v=25';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=24';
+} from './glossaryPopover.js?v=25';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue }) {

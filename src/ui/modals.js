@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=24';
-import { CODEX_ENTRIES } from '../data/codex.js?v=24';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=25';
+import { CODEX_ENTRIES } from '../data/codex.js?v=25';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=24';
+} from '../data/glossary.js?v=25';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=24';
-import { StoryDiagramGroup } from './storyDiagram.js?v=24';
-import { glossaryPopover } from './glossaryPopover.js?v=24';
+import { sound } from '../audio/sound.js?v=25';
+import { StoryDiagramGroup } from './storyDiagram.js?v=25';
+import { glossaryPopover } from './glossaryPopover.js?v=25';
 
 function esc(str) {
   return String(str ?? '')

@@ -604,18 +604,20 @@ test('Auto-migrates legacy pre-Stage-00 save to Stage 00 with empty seenTheaterS
 });
 
 test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip preservation & valid related links', () => {
-  // 1. No false positives inside English words like WORLD or AETHER-IX
-  const noFalsePos = tokenizeGlossaryText('送信電文："HELLO, WORLD." AETHER-IX は起動した。');
+  // 1. No false positives inside English words like WORLD or AETHER-IX, nor 'リレー' inside 'バトンリレー'/'バケツリレー'
+  const noFalsePos = tokenizeGlossaryText('送信電文："HELLO, WORLD." AETHER-IX はバトンリレーとバケツリレーで起動した。');
   assert.equal(noFalsePos.some((t) => t.type === 'term'), false);
 
-  // 2. Longest-match compound terms
-  const compound = tokenizeGlossaryText('P型シリコンとMOSFETトランジスタとNANDゲートと電磁パルス（EMP）');
+  // 2. Longest-match compound terms (including アース0 and 1ビット金庫)
+  const compound = tokenizeGlossaryText('P型シリコンとMOSFETトランジスタとNANDゲートと電磁パルス（EMP）とアース0と1ビット金庫');
   const termIds = compound.filter((t) => t.type === 'term').map((t) => [t.text, t.termId]);
   assert.deepEqual(termIds, [
     ['P型シリコン', 'p_silicon'],
     ['MOSFETトランジスタ', 'transistor'],
     ['NANDゲート', 'nand'],
     ['電磁パルス（EMP）', 'emp'],
+    ['アース0', 'earth'],
+    ['1ビット金庫', 'd_latch'],
   ]);
 
   // 3. Round-trip preservation across EVERY dialogue line in Prologue & all 20 Stages
@@ -709,6 +711,10 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
     if (st.rewardChip?.id) {
       const chipTerm = getGlossaryTermForChip(st.rewardChip.id);
       assert.ok(chipTerm && chipTerm.anim, `Reward chip '${st.rewardChip.id}' missing glossary term or anim`);
+    }
+    // No stage revealedTitle or hint should leak raw internal chip IDs like MUX_4BIT or DEC_2TO4
+    for (const rawId of ['HALF_ADDER', 'FULL_ADDER', 'ADD_4BIT', 'MUX_4BIT', 'DEC_2TO4', 'REG_4BIT', 'ALU_4BIT', 'PC_4BIT']) {
+      assert.ok(!st.revealedTitle.includes(rawId), `Stage ${st.code} revealedTitle contains internal ID '${rawId}'`);
     }
   }
 });

@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=24';
+import { sound } from '../audio/sound.js?v=25';
 
 const W = 340;
 const H = 126;
@@ -962,7 +962,7 @@ export class StoryDiagramPlayer {
     this._wire(ctx, [[66, 35], [108, 35]], a0 === 1, '#ffd166');
     this._wire(ctx, [[66, 69], [108, 69]], a1 === 1, '#ffd166');
 
-    this._chip(ctx, 108, 20, 76, 64, '番号解読', `2進 ${a1}${a0} = ${num}番`, '#6ec3ff', true);
+    this._chip(ctx, 108, 20, 76, 64, '番号解読', `A0=${a0}, A1=${a1}`, '#6ec3ff', true);
 
     for (let i = 0; i < 4; i++) {
       const y = 16 + i * 22;
@@ -973,7 +973,7 @@ export class StoryDiagramPlayer {
 
     this._caption(
       ctx,
-      `入力(${a1}${a0}) = ${num}番 ▶ 水耕栽培室 Y${num} だけピンポイントON！`,
+      `A0=${a0}, A1=${a1} (${num}番) ▶ 水耕栽培室 Y${num} だけピンポイントON！`,
       this.stepIdx,
       4,
       '#6ec3ff'
