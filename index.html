@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg" />
   <link rel="apple-touch-icon" href="./assets/icon.svg" />
-  <link rel="stylesheet" href="./styles/main.css?v=28" />
+  <link rel="stylesheet" href="./styles/main.css?v=29" />
 </head>
 <body>
   <div id="app">
@@ -23,6 +23,7 @@
         <span class="pill-caret">▾</span>
       </button>
       <div class="header-actions">
+        <button id="btn-quick-audio" class="icon-btn audio-quick-btn" title="音量切替（BGM+SE → SEのみ → 消音）"><span id="icon-quick-audio">🔊</span><span class="btn-lbl" id="lbl-quick-audio">音</span></button>
         <button id="btn-codex" class="icon-btn" title="CS歴史・用語図鑑">📖<span class="btn-lbl">図鑑</span></button>
         <button id="btn-settings" class="icon-btn" title="設定（音量・セーブ初期化）">⚙<span class="btn-lbl">設定</span></button>
       </div>
@@ -97,7 +98,10 @@
   <div id="prologue-overlay" class="prologue-overlay">
     <!-- TITLE SCREEN -->
     <section id="title-screen" class="title-screen">
-      <button id="btn-title-settings" class="title-settings-btn" type="button" title="設定">⚙ 設定</button>
+      <div class="title-top-actions">
+        <button id="btn-title-audio" class="title-settings-btn title-audio-btn" type="button" title="音量切替（BGM+SE → SEのみ → 消音）">🔊 BGM+SE</button>
+        <button id="btn-title-settings" class="title-settings-btn" type="button" title="設定">⚙ 設定</button>
+      </div>
       <div class="title-bg-wrap">
         <img class="title-bg-img" src="./assets/scene_opening_aether.jpg" alt="ARK-7" />
         <div class="title-bg-vignette"></div>
@@ -256,6 +260,6 @@
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="./src/main.js?v=28"></script>
+  <script type="module" src="./src/main.js?v=29"></script>
 </body>
 </html>

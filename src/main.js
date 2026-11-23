@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=28';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=29';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -17,14 +17,14 @@ import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from './engine/evaluator.js';
 import { provisionStandardChips } from './engine/blueprints.js';
 import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=28';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=28';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=28';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=28';
-import { DialogueController } from './ui/dialogue.js?v=28';
-import { ModalManager } from './ui/modals.js?v=28';
-import { PrologueOverlay } from './ui/prologue.js?v=28';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=28';
+import { sound } from './audio/sound.js?v=29';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=29';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=29';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=29';
+import { DialogueController } from './ui/dialogue.js?v=29';
+import { ModalManager } from './ui/modals.js?v=29';
+import { PrologueOverlay } from './ui/prologue.js?v=29';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=29';
 
 class SiliconGenesisApp {
   constructor() {
@@ -70,6 +70,7 @@ class SiliconGenesisApp {
     });
     this.workbench = new WorkbenchCanvas(this.dom.workbenchCanvas, {
       onPlaceChip: (type, x, y) => this.placeChip(type, x, y),
+      onGrabChip: () => sound.haptic(8),
       onMoveChip: (nodeId, x, y) => this.moveChip(nodeId, x, y),
       onConnectWire: (from, to) => this.addWire(from, to),
       onDeleteWire: (wireId) => this.deleteWire(wireId),
@@ -112,6 +113,7 @@ class SiliconGenesisApp {
     });
 
     this._bindUiEvents();
+    this._syncQuickAudioButtons();
     this._applySceneCollapse(this.save.sceneCollapsed);
 
     this.sceneCanvas.start();
@@ -130,6 +132,10 @@ class SiliconGenesisApp {
       stagePill: $('btn-stage-pill'),
       stageActBadge: $('stage-act-badge'),
       stageTitleText: $('stage-title-text'),
+      btnQuickAudio: $('btn-quick-audio'),
+      iconQuickAudio: $('icon-quick-audio'),
+      lblQuickAudio: $('lbl-quick-audio'),
+      btnTitleAudio: $('btn-title-audio'),
       btnCodex: $('btn-codex'),
       btnSettings: $('btn-settings'),
       btnTitleSettings: $('btn-title-settings'),
@@ -184,6 +190,9 @@ class SiliconGenesisApp {
       });
     });
 
+    this.dom.btnQuickAudio?.addEventListener('click', () => this._cycleQuickAudioMode());
+    this.dom.btnTitleAudio?.addEventListener('click', () => this._cycleQuickAudioMode());
+
     this.dom.btnCodex.addEventListener('click', () => {
       sound.playSwitch(true);
       this.modals.openCodex(this.save);
@@ -196,6 +205,7 @@ class SiliconGenesisApp {
         onChangeBgmEnabled: (enabled) => {
           this.save.bgmEnabled = enabled;
           sound.setBgmEnabled(enabled);
+          this._syncQuickAudioButtons();
           persistSaveData(this.save);
           return sound.getCurrentTrackName();
         },
@@ -208,6 +218,7 @@ class SiliconGenesisApp {
           this.save.soundEnabled = enabled;
           sound.setEnabled(enabled);
           if (enabled) sound.playSwitch(true);
+          this._syncQuickAudioButtons();
           persistSaveData(this.save);
         },
         onChangeVolume: (vol) => {
@@ -224,6 +235,7 @@ class SiliconGenesisApp {
           if (!this.save.soundEnabled) {
             this.save.soundEnabled = true;
             sound.setEnabled(true);
+            this._syncQuickAudioButtons();
             persistSaveData(this.save);
           }
           sound.playSoundTest();
@@ -250,6 +262,7 @@ class SiliconGenesisApp {
           sound.setBgmEnabled(this.save.bgmEnabled);
           sound.setBgmVolume(this.save.bgmVolume);
           sound.setDroneEnabled(this.save.droneEnabled);
+          this._syncQuickAudioButtons();
           this.loadStage('stage_00a', { autoIntro: false });
           this.prologue.showTitle(this.save);
           this.showToast('セーブデータを消去しました。最初から始められます！');
@@ -382,6 +395,68 @@ class SiliconGenesisApp {
       this.physicsLab.fitToView();
     } else {
       this.workbench.fitToView();
+    }
+  }
+
+  _cycleQuickAudioMode() {
+    const mode = sound.getAudioMode();
+    if (mode === 'all' || mode === 'bgm_only') {
+      // 1st tap: turn off game BGM so user can listen to Spotify / Apple Music, keep tactile SE!
+      this.save.bgmEnabled = false;
+      this.save.soundEnabled = true;
+      sound.setBgmEnabled(false);
+      sound.setEnabled(true);
+      sound.playSwitch(false);
+      this.showToast('BGMをOFFにしました（効果音のみ・別アプリ音楽と併用OK）');
+    } else if (mode === 'se_only') {
+      // 2nd tap: full mute (suspends AudioContext completely)
+      this.save.bgmEnabled = false;
+      this.save.soundEnabled = false;
+      sound.setBgmEnabled(false);
+      sound.setEnabled(false);
+      this.showToast('ゲーム音をすべてミュートにしました');
+    } else {
+      // 3rd tap: restore BGM + SE
+      this.save.bgmEnabled = true;
+      this.save.soundEnabled = true;
+      sound.setEnabled(true);
+      sound.setBgmEnabled(true);
+      sound.playSwitch(true);
+      this.showToast('BGM・効果音をONにしました');
+    }
+    this._syncQuickAudioButtons();
+    persistSaveData(this.save);
+  }
+
+  _syncQuickAudioButtons() {
+    const mode = sound.getAudioMode();
+    const isSeOnly = mode === 'se_only';
+    const isMuted = mode === 'muted';
+    const isBgmOnly = mode === 'bgm_only';
+
+    const btn = this.dom.btnQuickAudio;
+    if (btn) {
+      btn.classList.toggle('is-se-only', isSeOnly);
+      btn.classList.toggle('is-muted', isMuted);
+      if (this.dom.iconQuickAudio) {
+        this.dom.iconQuickAudio.textContent = isMuted ? '🔇' : isSeOnly ? '🔉' : '🔊';
+      }
+      if (this.dom.lblQuickAudio) {
+        this.dom.lblQuickAudio.textContent = isMuted ? '消音' : isSeOnly ? 'SE' : isBgmOnly ? '曲' : '音';
+      }
+    }
+
+    const tbtn = this.dom.btnTitleAudio;
+    if (tbtn) {
+      tbtn.classList.toggle('is-se-only', isSeOnly);
+      tbtn.classList.toggle('is-muted', isMuted);
+      tbtn.textContent = isMuted
+        ? '🔇 消音中'
+        : isSeOnly
+          ? '🔉 効果音のみ'
+          : isBgmOnly
+            ? '🎵 BGMのみ'
+            : '🔊 BGM+SE';
     }
   }
 
@@ -1218,7 +1293,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=28', { updateViaCache: 'none' })
+        .register('./sw.js?v=29', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

@@ -12,12 +12,12 @@
  *     zero-fatigue listening during long puzzle-thinking sessions
  *   - Zero harsh square-wave percussion ticking
  *   - Independent BGM & SE volume controls + toggles + smooth track transitions
- *   - iOS Safari / Android Chrome gesture unlock + iOS 17+ audioSession='playback'
+ *   - iOS Safari / Android Chrome gesture unlock + iOS 17+ audioSession='ambient'
+ *     (coexists cleanly with Spotify / Apple Music / YouTube Music without interrupting!)
+ *   - Automatic visibilitychange / pagehide / freeze / mobile-blur suspension so audio
+ *     NEVER plays in background tabs or cached PWAs
  *   - Soft DynamicsCompressor anti-clipping + optional subtle haptic feedback
  */
-
-const SILENT_WAV_URI =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
 // Musical note frequencies (Hz)
 const N = {
@@ -264,9 +264,15 @@ class SoundEngine {
     this._bgmStep = 0;
     this._bgmCycle = 0;
     this._unlocked = false;
-    this._silentAudio = null;
+    this._pageHidden = typeof document !== 'undefined' ? Boolean(document.hidden) : false;
+    this._bgSuspended = false;
 
     this._installGlobalUnlock();
+    this._installLifecycleHandlers();
+  }
+
+  _hasAnyAudioEnabled() {
+    return Boolean(this.bgmEnabled || this.enabled);
   }
 
   _installGlobalUnlock() {
@@ -277,6 +283,114 @@ class SoundEngine {
     window.addEventListener('pointerdown', handler, { capture: true, passive: true });
     window.addEventListener('click', handler, { capture: true, passive: true });
     window.addEventListener('keydown', handler, { capture: true, passive: true });
+  }
+
+  _installLifecycleHandlers() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    const isMobileCoarse = () => {
+      try {
+        return Boolean(
+          window.matchMedia?.('(pointer: coarse)').matches ||
+            /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '')
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.suspendForBackground();
+      } else {
+        this.resumeFromForeground();
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      this.suspendForBackground();
+    });
+
+    window.addEventListener('pageshow', () => {
+      if (!document.hidden) {
+        this.resumeFromForeground();
+      }
+    });
+
+    document.addEventListener('freeze', () => {
+      this.suspendForBackground();
+    });
+
+    window.addEventListener('blur', () => {
+      if (document.hidden || isMobileCoarse()) {
+        this.suspendForBackground();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      if (!document.hidden) {
+        this.resumeFromForeground();
+      }
+    });
+  }
+
+  suspendForBackground() {
+    this._pageHidden = true;
+    this._bgSuspended = true;
+    this._stopBgmLoop();
+    this.stopDrone();
+
+    if (this.ctx) {
+      const now = this.ctx.currentTime;
+      try {
+        if (this.bgmGain) {
+          this.bgmGain.gain.cancelScheduledValues(now);
+          this.bgmGain.gain.setValueAtTime(0, now);
+        }
+        if (this.seGain) {
+          this.seGain.gain.cancelScheduledValues(now);
+          this.seGain.gain.setValueAtTime(0, now);
+        }
+      } catch {
+        // ignore
+      }
+      if (this.ctx.state === 'running') {
+        this.ctx.suspend().catch(() => {});
+      }
+    }
+  }
+
+  resumeFromForeground() {
+    this._pageHidden = false;
+    if (!this._bgSuspended) return;
+    this._bgSuspended = false;
+
+    if (!this._hasAnyAudioEnabled()) return;
+    if (!this.ctx) return;
+
+    this._syncGains();
+    if (this.ctx.state === 'suspended' || this.ctx.state === 'interrupted') {
+      this.ctx
+        .resume()
+        .then(() => {
+          if (this._pageHidden || !this._hasAnyAudioEnabled()) return;
+          this._syncGains();
+          if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
+            this._startBgmLoop();
+          }
+          if (this.droneEnabled && this.enabled && !this.droneNodes) {
+            this.startDrone();
+          }
+        })
+        .catch(() => {});
+    } else if (this.ctx.state === 'running') {
+      if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
+        this._startBgmLoop();
+      }
+      if (this.droneEnabled && this.enabled && !this.droneNodes) {
+        this.startDrone();
+      }
+    }
   }
 
   haptic(pattern = 10) {
@@ -290,37 +404,36 @@ class SoundEngine {
   }
 
   unlock() {
+    // Never wake audio hardware while backgrounded or when both BGM and SE are muted
+    if (this._pageHidden || (typeof document !== 'undefined' && document.hidden)) return;
+    if (!this._hasAnyAudioEnabled()) return;
+
+    // Use 'ambient' on iOS 17+ so Spotify / Apple Music / YouTube Music keep playing uninterrupted!
     try {
-      if (navigator.audioSession && navigator.audioSession.type !== 'playback') {
-        navigator.audioSession.type = 'playback';
+      if (navigator.audioSession && navigator.audioSession.type !== 'ambient') {
+        navigator.audioSession.type = 'ambient';
       }
     } catch {
       // ignore
     }
 
-    if (!this._unlocked && typeof Audio !== 'undefined') {
-      try {
-        if (!this._silentAudio) {
-          this._silentAudio = new Audio(SILENT_WAV_URI);
-          this._silentAudio.playsInline = true;
-          this._silentAudio.volume = 0.01;
-        }
-        const p = this._silentAudio.play();
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-      } catch {
-        // ignore
-      }
-    }
-
-    const ctx = this._ensureCtx(true);
+    const ctx = this._ensureCtx(false);
     if (!ctx) return;
 
     if (ctx.state === 'suspended' || ctx.state === 'interrupted') {
-      ctx.resume().then(() => {
-        if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
-          this._startBgmLoop();
-        }
-      }).catch(() => {});
+      ctx
+        .resume()
+        .then(() => {
+          if (this._pageHidden || !this._hasAnyAudioEnabled()) return;
+          this._syncGains();
+          if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
+            this._startBgmLoop();
+          }
+          if (this.droneEnabled && this.enabled && !this.droneNodes) {
+            this.startDrone();
+          }
+        })
+        .catch(() => {});
     }
 
     if (!this._unlocked) {
@@ -336,19 +449,49 @@ class SoundEngine {
       }
     }
 
-    if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
-      this._startBgmLoop();
+    if (ctx.state === 'running') {
+      if (this.bgmEnabled && this.currentTrack && !this._bgmTimer) {
+        this._startBgmLoop();
+      }
+      if (this.droneEnabled && this.enabled && !this.droneNodes) {
+        this.startDrone();
+      }
     }
-    if (this.droneEnabled && this.enabled && !this.droneNodes) {
-      this.startDrone();
+  }
+
+  _suspendIfAllMuted() {
+    if (this._hasAnyAudioEnabled()) return;
+    this._stopBgmLoop();
+    this.stopDrone();
+    if (this.ctx && this.ctx.state === 'running') {
+      const now = this.ctx.currentTime;
+      try {
+        if (this.bgmGain) this.bgmGain.gain.setValueAtTime(0, now);
+        if (this.seGain) this.seGain.gain.setValueAtTime(0, now);
+      } catch {
+        // ignore
+      }
+      this.ctx.suspend().catch(() => {});
     }
+  }
+
+  getAudioMode() {
+    if (this.bgmEnabled && this.enabled) return 'all';
+    if (!this.bgmEnabled && this.enabled) return 'se_only';
+    if (this.bgmEnabled && !this.enabled) return 'bgm_only';
+    return 'muted';
   }
 
   setEnabled(flag) {
     this.enabled = Boolean(flag);
     this._syncGains();
-    if (!this.enabled) this.stopDrone();
-    else if (this.droneEnabled) this.startDrone();
+    if (!this.enabled) {
+      this.stopDrone();
+      this._suspendIfAllMuted();
+    } else {
+      if (!this._pageHidden) this.unlock();
+      if (this.droneEnabled && !this._pageHidden) this.startDrone();
+    }
   }
 
   setVolume(vol) {
@@ -360,10 +503,16 @@ class SoundEngine {
   setBgmEnabled(flag) {
     this.bgmEnabled = Boolean(flag);
     this._syncGains();
-    if (this.bgmEnabled && this.currentTrack) {
-      this._startBgmLoop();
+    if (this.bgmEnabled) {
+      if (!this._pageHidden) {
+        this.unlock();
+        if (this.currentTrack && this.ctx && this.ctx.state === 'running') {
+          this._startBgmLoop();
+        }
+      }
     } else {
       this._stopBgmLoop();
+      this._suspendIfAllMuted();
     }
   }
 
@@ -375,7 +524,7 @@ class SoundEngine {
 
   setDroneEnabled(flag) {
     this.droneEnabled = Boolean(flag);
-    if (this.droneEnabled && this.enabled) this.startDrone();
+    if (this.droneEnabled && this.enabled && !this._pageHidden) this.startDrone();
     else this.stopDrone();
   }
 
@@ -389,7 +538,7 @@ class SoundEngine {
     this._stopBgmLoop();
 
     // Gentle breath fade on track transitions so scene switches feel seamless
-    if (switched && this.ctx && this.bgmGain && this.bgmEnabled) {
+    if (switched && this.ctx && this.bgmGain && this.bgmEnabled && !this._pageHidden) {
       const now = this.ctx.currentTime;
       const target = this.bgmVolume * 0.65;
       try {
@@ -401,7 +550,7 @@ class SoundEngine {
       }
     }
 
-    if (this.bgmEnabled && this.ctx && this.ctx.state === 'running') {
+    if (this.bgmEnabled && !this._pageHidden && this.ctx && this.ctx.state === 'running') {
       this._startBgmLoop();
     }
   }
@@ -412,8 +561,9 @@ class SoundEngine {
   }
 
   getStateSummary() {
+    if (!this._hasAnyAudioEnabled()) return 'ミュート中（他アプリ音楽と完全共存）';
     if (!this.ctx) return '未初期化（画面タップで有効化）';
-    if (this.ctx.state === 'running') return '稼働中 (READY)';
+    if (this.ctx.state === 'running') return '稼働中 (他アプリ音楽と同時再生対応)';
     if (this.ctx.state === 'suspended') return '一時停止（テスト再生をタップ）';
     return this.ctx.state;
   }
@@ -422,21 +572,28 @@ class SoundEngine {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     if (this.seGain) {
-      const targetSe = this.enabled ? this.volume : 0;
+      const targetSe = this.enabled && !this._pageHidden ? this.volume : 0;
       try { this.seGain.gain.setTargetAtTime(targetSe, now, 0.02); } catch { this.seGain.gain.value = targetSe; }
     }
     if (this.bgmGain) {
-      const targetBgm = this.bgmEnabled ? this.bgmVolume * 0.65 : 0;
+      const targetBgm = this.bgmEnabled && !this._pageHidden ? this.bgmVolume * 0.65 : 0;
       try { this.bgmGain.gain.setTargetAtTime(targetBgm, now, 0.08); } catch { this.bgmGain.gain.value = targetBgm; }
     }
   }
 
   _ensureCtx(forceCreate = false) {
-    if (!this.enabled && !this.bgmEnabled && !forceCreate) return null;
+    if (this._pageHidden) return null;
+    if (!this._hasAnyAudioEnabled() && !forceCreate) return null;
     const AudioCtx = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!AudioCtx) return null;
     if (!this.ctx) {
       this.ctx = new AudioCtx();
+      this.ctx.onstatechange = () => {
+        if (!this.ctx) return;
+        if (this.ctx.state !== 'running') {
+          this._stopBgmLoop();
+        }
+      };
       this.seGain = this.ctx.createGain();
       this.seGain.gain.value = this.enabled ? this.volume : 0;
       this.bgmGain = this.ctx.createGain();
@@ -490,11 +647,15 @@ class SoundEngine {
   // PROCEDURAL LONG-FORM AMBIENT BGM SEQUENCER
   // ===========================================================================
   _startBgmLoop() {
-    if (this._bgmTimer || !this.bgmEnabled || !this.currentTrack) return;
+    if (this._bgmTimer || !this.bgmEnabled || !this.currentTrack || this._pageHidden) return;
     const track = BGM_TRACK_INFO[this.currentTrack];
     if (!track) return;
 
     const tick = () => {
+      if (this._pageHidden || (typeof document !== 'undefined' && document.hidden)) {
+        this.suspendForBackground();
+        return;
+      }
       if (!this.bgmEnabled || !this.ctx || this.ctx.state !== 'running') return;
       const t = BGM_TRACK_INFO[this.currentTrack];
       if (!t) return;
@@ -677,6 +838,7 @@ class SoundEngine {
   // SOUND EFFECTS (SE)
   // ===========================================================================
   _withSe(fn) {
+    if (this._pageHidden || (typeof document !== 'undefined' && document.hidden)) return;
     if (!this.enabled || this.volume <= 0.001) return;
     const ctx = this._ensureCtx();
     if (!ctx || !this.seGain) return;
@@ -686,7 +848,7 @@ class SoundEngine {
       ctx
         .resume()
         .then(() => {
-          if (ctx.state === 'running' && this.enabled) {
+          if (ctx.state === 'running' && this.enabled && !this._pageHidden) {
             fn(ctx, this.seGain);
           }
         })

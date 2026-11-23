@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=28';
-import { CODEX_ENTRIES } from '../data/codex.js?v=28';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=29';
+import { CODEX_ENTRIES } from '../data/codex.js?v=29';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=28';
+} from '../data/glossary.js?v=29';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=28';
-import { StoryDiagramGroup } from './storyDiagram.js?v=28';
-import { glossaryPopover } from './glossaryPopover.js?v=28';
+import { sound } from '../audio/sound.js?v=29';
+import { StoryDiagramGroup } from './storyDiagram.js?v=29';
+import { glossaryPopover } from './glossaryPopover.js?v=29';
 
 function esc(str) {
   return String(str ?? '')
@@ -1606,7 +1606,7 @@ export class ModalManager {
           <div class="sound-test-box">
             <button type="button" id="btn-sound-test" class="btn btn-amber">🔊 テスト音を鳴らす</button>
             <div id="set-audio-status" class="audio-status-note">音声エンジン: ${esc(audioStatusText)}</div>
-            <div class="audio-status-tip">※ スマホで音が出ない場合は、本体の音量ボタンとマナーモード（消音スイッチ）もご確認ください。</div>
+            <div class="audio-status-tip">※ 別アプリ（Spotify / Apple Music等）の音楽と同時再生できます。アプリを閉じたり裏へ回すと音は自動で停止します。</div>
           </div>
         </div>
 

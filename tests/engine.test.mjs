@@ -1086,3 +1086,131 @@ test('Priority 5: Direct Chapter 2 launch provisions standard chips with provisi
     globalThis.localStorage = prevStorage;
   }
 });
+
+test('v29 Mobile Audio Lifecycle: uses ambient audioSession, zero <audio> hijack, suspends on background & stays idle when muted', async () => {
+  const { sound } = await import('../src/audio/sound.js');
+  let suspendedCount = 0;
+  let resumedCount = 0;
+  let ctxCreatedCount = 0;
+  const fakeAudioSession = { type: 'auto' };
+
+  const prevAudioCtx = globalThis.AudioContext;
+  const prevNavDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+
+  class MockAudioContext {
+    constructor() {
+      ctxCreatedCount++;
+      this.state = 'running';
+      this.currentTime = 0;
+      this.destination = {};
+    }
+    createGain() {
+      return {
+        gain: {
+          value: 1,
+          setValueAtTime() {},
+          setTargetAtTime() {},
+          linearRampToValueAtTime() {},
+          exponentialRampToValueAtTime() {},
+          cancelScheduledValues() {},
+        },
+        connect() {},
+        disconnect() {},
+      };
+    }
+    createOscillator() {
+      return {
+        type: 'sine',
+        frequency: { value: 440, setValueAtTime() {}, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {} },
+        detune: { setValueAtTime() {} },
+        connect() {},
+        start() {},
+        stop() {},
+      };
+    }
+    createBiquadFilter() {
+      return {
+        type: 'lowpass',
+        Q: { value: 1 },
+        frequency: { value: 800, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} },
+        connect() {},
+      };
+    }
+    createDelay() {
+      return { delayTime: { value: 0.3 }, connect() {} };
+    }
+    createDynamicsCompressor() {
+      return { threshold: { value: 0 }, knee: { value: 0 }, ratio: { value: 1 }, connect() {} };
+    }
+    createBuffer() {
+      return {};
+    }
+    createBufferSource() {
+      return { buffer: null, connect() {}, start() {} };
+    }
+    suspend() {
+      suspendedCount++;
+      this.state = 'suspended';
+      return Promise.resolve();
+    }
+    resume() {
+      resumedCount++;
+      this.state = 'running';
+      return Promise.resolve();
+    }
+  }
+
+  globalThis.AudioContext = MockAudioContext;
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { audioSession: fakeAudioSession },
+  });
+
+  try {
+    // 1. When muted (both BGM and SE off), unlock() must NOT wake AudioContext or touch audioSession
+    sound.ctx = null;
+    sound._unlocked = false;
+    sound._pageHidden = false;
+    sound.setBgmEnabled(false);
+    sound.setEnabled(false);
+    sound.unlock();
+    assert.equal(ctxCreatedCount, 0, 'Muted engine must not create AudioContext on tap');
+    assert.equal(fakeAudioSession.type, 'auto', 'Muted engine must not touch audioSession');
+
+    // 2. Enabling audio uses 'ambient' (coexists with Spotify/Apple Music) and never uses HTML5 <audio>
+    sound.setEnabled(true);
+    sound.setBgmEnabled(true);
+    sound.setBgmTrack('workbench');
+    sound.unlock();
+    assert.equal(fakeAudioSession.type, 'ambient', 'Must use ambient audioSession, never exclusive playback');
+    assert.equal('_silentAudio' in sound, false, 'Must not instantiate HTML5 <audio> silencer');
+    assert.ok(sound._bgmTimer !== null, 'BGM timer should be active while visible and enabled');
+
+    // 3. Backgrounding immediately stops BGM timer and suspends AudioContext
+    sound.suspendForBackground();
+    assert.equal(sound._bgmTimer, null, 'BGM timer must stop immediately on background');
+    assert.equal(sound.ctx.state, 'suspended', 'AudioContext must suspend immediately on background');
+    assert.ok(suspendedCount >= 1);
+
+    // 4. Returning to foreground resumes cleanly
+    sound.resumeFromForeground();
+    await Promise.resolve();
+    assert.equal(sound.ctx.state, 'running', 'AudioContext should resume on foreground');
+    assert.ok(resumedCount >= 1);
+
+    // 5. Muting both BGM & SE immediately stops timer and suspends AudioContext so external music plays undisturbed
+    sound.setBgmEnabled(false);
+    sound.setEnabled(false);
+    assert.equal(sound._bgmTimer, null);
+    assert.equal(sound.ctx.state, 'suspended');
+    assert.equal(sound.getAudioMode(), 'muted');
+  } finally {
+    sound._stopBgmLoop();
+    sound.stopDrone();
+    sound.ctx = null;
+    globalThis.AudioContext = prevAudioCtx;
+    if (prevNavDesc) {
+      Object.defineProperty(globalThis, 'navigator', prevNavDesc);
+    }
+  }
+});
