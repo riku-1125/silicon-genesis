@@ -3,16 +3,17 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=29';
-import { STAGES } from '../data/stages.js?v=29';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=29';
-import { sound } from '../audio/sound.js?v=29';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=30';
+import { STAGES } from '../data/stages.js?v=30';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=30';
+import { isChapter2Unlocked } from '../state/storage.js?v=30';
+import { sound } from '../audio/sound.js?v=30';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=29';
+} from './glossaryPopover.js?v=30';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue, onStartChapter2 }) {
@@ -72,6 +73,11 @@ export class PrologueOverlay {
     });
 
     this.btnChapter2?.addEventListener('click', () => {
+      if (this.btnChapter2.classList.contains('locked')) {
+        sound.playSwitch(false);
+        this.onStartChapter2?.();
+        return;
+      }
       sound.playPowerUp();
       this.hide();
       this.onStartChapter2?.();
@@ -118,7 +124,7 @@ export class PrologueOverlay {
   showTitle(save) {
     this._stopTimer();
     const hasProgress = Boolean(
-      save.seenPrologue || save.chapter2Unlocked || (save.clearedStages && save.clearedStages.length > 0)
+      save.seenPrologue || (save.clearedStages && save.clearedStages.length > 0)
     );
     const clearedCount = save.clearedStages?.length || 0;
     const curStage = STAGES.find((s) => s.id === save.currentStageId) || STAGES[0];
@@ -149,14 +155,21 @@ export class PrologueOverlay {
     }
 
     if (this.btnChapter2) {
+      const ch2Open = isChapter2Unlocked(save);
       const ch2Stages = STAGES.filter((s) => s.chapter === 2);
       const clearedSet = new Set(save.clearedStages || []);
       const anyCh2Cleared = ch2Stages.some((s) => clearedSet.has(s.id));
       const nextCh2 = ch2Stages.find((s) => !clearedSet.has(s.id)) || ch2Stages[ch2Stages.length - 1];
-      this.btnChapter2.textContent =
-        anyCh2Cleared && nextCh2
-          ? `☀ 第二章：青空への帰還（STAGE ${nextCh2.code}〜）`
-          : '☀ 第二章：青空への帰還（STAGE 18〜）';
+      this.btnChapter2.classList.toggle('locked', !ch2Open);
+      this.btnChapter2.setAttribute('aria-disabled', ch2Open ? 'false' : 'true');
+      if (!ch2Open) {
+        this.btnChapter2.textContent = '🔒 第二章：青空への帰還（第一章クリアで解放）';
+      } else {
+        this.btnChapter2.textContent =
+          anyCh2Cleared && nextCh2
+            ? `☀ 第二章：青空への帰還（STAGE ${nextCh2.code}〜）`
+            : '☀ 第二章：青空への帰還（STAGE 18〜）';
+      }
     }
   }
 

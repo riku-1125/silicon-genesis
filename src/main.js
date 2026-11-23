@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=29';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=30';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -16,15 +16,20 @@ import {
 import { compileCircuit } from './engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from './engine/evaluator.js';
 import { provisionStandardChips } from './engine/blueprints.js';
-import { loadSaveData, persistSaveData, resetSaveData } from './state/storage.js';
-import { sound } from './audio/sound.js?v=29';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=29';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=29';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=29';
-import { DialogueController } from './ui/dialogue.js?v=29';
-import { ModalManager } from './ui/modals.js?v=29';
-import { PrologueOverlay } from './ui/prologue.js?v=29';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=29';
+import {
+  loadSaveData,
+  persistSaveData,
+  resetSaveData,
+  isChapter2Unlocked,
+} from './state/storage.js?v=30';
+import { sound } from './audio/sound.js?v=30';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=30';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=30';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=30';
+import { DialogueController } from './ui/dialogue.js?v=30';
+import { ModalManager } from './ui/modals.js?v=30';
+import { PrologueOverlay } from './ui/prologue.js?v=30';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=30';
 
 class SiliconGenesisApp {
   constructor() {
@@ -385,9 +390,15 @@ class SiliconGenesisApp {
       }
     });
 
-    window.addEventListener('resize', () => {
+    const scheduleRefit = () => {
       this._fitActiveCanvas();
-    });
+      requestAnimationFrame(() => this._fitActiveCanvas());
+      clearTimeout(this._refitTimer);
+      this._refitTimer = setTimeout(() => this._fitActiveCanvas(), 200);
+    };
+    window.addEventListener('resize', scheduleRefit);
+    window.addEventListener('orientationchange', scheduleRefit);
+    window.visualViewport?.addEventListener('resize', scheduleRefit);
   }
 
   _fitActiveCanvas() {
@@ -1232,9 +1243,14 @@ class SiliconGenesisApp {
   }
 
   // ===========================================================================
-  // CHAPTER 2 DIRECT LAUNCH & STANDARD CHAPTER 1 CHIP AUTO-PROVISIONING
+  // CHAPTER 2 LAUNCH (UNLOCKED UPON CLEARING CHAPTER 1 / STAGE 17)
   // ===========================================================================
   startChapter2() {
+    if (!isChapter2Unlocked(this.save)) {
+      sound.playSwitch(false);
+      this.showToast('第一章（STAGE 17：自作CPU起動）をクリアすると第二章が解放されます！');
+      return;
+    }
     this._ensureChapter1ChipsForChapter2();
     const ch2Stages = STAGES.filter((s) => s.chapter === 2);
     const clearedSet = new Set(this.save.clearedStages || []);
@@ -1293,7 +1309,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=29', { updateViaCache: 'none' })
+        .register('./sw.js?v=30', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

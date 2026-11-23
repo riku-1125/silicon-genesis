@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=29';
-import { CODEX_ENTRIES } from '../data/codex.js?v=29';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=30';
+import { CODEX_ENTRIES } from '../data/codex.js?v=30';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +14,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=29';
+} from '../data/glossary.js?v=30';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
-import { isStageUnlocked } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=29';
-import { StoryDiagramGroup } from './storyDiagram.js?v=29';
-import { glossaryPopover } from './glossaryPopover.js?v=29';
+import { isStageUnlocked, isChapter2Unlocked } from '../state/storage.js?v=30';
+import { sound } from '../audio/sound.js?v=30';
+import { StoryDiagramGroup } from './storyDiagram.js?v=30';
+import { glossaryPopover } from './glossaryPopover.js?v=30';
 
 function esc(str) {
   return String(str ?? '')
@@ -492,11 +492,12 @@ export class ModalManager {
   openMap(save, currentStageId, { onSelectStage, onReplayPrologue, onGoHome, onResetSave }) {
     const actsHtml = ACTS.map((act) => {
       const stagesInAct = STAGES.filter((s) => s.act === act.id);
+      const ch2Open = isChapter2Unlocked(save);
       const chapterBannerHtml =
         act.id === 6
-          ? `<div class="map-chapter-banner">
-              <span>☀ 第二章：青空への帰還（ノイマン型計算機＆アセンブリ編）</span>
-              <span class="mono" style="font-size:11px;opacity:0.85;">STAGE 18〜24</span>
+          ? `<div class="map-chapter-banner ${ch2Open ? '' : 'locked'}">
+              <span>${ch2Open ? '☀' : '🔒'} 第二章：青空への帰還（ノイマン型計算機＆アセンブリ編）</span>
+              <span class="mono" style="font-size:11px;opacity:0.9;">${ch2Open ? 'STAGE 18〜24' : '第一章クリアで解放'}</span>
             </div>`
           : '';
       const cards = stagesInAct
@@ -724,7 +725,7 @@ export class ModalManager {
             }
 
             const isModOpen = expandedModules.has(term.id);
-            const isProvisionedOnly = Boolean(!cleared && (forged?.provisioned || save.chapter2Unlocked));
+            const isProvisionedOnly = Boolean(!cleared && forged?.provisioned);
             const shortBadge = isProvisionedOnly
               ? `<span class="mod-status-badge provisioned">📦 支給品</span>`
               : forged

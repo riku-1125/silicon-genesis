@@ -15,7 +15,7 @@ import {
   isModuleEncyclopediaUnlocked,
   collectTermIdsFromTexts,
 } from '../src/data/glossary.js';
-import { loadSaveData, isStageUnlocked } from '../src/state/storage.js';
+import { loadSaveData, isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../src/state/storage.js';
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from '../src/engine/evaluator.js';
@@ -1010,49 +1010,56 @@ test('Priority 2: Stage 07 exhaustive 512-combination check catches counterexamp
   assert.deepEqual(diag.simulator.getOutputs(), [0, 0, 1, 0]); // 4 in little-endian binary
 });
 
-test('Priority 5: Direct Chapter 2 launch provisions standard chips with provisioned:true while preserving self-forged chips and keeping unplayed Chapter 1 stages uncleared', () => {
-  // Simulate a player who forged NOT (stage_01) themselves, then launched Chapter 2 directly
+test('Chapter 2 unlock requires clearing Chapter 1 (Stage 17) while preserving legacy saves and provisioned chip metadata', () => {
   const customChips = {};
-  const st00 = getStageById('stage_00');
-  const st01 = getStageById('stage_01');
   provisionStandardChips(customChips, { includeChapter2Hardware: false, provisioned: false });
   const playerForgedNot = {
     ...customChips.NOT,
     provisioned: false,
     customTag: 'PLAYER_FORGED',
   };
-  const save = {
+  const midCh1Save = {
     currentStageId: 'stage_01',
     clearedStages: ['stage_00a', 'stage_00b', 'stage_00', 'stage_01'],
     customChips: {
       NAND: { ...customChips.NAND, provisioned: false },
       NOT: playerForgedNot,
     },
-    chapter2Unlocked: true,
+    chapter2Unlocked: true, // even a stale legacy flag must NOT bypass Chapter 1 clear requirement
   };
 
-  // Provision remaining Chapter 1 chips for Chapter 2 direct start
-  provisionStandardChips(save.customChips, { includeChapter2Hardware: false, provisioned: true });
+  // 1. Provisioning standard chips preserves player-forged NOT and marks missing chips as provisioned:true
+  provisionStandardChips(midCh1Save.customChips, { includeChapter2Hardware: false, provisioned: true });
+  assert.equal(midCh1Save.customChips.NOT.provisioned, false);
+  assert.equal(midCh1Save.customChips.NOT.customTag, 'PLAYER_FORGED');
+  assert.equal(midCh1Save.customChips.AND.provisioned, true);
+  assert.equal(midCh1Save.customChips.ARK4_CORE.provisioned, true);
 
-  // 1. Player's self-forged NOT chip is preserved untouched (`provisioned: false`)
-  assert.equal(save.customChips.NOT.provisioned, false);
-  assert.equal(save.customChips.NOT.customTag, 'PLAYER_FORGED');
+  // 2. Chapter 2 is strictly LOCKED until Stage 17 (Chapter 1 finale) is cleared!
+  assert.equal(isChapter1Cleared(midCh1Save), false);
+  assert.equal(isChapter2Unlocked(midCh1Save), false);
+  assert.equal(isStageUnlocked(midCh1Save, 'stage_02'), true);
+  assert.equal(isStageUnlocked(midCh1Save, 'stage_17'), false);
+  assert.equal(isStageUnlocked(midCh1Save, 'stage_18'), false);
+  assert.equal(isStageUnlocked(midCh1Save, 'stage_19'), false);
 
-  // 2. Remaining Chapter 1 chips (AND..ARK4_CORE) are provisioned with `provisioned: true`
-  assert.equal(save.customChips.AND.provisioned, true);
-  assert.equal(save.customChips.ARK4_CORE.provisioned, true);
+  // 3. Clearing Stage 17 immediately unlocks Chapter 2 (Stage 18), while Stage 19 still requires Stage 18
+  const ch1ClearedSave = {
+    ...midCh1Save,
+    clearedStages: [
+      'stage_00a', 'stage_00b', 'stage_00', 'stage_01', 'stage_02', 'stage_03', 'stage_04',
+      'stage_05', 'stage_06', 'stage_07', 'stage_08', 'stage_09', 'stage_10', 'stage_11',
+      'stage_12', 'stage_13', 'stage_14', 'stage_15', 'stage_16', 'stage_17',
+    ],
+  };
+  assert.equal(isChapter1Cleared(ch1ClearedSave), true);
+  assert.equal(isChapter2Unlocked(ch1ClearedSave), true);
+  assert.equal(isStageUnlocked(ch1ClearedSave, 'stage_18'), true);
+  assert.equal(isStageUnlocked(ch1ClearedSave, 'stage_19'), false);
 
-  // 3. Unplayed Chapter 1 stages (e.g. stage_02..stage_17) are NOT falsely added to clearedStages,
-  //    but are unlocked ("利用可能") alongside stage_18!
-  assert.equal(save.clearedStages.includes('stage_02'), false);
-  assert.equal(save.clearedStages.includes('stage_17'), false);
-  assert.equal(isStageUnlocked(save, 'stage_02'), true);
-  assert.equal(isStageUnlocked(save, 'stage_17'), true);
-  assert.equal(isStageUnlocked(save, 'stage_18'), true);
-  assert.equal(isStageUnlocked(save, 'stage_19'), false); // Stage 19 still requires clearing Stage 18!
-
-  // 4. Legacy save compatibility: existing saves without `provisioned` or `chapter2Unlocked` load cleanly
-  //    preserving customChips, drafts, clearedStages, and unlockedCodex without guessing or deleting them!
+  // 4. Legacy save compatibility:
+  //    a) Normal legacy saves keep all customChips, drafts, and progress intact.
+  //    b) Saves previously parked on locked stage_18 without clearing stage_17 cleanly migrate to their next unlocked stage.
   const prevStorage = globalThis.localStorage;
   const legacyPayload = {
     version: 1,
@@ -1076,12 +1083,18 @@ test('Priority 5: Direct Chapter 2 launch provisions standard chips with provisi
   try {
     const loaded = loadSaveData();
     assert.equal(loaded.currentStageId, 'stage_05');
-    assert.equal(loaded.chapter2Unlocked, false);
     assert.deepEqual(loaded.clearedStages, legacyPayload.clearedStages);
-    assert.equal(loaded.customChips.NOT.provisioned, undefined); // Kept untouched (not guessed as provisioned or deleted)
+    assert.equal(loaded.customChips.NOT.provisioned, undefined);
     assert.equal(loaded.drafts.stage_05.nodes.length, 1);
     assert.equal(isStageUnlocked(loaded, 'stage_05'), true);
     assert.equal(isStageUnlocked(loaded, 'stage_18'), false);
+    assert.equal(isChapter2Unlocked(loaded), false);
+
+    // Save parked on locked stage_18 without clearing stage_17 falls back cleanly to stage_05
+    store.set('silicon_genesis_save_v1', JSON.stringify({ ...legacyPayload, currentStageId: 'stage_18', chapter2Unlocked: true }));
+    const migrated = loadSaveData();
+    assert.equal(migrated.currentStageId, 'stage_05');
+    assert.equal(isChapter2Unlocked(migrated), false);
   } finally {
     globalThis.localStorage = prevStorage;
   }

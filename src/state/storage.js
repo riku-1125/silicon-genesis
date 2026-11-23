@@ -51,9 +51,12 @@ export function loadSaveData() {
       seenIntroStages: Array.isArray(parsed.seenIntroStages) ? parsed.seenIntroStages : [],
       seenTheaterStages: Array.isArray(parsed.seenTheaterStages) ? parsed.seenTheaterStages : [],
     };
-    // Auto-migrate pre-ACT-0 saves that haven't cleared any stage yet to start at Stage 00-A
-    if (merged.clearedStages.length === 0 && !isStageUnlocked(merged, merged.currentStageId)) {
-      merged.currentStageId = 'stage_00a';
+    // Ensure currentStageId always points to an unlocked stage (handles pre-ACT-0 saves and locked Chapter 2 saves)
+    if (!isStageUnlocked(merged, merged.currentStageId)) {
+      const nextPlayable =
+        STAGES.find((s) => isStageUnlocked(merged, s.id) && !merged.clearedStages.includes(s.id)) ||
+        STAGES[0];
+      merged.currentStageId = nextPlayable.id;
     }
     return merged;
   } catch {
@@ -80,19 +83,33 @@ export function resetSaveData() {
 }
 
 /**
+ * Returns true once the player has cleared Chapter 1 (STAGE 17: ARK-4 CPU).
+ */
+export function isChapter1Cleared(save) {
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.includes('stage_17');
+}
+
+/**
+ * Chapter 2 unlocks upon clearing Chapter 1 (STAGE 17).
+ * Also stays unlocked if the save already contains any cleared Chapter 2 stage.
+ */
+export function isChapter2Unlocked(save) {
+  if (isChapter1Cleared(save)) return true;
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.some((id) => STAGES.find((s) => s.id === id)?.chapter === 2);
+}
+
+/**
  * Determines whether a stage is unlocked.
- * Stage 00 is always unlocked; stage N unlocks once stage N-1 is cleared.
+ * Stage 00-A is always unlocked; stage N unlocks once stage N-1 is cleared.
+ * Therefore Stage 18 (Chapter 2) strictly unlocks upon clearing Stage 17 (Chapter 1).
  */
 export function isStageUnlocked(save, stageId) {
   const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
-  if (stageId === 'sandbox') return cleared.length > 0 || Boolean(save?.chapter2Unlocked);
+  if (stageId === 'sandbox') return cleared.length > 0;
   const idx = STAGES.findIndex((s) => s.id === stageId);
   if (idx <= 0) return true;
-  const stage = STAGES[idx];
-  // When Chapter 2 was launched directly, Stage 18 is unlocked and all Chapter 1 stages are available to play!
-  if (save?.chapter2Unlocked) {
-    if (stage.chapter !== 2 || stageId === 'stage_18') return true;
-  }
   // Backwards-compatible: existing saves with prior clears keep stage_00 / stage_01 accessible
   if ((stageId === 'stage_00' || stageId === 'stage_01') && cleared.length > 0) return true;
   const prevStage = STAGES[idx - 1];

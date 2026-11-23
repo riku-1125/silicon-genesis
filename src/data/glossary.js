@@ -8,7 +8,7 @@
  *     until the player clears that stage, preventing any spoilers or puzzle-answer leaks!
  */
 
-import { isStageUnlocked } from '../state/storage.js';
+import { isStageUnlocked, isChapter2Unlocked } from '../state/storage.js';
 
 export const GLOSSARY_TERMS = {
   // =========================================================================
@@ -897,7 +897,7 @@ function isStageClearedOrProvisioned(stageId, term, save) {
   const cleared = Array.isArray(save.clearedStages) ? save.clearedStages : [];
   if (cleared.includes(stageId)) return true;
   if (term?.chipId && save.customChips?.[term.chipId]) return true;
-  if (save.chapter2Unlocked && (stageId === 'stage_00a' || stageId === 'stage_00b')) return true;
+  if (isChapter2Unlocked(save) && (stageId === 'stage_00a' || stageId === 'stage_00b')) return true;
   return false;
 }
 
