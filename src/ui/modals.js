@@ -4,8 +4,13 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=31';
-import { CODEX_ENTRIES } from '../data/codex.js?v=31';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=32';
+import { CODEX_ENTRIES } from '../data/codex.js?v=32';
+import {
+  ARK4_ISA_TABLE,
+  getStageSymbolReferences,
+  stageUsesIsaTable,
+} from '../data/symbolReference.js?v=32';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -14,13 +19,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=31';
+} from '../data/glossary.js?v=32';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
-import { isStageUnlocked, isChapter2Unlocked } from '../state/storage.js?v=31';
-import { sound } from '../audio/sound.js?v=31';
-import { StoryDiagramGroup } from './storyDiagram.js?v=31';
-import { glossaryPopover } from './glossaryPopover.js?v=31';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=31';
+import { isStageUnlocked, isChapter2Unlocked } from '../state/storage.js?v=32';
+import { sound } from '../audio/sound.js?v=32';
+import { StoryDiagramGroup } from './storyDiagram.js?v=32';
+import { glossaryPopover } from './glossaryPopover.js?v=32';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=32';
 
 function esc(str) {
   return String(str ?? '')
@@ -204,6 +209,80 @@ export class ModalManager {
       `
       : '';
 
+    const showIsa = stageUsesIsaTable(stage);
+    const isaCardHtml = showIsa
+      ? `
+        <div class="spec-ref-card isa">
+          <div class="spec-ref-title">📜 命令一覧（ニモニック・英語の意味）</div>
+          <div class="spec-ref-sub">※ 命令の意味は仕様です（どの順番で並べるか・どう配線するかが課題です）</div>
+          <div class="table-wrap">
+            <table class="crt-table spec-isa-table">
+              <thead>
+                <tr>
+                  <th>命令</th>
+                  <th>英語の元の意味</th>
+                  <th>はたらき</th>
+                  <th>機械語</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${ARK4_ISA_TABLE.map(
+                  (row) => `
+                  <tr>
+                    <td class="mono amber bold">${esc(row.mnemonic)}</td>
+                    <td class="spec-en-cell">${esc(row.en)}</td>
+                    <td>${esc(row.effect)}</td>
+                    <td class="mono emerald">${esc(row.bits)}</td>
+                  </tr>
+                `
+                ).join('')}
+                ${
+                  stage.id === 'stage_24'
+                    ? `
+                  <tr>
+                    <td class="mono amber bold">LOOP 1</td>
+                    <td class="spec-en-cell">Loop（外部帰還・固定）</td>
+                    <td>外部帰還線 RET=1 で判定を0に接地し、ACCを保ったまま1番地へ強制帰還</td>
+                    <td class="mono emerald">11 + RET</td>
+                  </tr>
+                `
+                    : ''
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `
+      : '';
+
+    const isaKeys = new Set(stage.id === 'stage_24' ? ['LDI', 'ADD', 'SUB', 'JZ', 'LOOP'] : ['LDI', 'ADD', 'SUB', 'JZ']);
+    const symRefs = getStageSymbolReferences(stage).filter(
+      (item) => !(showIsa && isaKeys.has(item.key))
+    );
+    const symbolRefHtml =
+      symRefs.length > 0
+        ? `
+        <div class="spec-ref-card">
+          <div class="spec-ref-title">📖 このステージの略語・記号リファレンス</div>
+          <div class="spec-ref-list">
+            ${symRefs
+              .map(
+                (item) => `
+              <div class="spec-ref-row">
+                <span class="spec-ref-sym">${esc(item.key)}</span>
+                <div class="spec-ref-body">
+                  <div class="spec-ref-en">${esc(item.en)}</div>
+                  <div class="spec-ref-ja">${esc(item.ja)}</div>
+                </div>
+              </div>
+            `
+              )
+              .join('')}
+          </div>
+        </div>
+      `
+        : '';
+
     this.open({
       title: `仕様書 · STAGE ${stage.code}「${isCleared ? stage.revealedTitle : stage.title}」`,
       bodyHtml: `
@@ -211,6 +290,7 @@ export class ModalManager {
         <div class="spec-goal">${esc(stage.plainGoal)}</div>
         <p class="spec-note">${esc(stage.beginnerNote)}</p>
         ${stage.mode === 'physics' ? physicsLabCard : stage.number === 0 ? physicsCard : stage.number <= 4 ? nandCard : ''}
+        ${isaCardHtml}
         <div class="spec-cols">
           <div class="spec-box">
             <h4>入力ピン（左）</h4>
@@ -221,6 +301,7 @@ export class ModalManager {
             <ul>${pinOutputsHtml}</ul>
           </div>
         </div>
+        ${symbolRefHtml}
         ${
           stage.tests.length > 0
             ? `

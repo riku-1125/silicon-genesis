@@ -929,7 +929,8 @@ export class WorkbenchCanvas {
     // Subtle status pill at top-center of workbench if armed / dragging / wiring
     if (this.armedChipType) {
       const def = getChipDef(this.armedChipType, this.customChips);
-      const hint = def?.shortRuleJa ? `｜${def.shortRuleJa}` : '';
+      const hintLabel = def?.shortRuleJa || def?.titleJa || '';
+      const hint = hintLabel ? `｜${hintLabel}` : '';
       this._drawCanvasBanner(ctx, w, `＋ [${def?.name || this.armedChipType}] 置く場所をタップ${hint}`, '#ffb347');
     } else if (this.gesture?.kind === 'dragNode' && this.gesture.moved) {
       this._drawCanvasBanner(ctx, w, '✋ モジュールを移動中（指を離すと配置）', '#ffd166');

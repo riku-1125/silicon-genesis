@@ -843,6 +843,140 @@ export const GLOSSARY_TERMS = {
     analogy: '掛け算ボタンのない電卓でも、「＋3」を4回繰り返す手順（レシピ）を書けば掛け算ができる仕組み！',
     related: ['assembly', 'conditional_branch', 'ark4_sys'],
   },
+
+  // =========================================================================
+  // HARDWARE SIGNALS & ASSEMBLY OPCODE VOCABULARY (Pure meanings, no spoilers!)
+  // =========================================================================
+  ldi_op: {
+    id: 'ldi_op',
+    title: 'LDI（即値代入命令）',
+    reading: 'Load Immediate',
+    category: 'アセンブリ命令・記号',
+    summary:
+      '「Load Immediate（ロード・イミディエイト）」の略。計算をせず、命令のすぐ後ろに書いた数値（IMM）をそのまま作業机レジスタ ACC へセットする命令です。例：「LDI 5」＝ ACC に 5 を入れる。',
+    analogy: '電卓で最初に数字をポンッと打ち込んで画面にセットする操作。',
+    related: ['acc_reg', 'imm_val', 'add_op', 'sub_op', 'jz_op'],
+  },
+  add_op: {
+    id: 'add_op',
+    title: 'ADD（加算命令）',
+    reading: 'Add',
+    category: 'アセンブリ命令・記号',
+    summary:
+      '「Add（足す）」の略。いま作業机レジスタ ACC に入っている数値に、命令の後ろの数値（IMM）を足し算して ACC に上書き保存する命令です。例：「ADD 7」＝ 今の ACC に +7 する。',
+    analogy: '電卓の画面に出ている数に「＋7＝」と続けて足す操作。',
+    related: ['ldi_op', 'sub_op', 'acc_reg', 'alu'],
+  },
+  sub_op: {
+    id: 'sub_op',
+    title: 'SUB（減算命令・引き算切替）',
+    reading: 'Subtract',
+    category: 'アセンブリ命令・記号',
+    summary:
+      '「Subtract（引く）」の略。アセンブリ命令では今の ACC から後ろの数値を引いて保存します（例：「SUB 4」＝ ACC − 4）。ALU 回路のピンとしては「0なら足し算、1なら引き算」を切り替えるスイッチです。',
+    analogy: '電卓の「−4＝」キー。結果がちょうど 0 になると ZERO_4B（Z=1）が光ります。',
+    related: ['ldi_op', 'add_op', 'jz_op', 'alu'],
+  },
+  jz_op: {
+    id: 'jz_op',
+    title: 'JZ（ゼロならジャンプ命令）',
+    reading: 'Jump if Zero',
+    category: 'アセンブリ命令・記号',
+    summary:
+      '「Jump if Zero（もし0なら飛べ）」の略。いま作業机 ACC がぴったり 0（Z=1）のときだけ、指定した番地へプログラムの実行位置（PC）をジャンプさせます。0でなければ普通に次の番地へ進みます（ACCの値は変わりません）。',
+    analogy: '「もし残りカウントが 0 になったら、4番地の開門手順へ進め！」という条件つきの分岐標識。',
+    related: ['pc_reg', 'acc_reg', 'zero_flag', 'cond_pc'],
+  },
+  loop_op: {
+    id: 'loop_op',
+    title: 'LOOP（繰り返し帰還）',
+    reading: 'Loop / Return',
+    category: 'アセンブリ命令・記号',
+    summary:
+      '指定した番地へ戻って同じ命令を繰り返す処理。Stage 24 では3番地に固定された外部帰還線（RET=1）と JZ 1 の組み合わせにより、ACC の値を保ったまま1番地へ戻るハードウェア帰還ループを実現します。',
+    analogy: 'カウントが 0 になるまで「1引く→確認」をぐるぐる回り続けるタイマーの歯車。',
+    related: ['jz_op', 'pc_reg', 'algorithm_loop'],
+  },
+  acc_reg: {
+    id: 'acc_reg',
+    title: 'ACC（アキュムレータ／作業机レジスタ）',
+    reading: 'Accumulator',
+    category: 'CPUレジスタ・記号',
+    summary:
+      '「Accumulator（値を積み上げる箱）」の略。CPU の中にある4ビット（0〜15）のメイン作業机レジスタで、LDI・ADD・SUB の計算結果はいつもこの ACC に保存されます。',
+    analogy: '電卓の一番大きな液晶表示。今いくつの数を持っているか常にここに残ります。',
+    related: ['ldi_op', 'add_op', 'sub_op', 'register'],
+  },
+  imm_val: {
+    id: 'imm_val',
+    title: 'IMM（即値：命令に書いた数値）',
+    reading: 'Immediate Value',
+    category: 'CPUレジスタ・記号',
+    summary:
+      '「Immediate（すぐ目の前の値）」の略。たとえば「LDI 5」の「5」や「JZ 4」の「4」のように、命令カード自体に直接書き込まれている4ビット（0〜15）の数値データのことです。',
+    analogy: '「5を足せ」「4番地へ飛べ」の数字そのもの。',
+    related: ['ldi_op', 'acc_reg', 'rom_mem'],
+  },
+  rom_mem: {
+    id: 'rom_mem',
+    title: 'ROM（命令メモリ表）',
+    reading: 'Read-Only Memory',
+    category: 'CPUレジスタ・記号',
+    summary:
+      '「Read-Only Memory（読み出し専用メモリ）」の略。0番地・1番地・2番地…と番地ごとに命令カードを並べておく棚で、PC（プログラムカウンタ）が指した番地の命令を1拍ずつ CPU へ渡します。',
+    analogy: '番号のふられた作業手順書のページ棚。PC の番号と同じ行が読み上げられます。',
+    related: ['pc_reg', 'assembly', 'ark4_sys'],
+  },
+  pc_reg: {
+    id: 'pc_reg',
+    title: 'PC（プログラムカウンタ番地）',
+    reading: 'Program Counter',
+    category: 'CPUレジスタ・記号',
+    summary:
+      '「Program Counter」の略。ROM に並んだ命令のうち「いま何番地（0〜15番地）を実行しているか」を覚えている番号札。ふだんは1拍ごとに +1 進み、JZ ジャンプが起きると飛び先の番地へ切り替わります。',
+    analogy: '楽譜の「いま何小節目を弾いているか」を指さすしおり。',
+    related: ['rom_mem', 'jz_op', 'program_counter'],
+  },
+  cin_cout: {
+    id: 'cin_cout',
+    title: 'CIN / COUT（くり上がり入出力）',
+    reading: 'Carry In / Carry Out',
+    category: '回路ピン記号',
+    summary:
+      'CIN（Carry In）は「下の桁から渡されるくり上がり入力」、COUT（Carry Out）は「上の桁へ渡すくり上がり出力（桁あふれ）」のことです。足し算器を横につなぐバトンリレーの端子です。',
+    analogy: '筆算で右の桁から「1くり上がるよ！」とメモを書いて渡すバトン。',
+    related: ['full_adder', 'ripple_adder', 'binary'],
+  },
+  sel_pin: {
+    id: 'sel_pin',
+    title: 'SEL（選択レバー信号）',
+    reading: 'Select',
+    category: '回路ピン記号',
+    summary:
+      '「Select（選ぶ）」の略。マルチプレクサ（MUX）で、0 なら1つ目の入力ルート（D0 や A）、1 なら2つ目の入力ルート（D1 や B）を選んで出力へ通す切替レバーのピンです。',
+    analogy: '線路の分岐ポイントを切り替えるレバー。',
+    related: ['mux', 'mux_4bit'],
+  },
+  we_pin: {
+    id: 'we_pin',
+    title: 'WE（書き込み許可信号）',
+    reading: 'Write Enable',
+    category: '回路ピン記号',
+    summary:
+      '「Write Enable（書き込みを有効にする）」の略。1 にすると新しい値を記憶回路へ上書き保存し、0 にすると記憶をロックして今の値をずっと保持します。',
+    analogy: '金庫の「ロック解除レバー」。開けているとき（1）だけ中身を入れ替えられます。',
+    related: ['d_latch', 'register', 'acc_reg'],
+  },
+  br_pin: {
+    id: 'br_pin',
+    title: 'BR（条件分岐フラグ）',
+    reading: 'Branch',
+    category: '回路ピン記号',
+    summary:
+      '「Branch（枝分かれ・分岐）」の略。JZ 命令のときだけ 1 になり、「もし今の値が 0（Z=1）ならジャンプしてよい」と COND_PC へ許可を出す信号線です。',
+    analogy: '分岐点にある「条件つきワープ許可スイッチ」。',
+    related: ['jz_op', 'cond_pc', 'zero_flag'],
+  },
 };
 
 /**
@@ -1073,6 +1207,21 @@ const TERM_ALIASES = [
   ['アセンブリ言語', 'assembly'],
   ['アセンブリ', 'assembly'],
   ['アルゴリズム', 'algorithm_loop'],
+  ['LDI', 'ldi_op'],
+  ['ADD', 'add_op'],
+  ['SUB', 'sub_op'],
+  ['JZ', 'jz_op'],
+  ['LOOP', 'loop_op'],
+  ['ACC', 'acc_reg'],
+  ['IMM', 'imm_val'],
+  ['ROM', 'rom_mem'],
+  ['PC', 'pc_reg'],
+  ['CLK', 'clock'],
+  ['CIN', 'cin_cout'],
+  ['COUT', 'cin_cout'],
+  ['SEL', 'sel_pin'],
+  ['WE', 'we_pin'],
+  ['BR', 'br_pin'],
   ['CPU', 'cpu'],
   ['アポロ11号', 'apollo11'],
   ['クロード・シャノン', 'shannon'],

@@ -1341,11 +1341,17 @@ export class PhysicsLabCanvas {
         ctx.textAlign = 'center';
         ctx.fillText(part.name, sx + 44, ry + rowH / 2);
 
-        // Machine Code Pill
+        // Meaning + Machine Code Pill
         ctx.font = 'bold 10px monospace';
         ctx.fillStyle = '#8ee5ff';
         ctx.textAlign = 'left';
-        ctx.fillText(part.meta || `機械語 ${part.opcodeBits}:${part.immBits}`, sx + 90, ry + rowH * 0.34);
+        const codeTag =
+          part.opcodeBits && part.immBits ? `機械語 ${part.opcodeBits}:${part.immBits}` : '';
+        const topLine =
+          part.meta && codeTag && !part.meta.includes('機械語')
+            ? `${part.meta} ｜ ${codeTag}`
+            : part.meta || codeTag;
+        ctx.fillText(topLine, sx + 90, ry + rowH * 0.34, sw - 100);
 
         // Meaning / Rule
         ctx.font = '10.5px -apple-system, sans-serif';
