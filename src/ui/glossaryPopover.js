@@ -12,14 +12,17 @@
 
 import {
   getGlossaryTerm,
+  getGlossaryTermForChip,
   tokenizeGlossaryText,
   hasGlossaryTerms,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
-} from '../data/glossary.js?v=30';
-import { persistSaveData } from '../state/storage.js';
-import { sound } from '../audio/sound.js?v=30';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=30';
+} from '../data/glossary.js?v=31';
+import { getChipDef } from '../engine/circuit.js';
+import { persistSaveData } from '../state/storage.js?v=31';
+import { sound } from '../audio/sound.js?v=31';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=31';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=31';
 
 let _saveProvider = null;
 
@@ -106,9 +109,18 @@ class GlossaryPopoverController {
     this.titleEl = null;
     this.readingEl = null;
     this.pinsWrap = null;
+    this.viewTabsWrap = null;
+    this.tabDiagramBtn = null;
+    this.tabCircuitBtn = null;
     this.diagramWrap = null;
     this.diagramHint = null;
     this.diagramCanvas = null;
+    this.myCircuitWrap = null;
+    this.circuitHeadEl = null;
+    this.circuitStepBadgeEl = null;
+    this.circuitSvgHostEl = null;
+    this.circuitMetaEl = null;
+    this.circuitSubchipsEl = null;
     this.summaryEl = null;
     this.analogyWrap = null;
     this.analogyEl = null;
@@ -118,10 +130,14 @@ class GlossaryPopoverController {
     this.doneBtn = null;
 
     this.currentTermId = null;
+    this.currentTerm = null;
+    this.currentForged = null;
+    this.activeView = 'diagram'; // 'diagram' | 'circuit'
     this.history = [];
     this.activeStoryTerms = null;
     this.inPrologue = false;
     this.diagramPlayer = new StoryDiagramPlayer();
+    this._miniSimHandle = null;
     this._bound = false;
   }
 
@@ -152,9 +168,18 @@ class GlossaryPopoverController {
     this.titleEl = root.querySelector('#gp-title');
     this.readingEl = root.querySelector('#gp-reading');
     this.pinsWrap = root.querySelector('#gp-pins-wrap');
+    this.viewTabsWrap = root.querySelector('#gp-view-tabs');
+    this.tabDiagramBtn = root.querySelector('#gp-tab-diagram');
+    this.tabCircuitBtn = root.querySelector('#gp-tab-circuit');
     this.diagramWrap = root.querySelector('#gp-diagram-wrap');
     this.diagramHint = root.querySelector('.gp-diagram-hint');
     this.diagramCanvas = root.querySelector('#gp-live-canvas');
+    this.myCircuitWrap = root.querySelector('#gp-my-circuit-wrap');
+    this.circuitHeadEl = root.querySelector('#gp-circuit-head');
+    this.circuitStepBadgeEl = root.querySelector('#gp-circuit-step-badge');
+    this.circuitSvgHostEl = root.querySelector('#gp-circuit-svg-host');
+    this.circuitMetaEl = root.querySelector('#gp-circuit-meta');
+    this.circuitSubchipsEl = root.querySelector('#gp-circuit-subchips');
     this.summaryEl = root.querySelector('#gp-summary');
     this.analogyWrap = root.querySelector('#gp-analogy-wrap');
     this.analogyEl = root.querySelector('#gp-analogy');
@@ -162,6 +187,20 @@ class GlossaryPopoverController {
     this.relatedList = root.querySelector('#gp-related-list');
     this.closeBtn = root.querySelector('#gp-close');
     this.doneBtn = root.querySelector('#gp-done');
+
+    this.tabDiagramBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.activeView === 'diagram') return;
+      sound.playSwitch(true);
+      this._setActiveView('diagram');
+    });
+
+    this.tabCircuitBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.activeView === 'circuit' || !this.currentForged?.circuit) return;
+      sound.playSwitch(true);
+      this._setActiveView('circuit');
+    });
 
     const closeHandler = (e) => {
       e.stopPropagation();
@@ -202,7 +241,7 @@ class GlossaryPopoverController {
     return Boolean(this.root && !this.root.classList.contains('hidden'));
   }
 
-  open(termId, { pushHistory = false } = {}) {
+  open(termId, { pushHistory = false, preferMyCircuit = false } = {}) {
     if (!this._ensureBound()) return;
     const term = getGlossaryTerm(termId);
     if (!term) return;
@@ -213,35 +252,173 @@ class GlossaryPopoverController {
     }
 
     if (pushHistory && this.currentTermId && this.currentTermId !== termId) {
-      this.history.push(this.currentTermId);
+      this.history.push({ termId: this.currentTermId, view: this.activeView });
     } else if (!pushHistory) {
       this.history = [];
     }
 
     this.currentTermId = termId;
-    this._renderTerm(term);
+    this._renderTerm(term, { preferMyCircuit });
     this.root.classList.remove('hidden');
   }
 
-  navigateTo(termId) {
+  navigateTo(termId, { preferMyCircuit = false } = {}) {
     if (!termId || termId === this.currentTermId) return;
     const save = this.getSave();
     if (!isGlossaryTermUnlocked(termId, save, this.activeStoryTerms, this.inPrologue)) return;
-    this.open(termId, { pushHistory: true });
+    this.open(termId, { pushHistory: true, preferMyCircuit });
   }
 
   goBack() {
     if (this.history.length === 0) return;
     sound.playSwitch(false);
-    const prevId = this.history.pop();
+    const prev = this.history.pop();
+    const prevId = typeof prev === 'string' ? prev : prev.termId;
+    const prevView = typeof prev === 'string' ? 'diagram' : prev.view;
     const prevTerm = getGlossaryTerm(prevId);
     if (!prevTerm) return;
     this.currentTermId = prevId;
-    this._renderTerm(prevTerm);
+    this._renderTerm(prevTerm, { preferMyCircuit: prevView === 'circuit' });
   }
 
-  _renderTerm(term) {
+  _stopMiniSim() {
+    if (this._miniSimHandle) {
+      this._miniSimHandle.stop();
+      this._miniSimHandle = null;
+    }
+  }
+
+  _setActiveView(view) {
+    const term = this.currentTerm;
+    const forged = this.currentForged;
+    const save = this.getSave();
+    const hasCircuit = Boolean(forged?.circuit);
+    const target = view === 'circuit' && hasCircuit ? 'circuit' : 'diagram';
+    this.activeView = target;
+
+    this.tabDiagramBtn?.classList.toggle('active', target === 'diagram');
+    this.tabDiagramBtn?.setAttribute('aria-selected', target === 'diagram' ? 'true' : 'false');
+    this.tabCircuitBtn?.classList.toggle('active', target === 'circuit');
+    this.tabCircuitBtn?.setAttribute('aria-selected', target === 'circuit' ? 'true' : 'false');
+
+    if (target === 'circuit' && hasCircuit && term) {
+      this.diagramPlayer.unmount();
+      this.diagramWrap?.classList.add('hidden');
+      this.myCircuitWrap?.classList.remove('hidden');
+      this._mountMyCircuit(term, forged, save?.customChips || {});
+    } else {
+      this._stopMiniSim();
+      this.myCircuitWrap?.classList.add('hidden');
+      if (term?.anim && this.diagramWrap && this.diagramCanvas) {
+        this.diagramWrap.classList.remove('hidden');
+        this.diagramCanvas.classList.remove('hidden');
+        if (this.diagramHint) {
+          this.diagramHint.textContent = '⚡ 動くモジュール図解（タップで状態切替）';
+        }
+        requestAnimationFrame(() => {
+          if (this.isOpen() && this.currentTermId === term.id && this.activeView === 'diagram') {
+            this.diagramPlayer.mount(this.diagramCanvas, term.anim);
+          }
+        });
+      }
+    }
+  }
+
+  _mountMyCircuit(term, forged, customChips) {
+    this._stopMiniSim();
+    const circuit = forged.circuit;
+    const chipId = term.chipId;
+    const isProv = Boolean(forged.provisioned);
+
+    if (this.circuitHeadEl) {
+      this.circuitHeadEl.textContent = isProv
+        ? `📦 標準支給された [${forged.name || chipId}] の回路`
+        : chipId === 'NAND'
+          ? `🔧 あなたが物理スイッチから創った [NAND] の実回路`
+          : `🔧 あなたが作った [${forged.name || chipId}] の実回路`;
+    }
+
+    if (this.circuitSvgHostEl) {
+      this.circuitSvgHostEl.innerHTML = renderMiniSchematicSvg(circuit, customChips);
+    }
+
+    if (this.circuitMetaEl) {
+      const nodeCount = circuit.nodes?.length || 0;
+      const wireCount = circuit.wires?.length || 0;
+      const nandLabel =
+        chipId === 'NAND'
+          ? `物理部品: ${nodeCount}個`
+          : `実効NAND: ${forged.nandCount ?? 0}個`;
+      this.circuitMetaEl.innerHTML = `
+        <span class="gp-meta-pill">部品 <b>${nodeCount}</b></span>
+        <span class="gp-meta-pill">配線 <b>${wireCount}</b></span>
+        <span class="gp-meta-pill amber">${nandLabel}</span>
+      `;
+    }
+
+    // Build clickable sub-chip links so the player can drill down into lower-level forged circuits!
+    if (this.circuitSubchipsEl) {
+      this.circuitSubchipsEl.textContent = '';
+      const seenTypes = new Set();
+      const drillItems = [];
+      for (const n of circuit.nodes || []) {
+        if (!n.type || seenTypes.has(n.type)) continue;
+        seenTypes.add(n.type);
+        const subTerm = getGlossaryTermForChip(n.type);
+        if (!subTerm || subTerm.id === term.id) continue;
+        if (!isGlossaryTermUnlocked(subTerm.id, this.getSave(), this.activeStoryTerms, this.inPrologue)) {
+          continue;
+        }
+        const subHasCircuit = Boolean(customChips?.[n.type]?.circuit);
+        const subDef = getChipDef(n.type, customChips);
+        drillItems.push({
+          term: subTerm,
+          label: subDef?.name || n.type,
+          hasCircuit: subHasCircuit,
+        });
+      }
+
+      if (drillItems.length > 0) {
+        const lbl = document.createElement('div');
+        lbl.className = 'gp-subchips-lbl';
+        lbl.textContent = '🔍 この中で使っている部品を見る：';
+        this.circuitSubchipsEl.appendChild(lbl);
+
+        const row = document.createElement('div');
+        row.className = 'gp-related-list';
+        for (const item of drillItems) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `gp-related-chip ${item.hasCircuit ? 'my-circuit-jump' : ''}`;
+          btn.textContent = item.hasCircuit
+            ? `🔧 ${item.label} の自作回路`
+            : `⚡ ${item.label}`;
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sound.playSwitch(true);
+            this.navigateTo(item.term.id, { preferMyCircuit: item.hasCircuit });
+          });
+          row.appendChild(btn);
+        }
+        this.circuitSubchipsEl.appendChild(row);
+        this.circuitSubchipsEl.classList.remove('hidden');
+      } else {
+        this.circuitSubchipsEl.classList.add('hidden');
+      }
+    }
+
+    this._miniSimHandle = startMiniSchematicLoop(
+      this.myCircuitWrap,
+      circuit,
+      customChips,
+      chipId,
+      { badgeSelector: '#gp-circuit-step-badge' }
+    );
+  }
+
+  _renderTerm(term, { preferMyCircuit = false } = {}) {
     this.diagramPlayer.unmount();
+    this._stopMiniSim();
     const save = this.getSave();
     const diagramUnlocked = isGlossaryDiagramUnlocked(
       term.id,
@@ -249,6 +426,13 @@ class GlossaryPopoverController {
       this.activeStoryTerms,
       this.inPrologue
     );
+    const forged =
+      diagramUnlocked && term.chipId && save?.customChips?.[term.chipId]?.circuit
+        ? save.customChips[term.chipId]
+        : null;
+
+    this.currentTerm = term;
+    this.currentForged = forged;
 
     this.categoryEl.textContent = `📖 用語解説 // ${term.category}`;
     this.titleEl.textContent = term.title;
@@ -270,27 +454,42 @@ class GlossaryPopoverController {
       }
     }
 
-    // Embedded Live Interactive Diagram (ONLY if diagram is unlocked!)
-    if (this.diagramWrap && this.diagramCanvas) {
-      if (term.anim && diagramUnlocked) {
-        this.diagramWrap.classList.remove('hidden');
-        this.diagramCanvas.classList.remove('hidden');
-        if (this.diagramHint) {
-          this.diagramHint.textContent = '⚡ 動くモジュール図解（タップで状態切替）';
-        }
-        requestAnimationFrame(() => {
-          if (this.isOpen() && this.currentTermId === term.id) {
-            this.diagramPlayer.mount(this.diagramCanvas, term.anim);
+    // View tabs (Conceptual Live Diagram <-> Player's Actual Forged Circuit!)
+    if (forged) {
+      this.viewTabsWrap?.classList.remove('hidden');
+      if (this.tabCircuitBtn) {
+        this.tabCircuitBtn.textContent = forged.provisioned
+          ? '📦 支給された回路'
+          : '🔧 自分が作った回路';
+      }
+      this._setActiveView(preferMyCircuit ? 'circuit' : 'diagram');
+    } else {
+      this.viewTabsWrap?.classList.add('hidden');
+      this.myCircuitWrap?.classList.add('hidden');
+      this.activeView = 'diagram';
+
+      // Embedded Live Interactive Diagram (ONLY if diagram is unlocked!)
+      if (this.diagramWrap && this.diagramCanvas) {
+        if (term.anim && diagramUnlocked) {
+          this.diagramWrap.classList.remove('hidden');
+          this.diagramCanvas.classList.remove('hidden');
+          if (this.diagramHint) {
+            this.diagramHint.textContent = '⚡ 動くモジュール図解（タップで状態切替）';
           }
-        });
-      } else if (term.anim && !diagramUnlocked) {
-        this.diagramWrap.classList.remove('hidden');
-        this.diagramCanvas.classList.add('hidden');
-        if (this.diagramHint) {
-          this.diagramHint.textContent = `🔒 内部構造の動的図解は ${term.unlockLabel || 'ステージクリア'} で解放されます`;
+          requestAnimationFrame(() => {
+            if (this.isOpen() && this.currentTermId === term.id) {
+              this.diagramPlayer.mount(this.diagramCanvas, term.anim);
+            }
+          });
+        } else if (term.anim && !diagramUnlocked) {
+          this.diagramWrap.classList.remove('hidden');
+          this.diagramCanvas.classList.add('hidden');
+          if (this.diagramHint) {
+            this.diagramHint.textContent = `🔒 内部構造の動的図解は ${term.unlockLabel || 'ステージクリア'} で解放されます`;
+          }
+        } else {
+          this.diagramWrap.classList.add('hidden');
         }
-      } else {
-        this.diagramWrap.classList.add('hidden');
       }
     }
 
@@ -329,7 +528,8 @@ class GlossaryPopoverController {
             this.activeStoryTerms,
             this.inPrologue
           );
-          chip.textContent = `${hasDiag ? '⚡ ' : '📖 '}${rel.title.split('（')[0]}`;
+          const relForged = Boolean(hasDiag && rel.chipId && save?.customChips?.[rel.chipId]?.circuit);
+          chip.textContent = `${relForged ? '🔧 ' : hasDiag ? '⚡ ' : '📖 '}${rel.title.split('（')[0]}`;
           chip.addEventListener('click', (e) => {
             e.stopPropagation();
             sound.playSwitch(true);
@@ -350,7 +550,9 @@ class GlossaryPopoverController {
 
     // Sync Back button visibility & previous term label
     const hasHistory = this.history.length > 0;
-    const prevTerm = hasHistory ? getGlossaryTerm(this.history[this.history.length - 1]) : null;
+    const prevEntry = hasHistory ? this.history[this.history.length - 1] : null;
+    const prevId = typeof prevEntry === 'string' ? prevEntry : prevEntry?.termId;
+    const prevTerm = prevId ? getGlossaryTerm(prevId) : null;
     const prevShort = prevTerm ? prevTerm.title.split('（')[0] : '';
 
     if (this.backTopBtn) {
@@ -369,6 +571,7 @@ class GlossaryPopoverController {
 
   close() {
     this.diagramPlayer.unmount();
+    this._stopMiniSim();
     if (!this.root) return;
     this.root.classList.add('hidden');
   }

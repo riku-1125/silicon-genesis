@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg" />
   <link rel="apple-touch-icon" href="./assets/icon.svg" />
-  <link rel="stylesheet" href="./styles/main.css?v=30" />
+  <link rel="stylesheet" href="./styles/main.css?v=31" />
 </head>
 <body>
   <div id="app">
@@ -237,9 +237,20 @@
       <div id="gp-title" class="gp-title"></div>
       <div id="gp-reading" class="gp-reading"></div>
       <div id="gp-pins-wrap" class="gp-pins-wrap hidden"></div>
+      <div id="gp-view-tabs" class="gp-view-tabs hidden" role="tablist" aria-label="表示切替">
+        <button id="gp-tab-diagram" class="gp-view-tab active" type="button" role="tab" aria-selected="true">⚡ 動く仕組み図解</button>
+        <button id="gp-tab-circuit" class="gp-view-tab" type="button" role="tab" aria-selected="false">🔧 自分が作った回路</button>
+      </div>
       <div id="gp-diagram-wrap" class="vc-live-wrap gp-diagram-wrap hidden">
         <div class="gp-diagram-hint">⚡ 動くモジュール図解（タップで状態切替）</div>
         <canvas id="gp-live-canvas" class="vc-live-canvas" aria-label="モジュール動く図解"></canvas>
+      </div>
+      <div id="gp-my-circuit-wrap" class="gp-my-circuit-wrap hidden">
+        <div id="gp-circuit-head" class="gp-circuit-head"></div>
+        <div id="gp-circuit-step-badge" class="inspector-live-step-badge">⚡ 自動稼働デモ中...</div>
+        <div id="gp-circuit-svg-host" class="gp-circuit-svg-host"></div>
+        <div id="gp-circuit-meta" class="gp-circuit-meta"></div>
+        <div id="gp-circuit-subchips" class="gp-circuit-subchips hidden"></div>
       </div>
       <p id="gp-summary" class="gp-summary"></p>
       <div id="gp-analogy-wrap" class="gp-analogy-wrap hidden">
@@ -260,6 +271,6 @@
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="./src/main.js?v=30"></script>
+  <script type="module" src="./src/main.js?v=31"></script>
 </body>
 </html>

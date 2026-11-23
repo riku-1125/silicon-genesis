@@ -2632,6 +2632,101 @@ button:disabled {
 .gp-pin-pill.out b {
   color: var(--emerald-bright);
 }
+.gp-view-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+.gp-view-tab {
+  padding: 8px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #9cb3c9;
+  background: rgba(13, 21, 30, 0.9);
+  border: 1.5px solid #2e4257;
+  text-align: center;
+  transition: all 0.14s ease;
+}
+.gp-view-tab.active {
+  color: #fff8e6;
+  background: linear-gradient(180deg, #273b50 0%, #192838 100%);
+  border-color: #6fd6ff;
+  box-shadow: 0 0 12px rgba(111, 214, 255, 0.22);
+}
+#gp-tab-circuit.active {
+  border-color: var(--amber-bright);
+  background: linear-gradient(180deg, #3c2e17 0%, #241b0e 100%);
+  box-shadow: 0 0 14px rgba(255, 184, 77, 0.28);
+}
+.gp-my-circuit-wrap {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #0d151f;
+  border: 1.5px solid rgba(255, 184, 77, 0.55);
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.gp-circuit-head {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--amber-bright);
+  line-height: 1.35;
+}
+.gp-circuit-svg-host .mini-svg-wrap {
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.gp-circuit-svg-host .mini-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+}
+.gp-circuit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gp-meta-pill {
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #bfd4e8;
+  background: rgba(20, 32, 44, 0.9);
+  border: 1px solid #30455a;
+}
+.gp-meta-pill.amber {
+  color: var(--amber-bright);
+  border-color: rgba(255, 184, 77, 0.45);
+  background: rgba(255, 184, 77, 0.1);
+}
+.gp-circuit-subchips {
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+.gp-subchips-lbl {
+  font-size: 11px;
+  font-weight: 800;
+  color: #9bb4cb;
+  margin-bottom: 5px;
+}
+.gp-related-chip.my-circuit-jump {
+  color: #ffe9b8;
+  background: rgba(255, 184, 77, 0.14);
+  border-color: rgba(255, 184, 77, 0.52);
+}
+.gp-related-chip.my-circuit-jump:active {
+  background: rgba(255, 184, 77, 0.3);
+}
 .gp-diagram-wrap {
   margin-top: 10px;
   margin-bottom: 2px;

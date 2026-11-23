@@ -3,17 +3,17 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=30';
-import { STAGES } from '../data/stages.js?v=30';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=30';
-import { isChapter2Unlocked } from '../state/storage.js?v=30';
-import { sound } from '../audio/sound.js?v=30';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=31';
+import { STAGES } from '../data/stages.js?v=31';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=31';
+import { isChapter2Unlocked } from '../state/storage.js?v=31';
+import { sound } from '../audio/sound.js?v=31';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=30';
+} from './glossaryPopover.js?v=31';
 
 export class PrologueOverlay {
   constructor(rootEl, { onFinish, onContinue, onStartChapter2 }) {
