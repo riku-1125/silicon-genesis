@@ -4,13 +4,13 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=34';
-import { CODEX_ENTRIES } from '../data/codex.js?v=34';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=35';
+import { CODEX_ENTRIES } from '../data/codex.js?v=35';
 import {
   ARK4_ISA_TABLE,
   getStageSymbolReferences,
   stageUsesIsaTable,
-} from '../data/symbolReference.js?v=34';
+} from '../data/symbolReference.js?v=35';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -19,13 +19,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=34';
+} from '../data/glossary.js?v=35';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
-import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=34';
-import { sound } from '../audio/sound.js?v=34';
-import { StoryDiagramGroup } from './storyDiagram.js?v=34';
-import { glossaryPopover } from './glossaryPopover.js?v=34';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=34';
+import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=35';
+import { sound } from '../audio/sound.js?v=35';
+import { StoryDiagramGroup } from './storyDiagram.js?v=35';
+import { glossaryPopover } from './glossaryPopover.js?v=35';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=35';
 
 function esc(str) {
   return String(str ?? '')

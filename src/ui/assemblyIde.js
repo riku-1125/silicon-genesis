@@ -23,7 +23,7 @@ import {
   evaluateRomStage,
   formatProgramText,
   assembleProgramText,
-} from '../engine/romRunner.js?v=34';
+} from '../engine/romRunner.js?v=35';
 
 const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JZ'];
 

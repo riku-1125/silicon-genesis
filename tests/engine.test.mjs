@@ -1356,9 +1356,11 @@ test('v34 Chapter I & II Cinematic Endings: rich beats, dynamic hardware stats, 
   assert.ok(ch2.some((s) => s.text.includes('512') && s.text.includes('1024')));
   assert.ok(ch2.some((s) => s.chapterCard?.sub?.includes('512 NAND')));
 
-  // Animated 16-bit pixel-art ending canvases and interactive choices are present in both
-  assert.ok(ch1.some((s) => s.canvasScene === 'ch1_beacon' && s.canvasPhase === 1));
-  assert.ok(ch2.some((s) => s.canvasScene === 'ch2_bluesky' && s.canvasPhase === 1));
+  // Cohesive high-detail ending scenes + subtle lighting VFX and interactive choices are present in both
+  assert.ok(ch1.some((s) => s.scene === './assets/scene_ending_ch1.jpg' && s.canvasScene === 'fx_hub_awaken'));
+  assert.ok(ch1.some((s) => s.canvasScene === 'fx_beacon' && s.canvasPhase === 1));
+  assert.ok(ch2.some((s) => s.scene === './assets/scene_ending_bluesky.jpg' && s.canvasScene === 'fx_bluesky_breeze'));
+  assert.ok(ch2.some((s) => s.canvasScene === 'fx_hatch_light'));
   assert.ok(ch1.some((s) => Array.isArray(s.choices) && s.choices.length >= 3));
   assert.ok(ch2.some((s) => Array.isArray(s.choices) && s.choices.length >= 3));
 
