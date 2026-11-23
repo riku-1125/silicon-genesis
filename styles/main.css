@@ -1665,6 +1665,149 @@ button:disabled {
 .pro-mood.mood-emerald {
   background: radial-gradient(circle at 50% 50%, rgba(82, 227, 182, 0.18) 0%, rgba(8, 16, 18, 0.78) 80%);
 }
+.pro-mood.mood-dawn {
+  background: linear-gradient(180deg, rgba(16, 32, 52, 0.14) 0%, rgba(255, 198, 112, 0.12) 60%, rgba(10, 15, 22, 0.58) 100%);
+}
+.pro-mood.mood-bluesky {
+  background: linear-gradient(180deg, rgba(80, 180, 255, 0.06) 0%, rgba(255, 248, 210, 0.08) 65%, rgba(12, 24, 38, 0.42) 100%);
+}
+
+.pro-ending-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+  z-index: 0;
+}
+
+/* Title Screen Ending Replay Buttons */
+.title-ending-replays {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.title-btn-ending {
+  flex: 1 1 0;
+  font-size: 12px !important;
+  border-color: rgba(82, 227, 182, 0.5) !important;
+  color: #b8ffe8 !important;
+}
+.title-btn-ending.sky {
+  border-color: rgba(111, 214, 255, 0.6) !important;
+  color: #d6f4ff !important;
+  background: linear-gradient(180deg, rgba(24, 72, 112, 0.85) 0%, rgba(14, 38, 62, 0.92) 100%) !important;
+}
+
+/* Victory Modal — Chapter I & II Journey Achievement Certificate */
+.victory-cert-card {
+  margin-bottom: 12px;
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(18, 44, 38, 0.92) 0%, rgba(11, 22, 26, 0.96) 100%);
+  border: 1.5px solid #52e3b6;
+  box-shadow: 0 0 22px rgba(82, 227, 182, 0.22);
+}
+.victory-cert-card.sky {
+  background: linear-gradient(180deg, rgba(20, 62, 102, 0.92) 0%, rgba(12, 26, 40, 0.96) 100%);
+  border-color: #7ee8ff;
+  box-shadow: 0 0 26px rgba(86, 204, 242, 0.3);
+}
+.vcert-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ffd166;
+  margin-bottom: 4px;
+}
+.vcert-title {
+  font-size: 15px;
+  font-weight: 900;
+  color: #ffffff;
+  margin-bottom: 5px;
+}
+.vcert-desc {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #d8ecf8;
+  margin: 0 0 9px;
+}
+.vcert-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.vcert-stat {
+  background: rgba(8, 16, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 6px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1px;
+}
+.vcert-lbl {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #93b5cf;
+}
+.vcert-stat strong {
+  font-size: 12px;
+  font-weight: 900;
+  color: #ffe28a;
+}
+.vcert-stat small {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #8ee5ff;
+}
+.vcert-chain {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #9cffdc;
+  background: rgba(8, 16, 24, 0.58);
+  border: 1px solid rgba(82, 227, 182, 0.32);
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: center;
+}
+.victory-cert-card.sky .vcert-chain {
+  color: #c8f3ff;
+  border-color: rgba(111, 214, 255, 0.42);
+}
+
+.btn-sky {
+  background: linear-gradient(180deg, #256f9e 0%, #17496b 100%);
+  border: 1.5px solid #7ee8ff;
+  color: #ffffff;
+  box-shadow: 0 2px 0 #092133;
+}
+.btn-sky:active {
+  transform: translateY(1px);
+}
+
+/* Map Modal Ending Replay Buttons */
+.map-ending-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.ending-replay-btn {
+  border-color: rgba(82, 227, 182, 0.55) !important;
+  background: linear-gradient(180deg, #16332c 0%, #0e201c 100%) !important;
+}
+.ending-replay-btn.sky {
+  border-color: rgba(111, 214, 255, 0.65) !important;
+  background: linear-gradient(180deg, #153852 0%, #0d2336 100%) !important;
+}
 
 .prologue-story.pro-shake {
   animation: screenShake 0.42s ease;

@@ -2,7 +2,11 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=33';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=34';
+import {
+  buildChapter1EndingSteps,
+  buildChapter2EndingSteps,
+} from './data/endings.js?v=34';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -21,16 +25,16 @@ import {
   persistSaveData,
   resetSaveData,
   isChapter2Unlocked,
-} from './state/storage.js?v=33';
-import { sound } from './audio/sound.js?v=33';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=33';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=33';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=33';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=33';
-import { DialogueController } from './ui/dialogue.js?v=33';
-import { ModalManager } from './ui/modals.js?v=33';
-import { PrologueOverlay } from './ui/prologue.js?v=33';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=33';
+} from './state/storage.js?v=34';
+import { sound } from './audio/sound.js?v=34';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=34';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=34';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=34';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=34';
+import { DialogueController } from './ui/dialogue.js?v=34';
+import { ModalManager } from './ui/modals.js?v=34';
+import { PrologueOverlay } from './ui/prologue.js?v=34';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=34';
 
 class SiliconGenesisApp {
   constructor() {
@@ -72,6 +76,18 @@ class SiliconGenesisApp {
       },
       onStartChapter2: () => {
         this.startChapter2();
+      },
+      onReplayEnding1: () => {
+        this._playChapterEnding(1, {
+          endBtnLabel: 'タイトルへ戻る ▶',
+          onComplete: () => this.prologue.showTitle(this.save),
+        });
+      },
+      onReplayEnding2: () => {
+        this._playChapterEnding(2, {
+          endBtnLabel: 'タイトルへ戻る ▶',
+          onComplete: () => this.prologue.showTitle(this.save),
+        });
       },
     });
     this.workbench = new WorkbenchCanvas(this.dom.workbenchCanvas, {
@@ -232,6 +248,18 @@ class SiliconGenesisApp {
         onReplayPrologue: () => {
           sound.playPowerUp();
           this.prologue.startStory();
+        },
+        onReplayEnding1: () => {
+          this._playChapterEnding(1, {
+            endBtnLabel: '作業台へ戻る ▶',
+            onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
+          });
+        },
+        onReplayEnding2: () => {
+          this._playChapterEnding(2, {
+            endBtnLabel: '作業台へ戻る ▶',
+            onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
+          });
         },
         onResetSave: () => {
           this.save = resetSaveData();
@@ -1287,12 +1315,24 @@ class SiliconGenesisApp {
     this._syncNextStageQuickBtn();
     this._syncSceneCanvas();
 
-    // 4. Play post-clear revelation dialogue, then open Chip Forging ceremony!
+    // 4. Play post-clear revelation dialogue (or full-screen Chapter Ending!), then open Chip Forging ceremony!
     sound.setBgmTrack(this.stage.isFinale ? 'finale' : 'story');
     const nextStage = this._getNextStage();
+    const isCh1Finale = this.stage.id === 'stage_17';
+    const isCh2Finale = this.stage.id === 'stage_24';
+    const journeyStats = this._collectEndingStats(metrics);
 
     const openCeremony = () => {
       this.modals.openVictory(this.stage, chipDef, metrics, Boolean(nextStage), {
+        journeyStats,
+        onReplayEnding:
+          isCh1Finale || isCh2Finale
+            ? () =>
+                this._playChapterEnding(isCh2Finale ? 2 : 1, {
+                  endBtnLabel: '達成レコードへ戻る ▶',
+                  onComplete: () => openCeremony(),
+                })
+            : null,
         onNext: (overrideId) => {
           this.loadStage(overrideId || nextStage?.id || 'sandbox', { autoIntro: true });
         },
@@ -1312,7 +1352,21 @@ class SiliconGenesisApp {
       });
     };
 
-    if (this.stage.outroDialogue && this.stage.outroDialogue.length > 0) {
+    if (isCh1Finale) {
+      this.dialogue.showGoal(`✔ 第一章完結：${this.stage.revealedTitle}`, 'hako');
+      this._playChapterEnding(1, {
+        endBtnLabel: '第一章・達成レコードへ ▶',
+        metrics,
+        onComplete: openCeremony,
+      });
+    } else if (isCh2Finale) {
+      this.dialogue.showGoal(`☀ 第二章完結：${this.stage.revealedTitle}`, 'hako');
+      this._playChapterEnding(2, {
+        endBtnLabel: 'グランドフィナーレ認定証へ ▶',
+        metrics,
+        onComplete: openCeremony,
+      });
+    } else if (this.stage.outroDialogue && this.stage.outroDialogue.length > 0) {
       const act = ACTS.find((a) => a.id === this.stage.act) || ACTS[0];
       this.dialogue.playLines(this.stage.outroDialogue, {
         fallbackGoal: `✔ クリア済：${this.stage.revealedTitle}`,
@@ -1324,6 +1378,38 @@ class SiliconGenesisApp {
     } else {
       openCeremony();
     }
+  }
+
+  _collectEndingStats(latestMetrics = null) {
+    const chips = this.save?.customChips || {};
+    const forgedChipCount = Object.values(chips).filter((c) => c && !c.provisioned).length;
+    const ark4NandCount =
+      this.save?.bestNandCounts?.stage_17 ??
+      chips.ARK4_CORE?.nandCount ??
+      (this.stage?.id === 'stage_17' ? latestMetrics?.nandCount : null) ??
+      270;
+    const ark4SysNandCount =
+      chips.ARK4_SYS?.nandCount ??
+      this.save?.bestNandCounts?.stage_21 ??
+      (this.stage?.id === 'stage_24' ? latestMetrics?.nandCount : null) ??
+      479;
+    return {
+      ark4NandCount,
+      ark4SysNandCount,
+      forgedChipCount: Math.max(forgedChipCount, 1),
+      clearedCount: (this.save?.clearedStages || []).length,
+    };
+  }
+
+  _playChapterEnding(chapterNum, { endBtnLabel = '次へ ▶', metrics = null, onComplete = null } = {}) {
+    const stats = this._collectEndingStats(metrics);
+    const steps =
+      chapterNum === 2 ? buildChapter2EndingSteps(stats) : buildChapter1EndingSteps(stats);
+    this.dialogue.close();
+    this.prologue.playEnding(steps, {
+      endBtnLabel,
+      onComplete,
+    });
   }
 
   // ===========================================================================
@@ -1393,7 +1479,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=33', { updateViaCache: 'none' })
+        .register('./sw.js?v=34', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

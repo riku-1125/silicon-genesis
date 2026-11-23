@@ -4,6 +4,10 @@ import { STAGES, getStageById } from '../src/data/stages.js';
 import { CODEX_ENTRIES } from '../src/data/codex.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
 import {
+  buildChapter1EndingSteps,
+  buildChapter2EndingSteps,
+} from '../src/data/endings.js';
+import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
   tokenizeGlossaryText,
@@ -1329,4 +1333,45 @@ test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Sho
   );
   assert.equal(cheat23Ldi0.passed, false);
   assert.match(cheat23Ldi0.error, /SUB 12/);
+});
+
+test('v34 Chapter I & II Cinematic Endings: rich beats, dynamic hardware stats, interactive choices & glossary round-trip', () => {
+  const ch1 = buildChapter1EndingSteps({
+    ark4NandCount: 288,
+    forgedChipCount: 17,
+    clearedCount: 20,
+  });
+  const ch2 = buildChapter2EndingSteps({
+    ark4SysNandCount: 512,
+    forgedChipCount: 21,
+    clearedCount: 27,
+  });
+
+  assert.ok(ch1.length >= 12, `Chapter 1 ending should have >=12 beats, got ${ch1.length}`);
+  assert.ok(ch2.length >= 14, `Chapter 2 ending should have >=14 beats, got ${ch2.length}`);
+
+  // Dynamic player hardware stats appear in the ending narration
+  assert.ok(ch1.some((s) => s.text.includes('288') && s.text.includes('576')));
+  assert.ok(ch1.some((s) => s.text.includes('17 種')));
+  assert.ok(ch2.some((s) => s.text.includes('512') && s.text.includes('1024')));
+  assert.ok(ch2.some((s) => s.chapterCard?.sub?.includes('512 NAND')));
+
+  // Animated 16-bit pixel-art ending canvases and interactive choices are present in both
+  assert.ok(ch1.some((s) => s.canvasScene === 'ch1_beacon' && s.canvasPhase === 1));
+  assert.ok(ch2.some((s) => s.canvasScene === 'ch2_bluesky' && s.canvasPhase === 1));
+  assert.ok(ch1.some((s) => Array.isArray(s.choices) && s.choices.length >= 3));
+  assert.ok(ch2.some((s) => Array.isArray(s.choices) && s.choices.length >= 3));
+
+  const validSpeakers = new Set([null, 'kagari', 'mina', 'hako']);
+  for (const step of [...ch1, ...ch2]) {
+    assert.ok(validSpeakers.has(step.speaker), `Unexpected speaker '${step.speaker}'`);
+    assert.ok(typeof step.text === 'string' && step.text.length > 0);
+    const toks = tokenizeGlossaryText(step.text);
+    assert.equal(toks.map((t) => t.text).join(''), step.text);
+    for (const c of step.choices || []) {
+      assert.ok(validSpeakers.has(c.replySpeaker));
+      const cToks = tokenizeGlossaryText(c.replyText);
+      assert.equal(cToks.map((t) => t.text).join(''), c.replyText);
+    }
+  }
 });

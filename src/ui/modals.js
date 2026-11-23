@@ -4,13 +4,13 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=33';
-import { CODEX_ENTRIES } from '../data/codex.js?v=33';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=34';
+import { CODEX_ENTRIES } from '../data/codex.js?v=34';
 import {
   ARK4_ISA_TABLE,
   getStageSymbolReferences,
   stageUsesIsaTable,
-} from '../data/symbolReference.js?v=33';
+} from '../data/symbolReference.js?v=34';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -19,13 +19,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=33';
+} from '../data/glossary.js?v=34';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
-import { isStageUnlocked, isChapter2Unlocked } from '../state/storage.js?v=33';
-import { sound } from '../audio/sound.js?v=33';
-import { StoryDiagramGroup } from './storyDiagram.js?v=33';
-import { glossaryPopover } from './glossaryPopover.js?v=33';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=33';
+import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=34';
+import { sound } from '../audio/sound.js?v=34';
+import { StoryDiagramGroup } from './storyDiagram.js?v=34';
+import { glossaryPopover } from './glossaryPopover.js?v=34';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=34';
 
 function esc(str) {
   return String(str ?? '')
@@ -455,7 +455,13 @@ export class ModalManager {
   // ===========================================================================
   // 4. VICTORY & CUSTOM CHIP FORGING MODAL
   // ===========================================================================
-  openVictory(stage, chipDef, metrics, hasNextStage, { onNext, onOpenCodex, onStay }) {
+  openVictory(
+    stage,
+    chipDef,
+    metrics,
+    hasNextStage,
+    { onNext, onOpenCodex, onStay, onReplayEnding, journeyStats = null }
+  ) {
     const codexCards = (stage.codexUnlock || [])
       .map((cid) => CODEX_ENTRIES[cid])
       .filter(Boolean)
@@ -470,17 +476,39 @@ export class ModalManager {
       )
       .join('');
 
-    const finaleBanner = stage.isChapter2Finale
-      ? `<div class="callout callout-emerald">
-          <b>☀ 第二章完結 — 42年ぶりの青空への帰還！！</b><br>
-          砂（シリコン）と1個のスイッチから始まったあなたの計算機 <code>ARK4_SYS</code> とアセンブリ・プログラムが、ついにアーク7の地上大ハッチを全開にし、118人の生存者を青空の下へ導きました！
-        </div>`
-      : stage.isFinale
-        ? `<div class="callout callout-emerald">
-            <b>🎉 第一章完結 — 自作CPU『ARK-4』稼働開始！</b><br>
-            地上ビーコンから <code>"HELLO, WORLD."</code> が発信され、さらに <b>☀ 第二章「青空への帰還」（STAGE 18〜24）</b> が解放されました！
-          </div>`
-        : '';
+    let finaleBanner = '';
+    if (stage.isChapter2Finale) {
+      const sysNand = journeyStats?.ark4SysNandCount ?? metrics.nandCount ?? 479;
+      const forgedCount = journeyStats?.forgedChipCount ?? 21;
+      const clearedCount = journeyStats?.clearedCount ?? STAGES.length;
+      finaleBanner = `
+        <div class="victory-cert-card sky">
+          <div class="vcert-eyebrow">☀ SILICON GENESIS // ALL CHAPTERS COMPLETE</div>
+          <div class="vcert-title">第二章完結 — 42年ぶりの青空への帰還！！</div>
+          <p class="vcert-desc">砂（シリコン）と1個のスイッチから始まったあなたの自作計算機 <code>ARK4_SYS</code> とアセンブリ・プログラムが、地上大ハッチを全開にし、118人全員を本物の青空の下へ導きました！</p>
+          <div class="vcert-grid">
+            <div class="vcert-stat"><span class="vcert-lbl">最終称号</span><strong>アーク7 最高主任技師</strong></div>
+            <div class="vcert-stat"><span class="vcert-lbl">自作計算機</span><strong>${sysNand} NAND</strong><small>TR換算 ${sysNand * 2}個</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">復元レコード</span><strong>${clearedCount} / ${STAGES.length}</strong><small>自作チップ ${forgedCount}種</small></div>
+          </div>
+          <div class="vcert-chain">砂(MOSFET) → NAND → 加算器 → ラッチ → CPU → アセンブリ → ☀青空</div>
+        </div>`;
+    } else if (stage.isFinale) {
+      const cpuNand = journeyStats?.ark4NandCount ?? metrics.nandCount ?? 270;
+      const forgedCount = journeyStats?.forgedChipCount ?? 17;
+      finaleBanner = `
+        <div class="victory-cert-card">
+          <div class="vcert-eyebrow">★ CHAPTER I COMPLETE // HELLO, WORLD.</div>
+          <div class="vcert-title">第一章完結 — 自作CPU『ARK-4』稼働開始！</div>
+          <p class="vcert-desc">地上ビーコンから <code>"HELLO, WORLD."</code> が届き、生存シェルター『アーク3』と繋がりました！ <b>☀ 第二章「青空への帰還」（STAGE 18〜24）</b> が解放されました！</p>
+          <div class="vcert-grid">
+            <div class="vcert-stat"><span class="vcert-lbl">昇格称号</span><strong>アーク7 主任技師</strong></div>
+            <div class="vcert-stat"><span class="vcert-lbl">自作CPU規模</span><strong>${cpuNand} NAND</strong><small>TR換算 ${cpuNand * 2}個</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">鍛えたチップ</span><strong>${forgedCount} 種</strong><small>全21図鑑連動</small></div>
+          </div>
+          <div class="vcert-chain">砂(MOSFET) → NAND → 論理ゲート → 4bit加算器 → 記憶回路 → 🧠ARK-4</div>
+        </div>`;
+    }
 
     const metaText =
       stage.id === 'stage_00a'
@@ -544,6 +572,15 @@ export class ModalManager {
             ? `<button class="btn btn-emerald" id="btn-victory-next">${nextBtnLabel}</button>`
             : `<button class="btn btn-emerald" id="btn-victory-sandbox">自由実験室（FREE LAB）へ ▶</button>`
         }
+        ${
+          onReplayEnding
+            ? `<button class="btn btn-sky" id="btn-victory-ending">${
+                stage.isChapter2Finale
+                  ? '☀ グランドエンディングをもう一度観る'
+                  : '🎬 第一章エンディングをもう一度観る'
+              }</button>`
+            : ''
+        }
         <button class="btn btn-amber" id="btn-victory-codex">📖 CS図鑑を読む</button>
         <button class="btn btn-ghost" id="btn-victory-stay">この回路に留まる</button>
       `,
@@ -556,6 +593,10 @@ export class ModalManager {
     this.footerEl.querySelector('#btn-victory-sandbox')?.addEventListener('click', () => {
       this.close();
       onNext('sandbox');
+    });
+    this.footerEl.querySelector('#btn-victory-ending')?.addEventListener('click', () => {
+      this.close();
+      onReplayEnding?.();
     });
     this.footerEl.querySelector('#btn-victory-codex')?.addEventListener('click', () => {
       this.close();
@@ -570,7 +611,11 @@ export class ModalManager {
   // ===========================================================================
   // 5. CAMPAIGN STAGE MAP & SAVE MANAGEMENT MODAL
   // ===========================================================================
-  openMap(save, currentStageId, { onSelectStage, onReplayPrologue, onGoHome, onResetSave }) {
+  openMap(
+    save,
+    currentStageId,
+    { onSelectStage, onReplayPrologue, onReplayEnding1, onReplayEnding2, onGoHome, onResetSave }
+  ) {
     const actsHtml = ACTS.map((act) => {
       const stagesInAct = STAGES.filter((s) => s.act === act.id);
       const ch2Open = isChapter2Unlocked(save);
@@ -637,7 +682,39 @@ export class ModalManager {
     }).join('');
 
     const sandboxUnlocked = isStageUnlocked(save, 'sandbox');
+    const ch1Ended = isChapter1Cleared(save);
+    const ch2Ended = Boolean(save?.clearedStages?.includes('stage_24'));
     const clearedTotal = save.clearedStages.length;
+
+    const endingReplayHtml =
+      ch1Ended || ch2Ended
+        ? `
+          <div class="map-ending-row">
+            ${
+              ch1Ended
+                ? `<button class="map-stage-btn ending-replay-btn" id="btn-map-end1">
+                    <span class="map-code">ED1</span>
+                    <span class="map-info">
+                      <span class="map-name">🎬 第一章エンディング</span>
+                      <span class="map-sub">"HELLO, WORLD." 文明再起動ストーリーを再生</span>
+                    </span>
+                  </button>`
+                : ''
+            }
+            ${
+              ch2Ended
+                ? `<button class="map-stage-btn ending-replay-btn sky" id="btn-map-end2">
+                    <span class="map-code">ED2</span>
+                    <span class="map-info">
+                      <span class="map-name">☀ 第二章グランドエンディング</span>
+                      <span class="map-sub">42年ぶりの青空への帰還ストーリーを再生</span>
+                    </span>
+                  </button>`
+                : ''
+            }
+          </div>
+        `
+        : '';
 
     this.open({
       title: `ミッションマップ（進捗 ${clearedTotal} / ${STAGES.length}）`,
@@ -660,6 +737,7 @@ export class ModalManager {
             </span>
           </button>
         </div>
+        ${endingReplayHtml}
         <div class="map-sandbox-wrap">
           <button class="map-stage-btn sandbox-btn ${currentStageId === 'sandbox' ? 'active' : ''} ${!sandboxUnlocked ? 'locked' : ''}" data-stage-id="sandbox" ${!sandboxUnlocked ? 'disabled' : ''}>
             <span class="map-code">LAB</span>
@@ -685,6 +763,16 @@ export class ModalManager {
     this.bodyEl.querySelector('#btn-map-prologue')?.addEventListener('click', () => {
       this.close();
       onReplayPrologue?.();
+    });
+
+    this.bodyEl.querySelector('#btn-map-end1')?.addEventListener('click', () => {
+      this.close();
+      onReplayEnding1?.();
+    });
+
+    this.bodyEl.querySelector('#btn-map-end2')?.addEventListener('click', () => {
+      this.close();
+      onReplayEnding2?.();
     });
 
     this.bodyEl.querySelectorAll('[data-stage-id]').forEach((btn) => {

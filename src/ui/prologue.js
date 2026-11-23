@@ -3,24 +3,30 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=33';
-import { STAGES } from '../data/stages.js?v=33';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=33';
-import { isChapter2Unlocked } from '../state/storage.js?v=33';
-import { sound } from '../audio/sound.js?v=33';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=34';
+import { STAGES } from '../data/stages.js?v=34';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=34';
+import { isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=34';
+import { sound } from '../audio/sound.js?v=34';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=33';
+} from './glossaryPopover.js?v=34';
+import { EndingSceneCanvas } from './endingCanvas.js?v=34';
 
 export class PrologueOverlay {
-  constructor(rootEl, { onFinish, onContinue, onStartChapter2 }) {
+  constructor(
+    rootEl,
+    { onFinish, onContinue, onStartChapter2, onReplayEnding1, onReplayEnding2 }
+  ) {
     this.root = rootEl;
     this.onFinish = onFinish;
     this.onContinue = onContinue;
     this.onStartChapter2 = onStartChapter2;
+    this.onReplayEnding1 = onReplayEnding1;
+    this.onReplayEnding2 = onReplayEnding2;
 
     this.titleScreen = rootEl.querySelector('#title-screen');
     this.storyScreen = rootEl.querySelector('#prologue-story');
@@ -28,9 +34,13 @@ export class PrologueOverlay {
     this.btnContinue = rootEl.querySelector('#btn-title-continue');
     this.btnChapter2 = rootEl.querySelector('#btn-title-chapter2');
     this.btnReplayPrologue = rootEl.querySelector('#btn-title-prologue');
+    this.endingReplaysWrap = rootEl.querySelector('#title-ending-replays');
+    this.btnReplayEnd1 = rootEl.querySelector('#btn-title-end1');
+    this.btnReplayEnd2 = rootEl.querySelector('#btn-title-end2');
     this.titleProgressMeta = rootEl.querySelector('#title-progress-meta');
 
     this.bgImg = rootEl.querySelector('#pro-bg');
+    this.endingCanvas = new EndingSceneCanvas(rootEl.querySelector('#pro-ending-canvas'));
     this.moodLayer = rootEl.querySelector('#pro-mood');
     this.datelineEl = rootEl.querySelector('#pro-dateline');
     this.chapterCard = rootEl.querySelector('#pro-chapter-card');
@@ -48,6 +58,10 @@ export class PrologueOverlay {
     this.choicesWrap = rootEl.querySelector('#pro-choices');
     this.storyTapArea = rootEl.querySelector('#pro-tap-area');
 
+    this.activeSteps = PROLOGUE_STEPS;
+    this.activeEndLabel = 'ミッション開始 ▶';
+    this.activeOnComplete = null;
+    this.activeInPrologue = true;
     this.stepIdx = 0;
     this.fullText = '';
     this.charIdx = 0;
@@ -86,6 +100,16 @@ export class PrologueOverlay {
     this.btnReplayPrologue.addEventListener('click', () => {
       sound.playPowerUp();
       this.startStory();
+    });
+
+    this.btnReplayEnd1?.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.onReplayEnding1?.();
+    });
+
+    this.btnReplayEnd2?.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.onReplayEnding2?.();
     });
 
     this.btnSkip.addEventListener('click', (e) => {
@@ -171,10 +195,39 @@ export class PrologueOverlay {
             : '☀ 第二章：青空への帰還（STAGE 18〜）';
       }
     }
+    if (this.endingReplaysWrap) {
+      const ch1Done = isChapter1Cleared(save);
+      const ch2Done = Boolean(save?.clearedStages?.includes('stage_24'));
+      this.endingReplaysWrap.classList.toggle('hidden', !ch1Done && !ch2Done);
+      this.btnReplayEnd1?.classList.toggle('hidden', !ch1Done);
+      this.btnReplayEnd2?.classList.toggle('hidden', !ch2Done);
+    }
   }
 
   startStory() {
+    this.playSequence(PROLOGUE_STEPS, {
+      endBtnLabel: 'ミッション開始 ▶',
+      onComplete: this.onFinish,
+      inPrologue: true,
+    });
+  }
+
+  playEnding(steps, { endBtnLabel = '達成レコードへ ▶', onComplete = null } = {}) {
+    this.playSequence(steps, {
+      endBtnLabel,
+      onComplete,
+      inPrologue: false,
+    });
+  }
+
+  playSequence(steps, { endBtnLabel = '次へ ▶', onComplete = null, inPrologue = false } = {}) {
     this._stopTimer();
+    this.endingCanvas.stop();
+    this.activeSteps = Array.isArray(steps) && steps.length > 0 ? steps : PROLOGUE_STEPS;
+    this.activeEndLabel = endBtnLabel;
+    this.activeOnComplete = onComplete;
+    this.activeInPrologue = Boolean(inPrologue);
+
     this.root.classList.remove('hidden');
     this.titleScreen.classList.add('hidden');
     this.storyScreen.classList.remove('hidden');
@@ -186,22 +239,25 @@ export class PrologueOverlay {
 
   hide() {
     this._stopTimer();
+    this.endingCanvas.setScene(null);
     glossaryPopover.close();
     glossaryPopover.setActiveStoryContext({ activeTerms: null, inPrologue: false });
     this.root.classList.add('hidden');
   }
 
   _renderStep(idx, { instant = false } = {}) {
-    const step = PROLOGUE_STEPS[idx];
+    const steps = this.activeSteps || PROLOGUE_STEPS;
+    const step = steps[idx];
     if (!step) {
       this._finishStory();
       return;
     }
 
-    // Strict position-based unlocking: only terms seen in Prologue steps 0..idx are unlocked!
-    const seenTexts = PROLOGUE_STEPS.slice(0, idx + 1).map((s) => s.text);
-    const activeTerms = collectTermIdsFromTexts(seenTexts, null);
-    glossaryPopover.setActiveStoryContext({ activeTerms, inPrologue: true });
+    // Strict position-based unlocking in prologue; in endings allow all terms unlocked by current save!
+    const seenTexts = steps.slice(0, idx + 1).map((s) => s.text);
+    const save = this.activeInPrologue ? null : glossaryPopover.getSave();
+    const activeTerms = collectTermIdsFromTexts(seenTexts, save);
+    glossaryPopover.setActiveStoryContext({ activeTerms, inPrologue: this.activeInPrologue });
 
     this.awaitingChoice = false;
     this.pendingReply = false;
@@ -210,8 +266,15 @@ export class PrologueOverlay {
     this.btnPrev.disabled = idx <= 0;
     this.btnNext.disabled = false;
 
-    // Backdrop transition
-    if (this.bgImg.getAttribute('src') !== step.scene) {
+    // Live 16-bit Pixel-Art Ending Scene Canvas OR Backdrop Image
+    if (step.canvasScene) {
+      this.endingCanvas.setScene(step.canvasScene, { phase: step.canvasPhase || 0 });
+    } else {
+      this.endingCanvas.setScene(null);
+    }
+
+    // Backdrop transition (also stays underneath as fallback)
+    if (step.scene && this.bgImg.getAttribute('src') !== step.scene) {
       this.bgImg.classList.remove('bg-fade-in');
       void this.bgImg.offsetWidth;
       this.bgImg.src = step.scene;
@@ -236,9 +299,9 @@ export class PrologueOverlay {
 
     // Dateline & step counter
     this.datelineEl.textContent = step.dateline || '';
-    this.stepCounter.textContent = `${idx + 1} / ${PROLOGUE_STEPS.length}`;
+    this.stepCounter.textContent = `${idx + 1} / ${steps.length}`;
 
-    // Cinematic chapter interstitial banner (e.g. PROLOGUE · I / II / III)
+    // Cinematic chapter / ending interstitial banner
     if (this.chapterCard) {
       if (step.chapterCard) {
         const cc = step.chapterCard;
@@ -272,7 +335,7 @@ export class PrologueOverlay {
       if (this.termHintEl) this.termHintEl.classList.toggle('hidden', !mounted.hasTerms);
       this.typing = false;
       this.btnNext.textContent =
-        this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
+        this.stepIdx >= steps.length - 1 ? this.activeEndLabel : '次へ ▶';
       afterText();
     } else {
       this._typeText(step.text, step.speaker, afterText);
@@ -306,8 +369,9 @@ export class PrologueOverlay {
     const mounted = mountRichText(this.textEl, text, { instant: false });
     this._richNodes = mounted.nodes;
     if (this.termHintEl) this.termHintEl.classList.toggle('hidden', !mounted.hasTerms);
+    const steps = this.activeSteps || PROLOGUE_STEPS;
     this.btnNext.textContent =
-      this.stepIdx >= PROLOGUE_STEPS.length - 1 ? 'ミッション開始 ▶' : '次へ ▶';
+      this.stepIdx >= steps.length - 1 ? this.activeEndLabel : '次へ ▶';
     this._onTypeDone = onDone;
 
     const pitch =
@@ -382,10 +446,11 @@ export class PrologueOverlay {
       return;
     }
 
+    const steps = this.activeSteps || PROLOGUE_STEPS;
     sound.playSwitch(true);
     this.pendingReply = false;
     this.stepIdx++;
-    if (this.stepIdx >= PROLOGUE_STEPS.length) {
+    if (this.stepIdx >= steps.length) {
       this._finishStory();
     } else {
       this._renderStep(this.stepIdx);
@@ -393,17 +458,20 @@ export class PrologueOverlay {
   }
 
   _finishStory() {
+    const doneCb = this.activeOnComplete || this.onFinish;
+    this.activeOnComplete = null;
     this.hide();
-    this.onFinish?.();
+    doneCb?.();
   }
 
   _resolveStepBgm(idx) {
+    const steps = this.activeSteps || PROLOGUE_STEPS;
     for (let i = idx; i >= 0; i--) {
-      if (PROLOGUE_STEPS[i]?.bgm) return PROLOGUE_STEPS[i].bgm;
+      if (steps[i]?.bgm) return steps[i].bgm;
     }
-    const mood = PROLOGUE_STEPS[idx]?.mood;
+    const mood = steps[idx]?.mood;
     if (mood === 'alert') return 'crisis';
-    if (mood === 'amber') return 'finale';
+    if (mood === 'amber' || mood === 'dawn' || mood === 'bluesky') return 'finale';
     if (mood === 'calm') return 'story';
     return 'title';
   }
