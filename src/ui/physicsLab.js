@@ -10,10 +10,12 @@
  *     and watch the 5.0V <-> 0.0V voltage meter flip cleanly!
  */
 
-import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js';
+import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js?v=33';
 
 const W = 640;
 const H = 360;
+const PORTRAIT_ASM_W = 374;
+const PORTRAIT_ASM_H = 548;
 
 export class PhysicsLabCanvas {
   constructor(canvas, callbacks = {}) {
@@ -27,6 +29,7 @@ export class PhysicsLabCanvas {
     this.armedPart = null; // partId | null
     this.controlBit = 0;   // 'ひねり' (00-A) or 'ぬけ' (00-B)
     this.awaitingFinalClock = false;
+    this.portraitMode = false;
     this.time = 0;
     this.scale = 1;
     this.offsetX = 0;
@@ -340,21 +343,35 @@ export class PhysicsLabCanvas {
     }
   }
 
+  _isPortraitAssembly() {
+    return this.stage?.kind === 'assembly_program' && this.portraitMode;
+  }
+
+  _getBoardSize() {
+    if (this._isPortraitAssembly()) {
+      return { w: PORTRAIT_ASM_W, h: PORTRAIT_ASM_H };
+    }
+    return { w: W, h: H };
+  }
+
   _getSlotDefs() {
     if (this.stage?.kind === 'assembly_program') {
       const rows = this.stage.asmProgramSpec?.rows || [];
       const n = Math.max(1, rows.length);
-      const rowH = n <= 3 ? 44 : 33;
-      const gap = n <= 3 ? 8 : 5;
-      const startY = 166;
+      const isPortrait = this._isPortraitAssembly();
+      const rowH = isPortrait ? (n <= 3 ? 88 : 58) : (n <= 3 ? 44 : 33);
+      const gap = isPortrait ? (n <= 3 ? 12 : 5) : (n <= 3 ? 8 : 5);
+      const startY = isPortrait ? 226 : 166;
+      const sx = isPortrait ? 12 : 176;
+      const sw = isPortrait ? PORTRAIT_ASM_W - 24 : 444;
       const defs = [];
       rows.forEach((r, idx) => {
         if (!r.locked) {
           defs.push({
             id: r.slotId,
-            x: 176,
+            x: sx,
             y: startY + idx * (rowH + gap),
-            w: 444,
+            w: sw,
             h: rowH,
             label: r.label,
             ideal: r.ideal,
@@ -380,6 +397,9 @@ export class PhysicsLabCanvas {
 
   _getControlBtnRect() {
     if (this.stage?.kind === 'assembly_program') {
+      if (this._isPortraitAssembly()) {
+        return { x: 214, y: 13, w: 144, h: 34 };
+      }
       return { x: 492, y: 14, w: 132, h: 32 };
     }
     if (this.stage?.kind === 'physics_transistor') {
@@ -466,12 +486,15 @@ export class PhysicsLabCanvas {
   fitToView() {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 20) return;
-    const padX = 10;
-    const padTop = 38;
-    const padBottom = 10;
-    this.scale = Math.min((rect.width - padX * 2) / W, (rect.height - padTop - padBottom) / H);
-    this.offsetX = (rect.width - W * this.scale) / 2;
-    this.offsetY = padTop + (rect.height - padTop - padBottom - H * this.scale) / 2;
+    // Switch Assembly stages into dedicated portrait-native layout on vertical phones & portrait tablets!
+    this.portraitMode = rect.height > rect.width * 1.02;
+    const { w: bw, h: bh } = this._getBoardSize();
+    const padX = this._isPortraitAssembly() ? 6 : 10;
+    const padTop = this._isPortraitAssembly() ? 40 : 38;
+    const padBottom = this._isPortraitAssembly() ? 6 : 10;
+    this.scale = Math.min((rect.width - padX * 2) / bw, (rect.height - padTop - padBottom) / bh);
+    this.offsetX = (rect.width - bw * this.scale) / 2;
+    this.offsetY = padTop + (rect.height - padTop - padBottom - bh * this.scale) / 2;
   }
 
   _screenToWorld(clientX, clientY) {
@@ -588,8 +611,9 @@ export class PhysicsLabCanvas {
     ctx.scale(this.scale, this.scale);
 
     // Outer lab chamber frame
+    const { w: bw, h: bh } = this._getBoardSize();
     ctx.fillStyle = '#111a23';
-    this._roundRect(ctx, 4, 4, W - 8, H - 8, 12);
+    this._roundRect(ctx, 4, 4, bw - 8, bh - 8, 12);
     ctx.fill();
     ctx.strokeStyle = 'rgba(184, 138, 72, 0.42)';
     ctx.lineWidth = 2;
@@ -598,7 +622,11 @@ export class PhysicsLabCanvas {
     if (this.stage.kind === 'physics_transistor') {
       this._renderTransistorLab(ctx);
     } else if (this.stage.kind === 'assembly_program') {
-      this._renderAssemblyLab(ctx);
+      if (this._isPortraitAssembly()) {
+        this._renderAssemblyLabPortrait(ctx);
+      } else {
+        this._renderAssemblyLab(ctx);
+      }
     } else {
       this._renderPullupLab(ctx);
     }
@@ -619,7 +647,8 @@ export class PhysicsLabCanvas {
     // Floating guidance / feedback pill below top-left utility buttons
     if (this.armedPart) {
       const pDef = this.stage.physicsParts?.find((p) => p.id === this.armedPart);
-      this._drawBanner(ctx, w, `＋ [${pDef?.name || this.armedPart}] を入れる光る枠をタップ`, '#ffd166');
+      const label = pDef?.meta ? `${pDef.name}｜${pDef.meta}` : (pDef?.name || this.armedPart);
+      this._drawBanner(ctx, w, `＋ [${label}] を入れる光る枠をタップ`, '#ffd166');
     } else if (this.feedbackMsg) {
       this._drawBanner(ctx, w, this.feedbackMsg, this.feedbackColor);
     }
@@ -1104,6 +1133,319 @@ export class PhysicsLabCanvas {
     const res = evaluateRomStage(this.stage, this.slots, this.customChips);
     this.asmTrace = res.trace || [];
     return res;
+  }
+
+  _renderAssemblyLabPortrait(ctx) {
+    const pw = PORTRAIT_ASM_W;
+    const spec = this.stage?.asmProgramSpec;
+    const rows = spec?.rows || [];
+    const st = this.asmState || {
+      pc: 0,
+      pcNext: 0,
+      accBefore: 0,
+      acc: 0,
+      z: 1,
+      opcodeBits: '00',
+      immBits: '0000',
+      retBit: 0,
+      opName: '待機中',
+      setFlag: 0,
+      opFlag: 0,
+      weFlag: 0,
+      brFlag: 0,
+      jmpFired: false,
+      stepIdx: -1,
+    };
+
+    // -------------------------------------------------------------------------
+    // 1. UPPER CARD: 2x2 LARGE-FONT ARK4_SYS HARDWARE MONITOR (y = 10..184)
+    // -------------------------------------------------------------------------
+    ctx.fillStyle = '#0b1219';
+    this._roundRect(ctx, 10, 10, pw - 20, 174, 10);
+    ctx.fill();
+    ctx.strokeStyle = this.awaitingFinalClock ? '#ffd166' : 'rgba(86, 204, 242, 0.42)';
+    ctx.lineWidth = this.awaitingFinalClock ? 2.2 : 1.6;
+    ctx.stroke();
+
+    // Header Title + Big Tactile Step Button
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 12.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = this.awaitingFinalClock ? '#ffd166' : '#8ee5ff';
+    ctx.fillText('🖥 自作CPU [ARK4_SYS]', 18, 24, 190);
+    ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = this.awaitingFinalClock ? '#ffe599' : '#8fa9c2';
+    ctx.fillText(
+      this.awaitingFinalClock ? '⚡ 最終開門クロック待機中！' : '実機回路ライブ稼働モニタ',
+      18,
+      39,
+      190
+    );
+
+    const btn = this._getControlBtnRect();
+    ctx.fillStyle = this.awaitingFinalClock ? '#9b5f12' : '#183b50';
+    this._roundRect(ctx, btn.x, btn.y, btn.w, btn.h, 8);
+    ctx.fill();
+    ctx.strokeStyle = this.awaitingFinalClock ? '#ffd166' : '#56ccf2';
+    ctx.lineWidth = this.awaitingFinalClock ? 2.2 : 1.8;
+    ctx.stroke();
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(
+      this.awaitingFinalClock ? '⚡ 最終開門CLK' : '⚡ 1行実行 (CLK)',
+      btn.x + btn.w / 2,
+      btn.y + btn.h / 2
+    );
+
+    const accBits = ((st.acc & 15) >>> 0).toString(2).padStart(4, '0');
+
+    // Tile 1 (Top-Left): ARK4_CPU (ACC Calculation & Memory)
+    ctx.fillStyle = '#241b16';
+    this._roundRect(ctx, 16, 52, 168, 60, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#ffbe76';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = '#ffe4c4';
+    ctx.textAlign = 'center';
+    ctx.fillText('ARK4_CPU（計算・記憶）', 100, 64);
+    ctx.font = 'bold 15px monospace';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(
+      st.stepIdx >= 0 ? `ACC: ${st.accBefore ?? 0} → ${st.acc}` : `ACC = ${st.acc}`,
+      100,
+      84
+    );
+    ctx.font = 'bold 10.5px monospace';
+    ctx.fillStyle = '#ffbe76';
+    ctx.fillText(`(${accBits}) ${st.opName}`, 100, 102, 158);
+
+    // Tile 2 (Top-Right): COND_PC (Program Counter)
+    ctx.fillStyle = st.jmpFired ? '#14382c' : '#141f2c';
+    this._roundRect(ctx, 190, 52, 168, 60, 8);
+    ctx.fill();
+    ctx.strokeStyle = st.jmpFired ? '#52e3b6' : '#56ccf2';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = '#d6f4ff';
+    ctx.fillText('COND_PC（行番号）', 274, 64);
+    ctx.font = 'bold 14.5px monospace';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(
+      st.stepIdx >= 0 ? `PC: ${st.pc} → ${st.pcNext}番` : `PC = ${st.pc}番地`,
+      274,
+      84
+    );
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = st.retBit ? '#ffbe76' : st.jmpFired ? '#72f2c8' : '#9bb4cc';
+    ctx.fillText(
+      st.retBit ? '🔄 外部帰還(RET=1)' : st.jmpFired ? '⚡ JZジャンプ発火!' : '通常 +1 進行',
+      274,
+      102,
+      158
+    );
+
+    // Tile 3 (Bottom-Left): INST_DEC (Instruction Decoder)
+    ctx.fillStyle = '#141f2c';
+    this._roundRect(ctx, 16, 118, 168, 58, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(86, 204, 242, 0.72)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = '#d6f4ff';
+    ctx.fillText('INST_DEC（翻訳）', 100, 130);
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(
+      `機械語 ${st.opcodeBits}:${st.immBits}${st.retBit ? '+RET' : ''}`,
+      100,
+      147,
+      158
+    );
+    ctx.font = 'bold 10px monospace';
+    ctx.fillStyle = '#8ee5ff';
+    ctx.fillText(`OP=${st.opFlag} SET=${st.setFlag} WE=${st.weFlag} BR=${st.brFlag}`, 100, 164, 158);
+
+    // Tile 4 (Bottom-Right): ZERO_4B (Zero Detector)
+    ctx.fillStyle = st.z ? '#11382b' : '#141e28';
+    this._roundRect(ctx, 190, 118, 168, 58, 8);
+    ctx.fill();
+    ctx.strokeStyle = st.z ? '#52e3b6' : '#4a6076';
+    ctx.lineWidth = st.z ? 2 : 1.5;
+    ctx.stroke();
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = st.z ? '#d0fff0' : '#bfd2e4';
+    ctx.fillText('ZERO_4B（ゼロ検知）', 274, 130);
+    ctx.font = 'bold 15px monospace';
+    ctx.fillStyle = st.z ? '#72f2c8' : '#859db3';
+    ctx.fillText(`Z = ${st.z}`, 274, 148);
+    ctx.font = 'bold 10.5px -apple-system, sans-serif';
+    ctx.fillStyle = st.z ? '#a8ffe2' : '#859db3';
+    ctx.fillText(st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ', 274, 165);
+
+    // -------------------------------------------------------------------------
+    // 2. LOWER SECTION: LARGE FULL-WIDTH ROM PROGRAM CARDS (y = 192..516)
+    // -------------------------------------------------------------------------
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 12.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('📜 ROM 命令メモリ表', 12, 198);
+
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = '#97b0c7';
+    ctx.fillText('タップで配置 ／ 外す', pw - 12, 198);
+
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 10.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.fillStyle = '#7ef2cb';
+    ctx.fillText(spec?.goalTitle || '', 12, 215, pw - 24);
+
+    const n = Math.max(1, rows.length);
+    const spacious = n <= 3;
+    const rowH = spacious ? 88 : 58;
+    const gap = spacious ? 12 : 5;
+    const startY = 226;
+    const sx = 12;
+    const sw = pw - 24;
+
+    rows.forEach((r, idx) => {
+      const ry = startY + idx * (rowH + gap);
+      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === 4;
+      const isCurrentPc = isAwaitingOpenRow || (st.stepIdx >= 0 && st.pc === r.addr);
+      const part = r.locked
+        ? r.fixedPart
+        : (this.stage.physicsParts || []).find((p) => p.id === this.slots[r.slotId]) || null;
+
+      if (part) {
+        ctx.fillStyle = isAwaitingOpenRow
+          ? '#3b280d'
+          : isCurrentPc
+            ? '#133229'
+            : r.locked
+              ? '#17202b'
+              : '#1b2836';
+        this._roundRect(ctx, sx, ry, sw, rowH, 9);
+        ctx.fill();
+        ctx.strokeStyle = isAwaitingOpenRow
+          ? '#ffd166'
+          : isCurrentPc
+            ? '#52e3b6'
+            : (part.accent || '#56ccf2');
+        ctx.lineWidth = isCurrentPc ? 2.4 : 1.6;
+        ctx.stroke();
+
+        // Top meta line inside card: Address + Role + Machine Code
+        const topY = ry + (spacious ? 17 : 13);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.font = `bold ${spacious ? 12 : 11.5}px monospace`;
+        ctx.fillStyle = isAwaitingOpenRow ? '#ffe599' : isCurrentPc ? '#72f2c8' : '#ffd166';
+        const addrLabel = `${isCurrentPc ? '▶' : ''}[${r.addr}番地]`;
+        ctx.fillText(addrLabel, sx + 10, topY);
+
+        const addrW = ctx.measureText(addrLabel).width;
+        ctx.font = `${spacious ? 11 : 10}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif`;
+        ctx.fillStyle = '#b4c9dd';
+        ctx.fillText(
+          r.label || (r.locked ? '外部帰還回路' : ''),
+          sx + 16 + addrW,
+          topY,
+          sw - addrW - 114
+        );
+
+        ctx.textAlign = 'right';
+        ctx.font = `bold ${spacious ? 10.5 : 10}px monospace`;
+        ctx.fillStyle = '#8ee5ff';
+        const codeStr = r.locked
+          ? `${part.opcodeBits}:${part.immBits} [固定]`
+          : `${part.opcodeBits}:${part.immBits}`;
+        ctx.fillText(codeStr, sx + sw - 10, topY);
+
+        // Main command row: Colored Mnemonic Pill + 2 clean un-squeezed lines (Japanese meaning + rule)
+        if (spacious) {
+          ctx.fillStyle = part.color || '#28527a';
+          this._roundRect(ctx, sx + 10, ry + 32, 88, 42, 7);
+          ctx.fill();
+          ctx.font = 'bold 15px monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(part.name, sx + 54, ry + 53);
+
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 13.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillStyle = '#ffe8a8';
+          ctx.fillText(part.meta || part.name, sx + 108, ry + 43, sw - 118);
+
+          ctx.font = '11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillStyle = '#e5f1fc';
+          ctx.fillText(part.rule || '', sx + 108, ry + 64, sw - 118);
+        } else {
+          ctx.fillStyle = part.color || '#28527a';
+          this._roundRect(ctx, sx + 10, ry + 23, 76, 28, 6);
+          ctx.fill();
+          ctx.font = 'bold 12.5px monospace';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.fillText(part.name, sx + 48, ry + 37);
+
+          const niceMeta =
+            part.meta && !part.meta.includes('機械語')
+              ? part.meta
+              : part.op === 'LOOP'
+                ? '1番地へ強制帰還 (RET=1)'
+                : part.op === 'JZ'
+                  ? `0なら${part.val}番地へ飛ぶ`
+                  : part.name;
+
+          ctx.textAlign = 'left';
+          ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillStyle = '#ffe8a8';
+          ctx.fillText(niceMeta, sx + 94, ry + 30, sw - 104);
+
+          ctx.font = '10px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+          ctx.fillStyle = '#dceaf7';
+          ctx.fillText(part.rule || '', sx + 94, ry + 45, sw - 104);
+        }
+      } else {
+        const isArmed = Boolean(this.armedPart);
+        ctx.fillStyle = isArmed ? 'rgba(255, 209, 102, 0.12)' : 'rgba(14, 22, 31, 0.8)';
+        this._roundRect(ctx, sx, ry, sw, rowH, 9);
+        ctx.fill();
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = isArmed ? '#ffd166' : '#405a75';
+        ctx.lineWidth = isArmed ? 2.2 : 1.6;
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.font = `bold ${spacious ? 12 : 11.5}px monospace`;
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText(`[${r.addr}番地]`, sx + 10, ry + (spacious ? 20 : 15));
+
+        ctx.font = `${spacious ? 11.5 : 10.5}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif`;
+        ctx.fillStyle = '#b4c9dd';
+        ctx.fillText(r.label || '', sx + 74, ry + (spacious ? 20 : 15), sw - 86);
+
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${spacious ? 13 : 11.5}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif`;
+        ctx.fillStyle = isArmed ? '#ffe599' : '#8da7c0';
+        ctx.fillText(
+          isArmed ? '＋ ここをタップして命令カードをセット！' : '（空欄：下の命令カードを選んでここをタップ）',
+          sx + sw / 2,
+          ry + (spacious ? 54 : 37),
+          sw - 20
+        );
+      }
+    });
   }
 
   _renderAssemblyLab(ctx) {

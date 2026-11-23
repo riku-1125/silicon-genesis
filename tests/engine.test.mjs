@@ -20,7 +20,16 @@ import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } 
 import { compileCircuit } from '../src/engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from '../src/engine/evaluator.js';
 import { provisionStandardChips } from '../src/engine/blueprints.js';
-import { runRomProgram, evaluateRomStage } from '../src/engine/romRunner.js';
+import {
+  runRomProgram,
+  evaluateRomStage,
+  parseAssemblyLine,
+  assembleProgramText,
+  formatProgramText,
+  compileRomHardware,
+  probeInstructionDecode,
+  makeInstructionPart,
+} from '../src/engine/romRunner.js';
 
 /**
  * Helper to concisely construct test circuits matching player editing actions.
@@ -1226,4 +1235,98 @@ test('v29 Mobile Audio Lifecycle: uses ambient audioSession, zero <audio> hijack
       Object.defineProperty(globalThis, 'navigator', prevNavDesc);
     }
   }
+});
+
+test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Shortcut Spec Guards', () => {
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
+
+  // 1. parseAssemblyLine handles decimal, binary (0b), hex (0x), comments, and line prefixes
+  const pDec = parseAssemblyLine('0: ldi 5 ; base pressure');
+  assert.equal(pDec.ok, true);
+  assert.equal(pDec.op, 'LDI');
+  assert.equal(pDec.val, 5);
+  assert.equal(pDec.part.opcodeBits, '00');
+  assert.equal(pDec.part.immBits, '0101');
+
+  const pBin = parseAssemblyLine('4: LDI 0b1111 // open hatch');
+  assert.equal(pBin.ok, true);
+  assert.equal(pBin.val, 15);
+  assert.equal(pBin.part.immBits, '1111');
+
+  const pHex = parseAssemblyLine('SUB 0xC');
+  assert.equal(pHex.ok, true);
+  assert.equal(pHex.op, 'SUB');
+  assert.equal(pHex.val, 12);
+  assert.equal(pHex.part.opcodeBits, '10');
+  assert.equal(pHex.part.immBits, '1100');
+
+  // Invalid syntax & out-of-range operands fail cleanly with Japanese errors
+  const badOp = parseAssemblyLine('MOV 3');
+  assert.equal(badOp.ok, false);
+  assert.match(badOp.error, /不明な命令/);
+
+  const badRange = parseAssemblyLine('LDI 16');
+  assert.equal(badRange.ok, false);
+  assert.match(badRange.error, /0〜15/);
+
+  // 2. Live INST_DEC probe reflects compiled hardware control wires for every opcode
+  const hw = compileRomHardware(customChips);
+  const dLdi = probeInstructionDecode(hw, makeInstructionPart('LDI', 3));
+  assert.deepEqual([dLdi.i1, dLdi.i0, dLdi.opFlag, dLdi.setFlag, dLdi.weFlag, dLdi.brFlag], [0, 0, 0, 1, 1, 0]);
+  const dSub = probeInstructionDecode(hw, makeInstructionPart('SUB', 1));
+  assert.deepEqual([dSub.i1, dSub.i0, dSub.opFlag, dSub.setFlag, dSub.weFlag, dSub.brFlag], [1, 0, 1, 0, 1, 0]);
+  const dJz = probeInstructionDecode(hw, makeInstructionPart('JZ', 4));
+  assert.deepEqual([dJz.i1, dJz.i0, dJz.opFlag, dJz.setFlag, dJz.weFlag, dJz.brFlag], [1, 1, 0, 0, 0, 1]);
+
+  // 3. Stage 24 raw assembly source text assembles cleanly, protects locked line 3, and clears on real ARK4_SYS!
+  const st24 = getStageById('stage_24');
+  const raw24 = [
+    '0: LDI 3      ; 初期値',
+    '1: SUB 1      ; 1減らす',
+    '2: JZ 4       ; 0なら4番地へ',
+    '3: LOOP 1     ; 固定回路',
+    '4: LDI 0b1111 ; 大ハッチ全開!',
+  ].join('\n');
+  const asm24 = assembleProgramText(raw24, st24);
+  assert.equal(asm24.ok, true, `Expected Stage 24 assembly to parse cleanly: ${JSON.stringify(asm24)}`);
+  const eval24 = evaluateRomStage(st24, asm24.slots, customChips);
+  assert.equal(eval24.passed, true, `Assembled Stage 24 text failed hardware eval: ${JSON.stringify(eval24)}`);
+  assert.equal(eval24.trace.length, 10);
+
+  // Format -> re-assemble round-trip preserves valid program
+  const formatted24 = formatProgramText(st24, asm24.slots);
+  const roundTrip24 = assembleProgramText(formatted24, st24);
+  assert.equal(roundTrip24.ok, true);
+  assert.deepEqual(roundTrip24.slots, asm24.slots);
+
+  // Attempting to overwrite locked line 3 in text mode yields a clear error
+  const badLocked = assembleProgramText('0: LDI 3\n1: SUB 1\n2: JZ 4\n3: ADD 1\n4: LDI 15', st24);
+  assert.equal(badLocked.ok, false);
+  assert.match(badLocked.errors[0].message, /固定命令/);
+
+  // 4. Anti-shortcut spec checks on Stage 22 & Stage 23
+  const st22 = getStageById('stage_22');
+  const cheat22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'LDI 8', line_2: 'ADD 0' }, customChips);
+  assert.equal(cheat22.passed, false);
+  assert.match(cheat22.error, /直接上書き/);
+  const creative22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'ADD 2', line_2: 'ADD 1' }, customChips);
+  assert.equal(creative22.passed, true);
+
+  const st23 = getStageById('stage_23');
+  const cheat23Ldi12 = evaluateRomStage(
+    st23,
+    { line_0: 'LDI 12', line_1: 'ADD 0', line_2: 'ADD 0', line_3: 'SUB 12' },
+    customChips
+  );
+  assert.equal(cheat23Ldi12.passed, false);
+  assert.match(cheat23Ldi12.error, /直接代入/);
+
+  const cheat23Ldi0 = evaluateRomStage(
+    st23,
+    { line_0: 'LDI 3', line_1: 'ADD 3', line_2: 'ADD 6', line_3: 'LDI 0' },
+    customChips
+  );
+  assert.equal(cheat23Ldi0.passed, false);
+  assert.match(cheat23Ldi0.error, /SUB 12/);
 });

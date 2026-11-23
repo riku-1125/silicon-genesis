@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg" />
   <link rel="apple-touch-icon" href="./assets/icon.svg" />
-  <link rel="stylesheet" href="./styles/main.css?v=32" />
+  <link rel="stylesheet" href="./styles/main.css?v=33" />
 </head>
 <body>
   <div id="app">
@@ -54,9 +54,10 @@
     <main class="workbench-section">
       <canvas id="workbench-canvas" aria-label="論理回路ワークベンチ"></canvas>
       <canvas id="physics-lab-canvas" class="hidden" aria-label="物理ラボ実験台"></canvas>
+      <div id="assembly-ide" class="assembly-ide hidden" aria-label="ARK-4 アセンブリ開発コンソール"></div>
 
       <!-- Floating Workbench Utility Controls (Top-Left) -->
-      <div class="wb-tools-tl">
+      <div id="wb-tools-tl" class="wb-tools-tl">
         <button id="btn-undo" class="wb-mini-btn" title="ひとつ戻す (Ctrl+Z)" disabled>↶</button>
         <button id="btn-zoom-out" class="wb-mini-btn" title="作業台を縮小（広く見る）">－</button>
         <button id="btn-reset-view" class="wb-mini-btn" title="表示位置をリセット">⌖</button>
@@ -83,7 +84,7 @@
     <!-- BOTTOM DOCK: CUSTOM CHIP PALETTE + ACTION BAR -->
     <footer class="bottom-dock">
       <div class="palette-bar">
-        <div class="palette-label">部品</div>
+        <div id="palette-label" class="palette-label">部品</div>
         <div id="palette-scroll" class="palette-scroll"></div>
       </div>
       <div class="action-bar">
@@ -271,6 +272,6 @@
   <!-- TOAST NOTIFICATION -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="./src/main.js?v=32"></script>
+  <script type="module" src="./src/main.js?v=33"></script>
 </body>
 </html>

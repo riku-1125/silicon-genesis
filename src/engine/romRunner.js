@@ -182,8 +182,369 @@ export function resetRomHardware(hw) {
   };
 }
 
+export const ARK4_OPCODES = {
+  LDI: {
+    op: 'LDI',
+    bits: '00',
+    i1: 0,
+    i0: 0,
+    shortJa: '代入',
+    english: 'Load Immediate',
+    color: '#b87424',
+    accent: '#ffd166',
+    wireHint: 'SET=1, WE=1（数値をそのままACCへ保存）',
+  },
+  ADD: {
+    op: 'ADD',
+    bits: '01',
+    i1: 0,
+    i0: 1,
+    shortJa: '足す',
+    english: 'Add',
+    color: '#2b7a5b',
+    accent: '#5ce0a8',
+    wireHint: 'OP=0, WE=1（今のACCに数値を足して保存）',
+  },
+  SUB: {
+    op: 'SUB',
+    bits: '10',
+    i1: 1,
+    i0: 0,
+    shortJa: '引く',
+    english: 'Subtract',
+    color: '#a8423b',
+    accent: '#ff8a7a',
+    wireHint: 'OP=1, WE=1（今のACCから数値を引いて保存）',
+  },
+  JZ: {
+    op: 'JZ',
+    bits: '11',
+    i1: 1,
+    i0: 1,
+    shortJa: '0なら飛ぶ',
+    english: 'Jump if Zero',
+    color: '#6e459c',
+    accent: '#c89bff',
+    wireHint: 'WE=0, BR=1（ACC=0なら指定番地へジャンプ）',
+  },
+  LOOP: {
+    op: 'LOOP',
+    bits: '11',
+    i1: 1,
+    i0: 1,
+    shortJa: '強制帰還',
+    english: 'Hardware Return Loop',
+    color: '#28527a',
+    accent: '#56ccf2',
+    wireHint: 'RET=1でZERO_4B入力を0接地し指定番地へ戻る',
+  },
+};
+
+export function makeInstructionPart(opRaw, valRaw) {
+  const op = String(opRaw || '').trim().toUpperCase();
+  const def = ARK4_OPCODES[op];
+  if (!def) return null;
+  const val = Number.isFinite(Number(valRaw)) ? Math.max(0, Math.min(15, Math.trunc(Number(valRaw)))) : 0;
+  const imm = numToBits(val, 4);
+  const immBits = `${imm[3]}${imm[2]}${imm[1]}${imm[0]}`;
+
+  let meta = '';
+  let comment = '';
+  let rule = '';
+  if (op === 'LDI') {
+    meta = `代入 (←${val})`;
+    comment = `ACC ← ${val}`;
+    rule = `ACC に ${val}（${immBits}）をそのままセット`;
+  } else if (op === 'ADD') {
+    meta = `足す (+${val})`;
+    comment = `ACC ← ACC + ${val}`;
+    rule = `今の ACC に +${val} を足して保存`;
+  } else if (op === 'SUB') {
+    meta = `引く (−${val})`;
+    comment = `ACC ← ACC − ${val}`;
+    rule = `今の ACC から ${val} を引いて保存`;
+  } else if (op === 'JZ') {
+    meta = `0なら${val}番へ`;
+    comment = `Z=1なら ${val}番地へ`;
+    rule = `ACC==0 (Z=1) なら ${val}番地へジャンプ`;
+  } else if (op === 'LOOP') {
+    meta = `${val}番地へ強制帰還 (RET=1)`;
+    comment = `RET=1 → ${val}番地へ`;
+    rule = `外部帰還RET=1でCOND_PCのV入力を0000に接地し${val}番地へ強制帰還`;
+  }
+
+  return {
+    id: `ASM_${op}_${val}`,
+    name: `${op} ${val}`,
+    op,
+    val,
+    opcodeBits: def.bits,
+    immBits,
+    color: def.color,
+    accent: def.accent,
+    meta,
+    comment,
+    rule,
+  };
+}
+
+function parseNumericLiteral(token) {
+  const s = String(token || '').trim();
+  if (/^0b[01]+$/i.test(s)) return parseInt(s.slice(2), 2);
+  if (/^0x[0-9a-f]+$/i.test(s)) return parseInt(s.slice(2), 16);
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  return NaN;
+}
+
 /**
- * Decodes an assembly card into the exact `[I0, I1]` and `RET` hardware lines.
+ * Parses a single line of ARK-4 assembly text, e.g.:
+ *   "LDI 5", "1: SUB 1 ; decrement", "JZ 0b0100", "LDI 0xF"
+ */
+export function parseAssemblyLine(rawLine, { allowLoop = false } = {}) {
+  const withoutComment = String(rawLine ?? '')
+    .replace(/;.*$/, '')
+    .replace(/\/\/.*$/, '')
+    .trim();
+  if (!withoutComment) {
+    return { ok: true, empty: true, part: null };
+  }
+
+  // Strip optional leading address label like "0:" or "0x0:" or "[0番地]"
+  const body = withoutComment
+    .replace(/^\[?\d+番地\]?\s*:?\s*/, '')
+    .replace(/^(?:0x)?[0-9a-f]+\s*:\s*/i, '')
+    .trim();
+  if (!body) {
+    return { ok: true, empty: true, part: null };
+  }
+
+  const tokens = body.split(/[\s,]+/).filter(Boolean);
+  const op = tokens[0].toUpperCase();
+  const allowed = allowLoop ? ['LDI', 'ADD', 'SUB', 'JZ', 'LOOP'] : ['LDI', 'ADD', 'SUB', 'JZ'];
+  if (!allowed.includes(op)) {
+    return {
+      ok: false,
+      error: `不明な命令「${tokens[0]}」（使える命令: LDI / ADD / SUB / JZ）`,
+    };
+  }
+  if (tokens.length < 2) {
+    return {
+      ok: false,
+      error: `「${op}」のあとに 0〜15 の数値が必要です（例: ${op} 3）`,
+    };
+  }
+  if (tokens.length > 2) {
+    return {
+      ok: false,
+      error: `余分な文字「${tokens.slice(2).join(' ')}」があります（形式: ${op} 数値）`,
+    };
+  }
+
+  const val = parseNumericLiteral(tokens[1]);
+  if (!Number.isInteger(val) || val < 0 || val > 15) {
+    return {
+      ok: false,
+      error: `数値「${tokens[1]}」は 0〜15 の整数にしてください（4ビット幅: 0000〜1111）`,
+    };
+  }
+
+  return {
+    ok: true,
+    empty: false,
+    op,
+    val,
+    part: makeInstructionPart(op, val),
+  };
+}
+
+/**
+ * Resolves any slot value format (legacy 'ASM_LDI_5', '{ op, val }', or text 'LDI 5')
+ * into a canonical instruction part object.
+ */
+export function resolveSlotInstruction(slotVal, stage = null) {
+  if (!slotVal) return null;
+
+  if (typeof slotVal === 'object' && slotVal.op) {
+    return makeInstructionPart(slotVal.op, slotVal.val);
+  }
+
+  if (typeof slotVal === 'string') {
+    const trimmed = slotVal.trim();
+    if (!trimmed) return null;
+
+    // 1. Legacy pre-defined stage card ID (e.g. 'ASM_LDI_5')
+    if (stage?.physicsParts) {
+      const legacy = stage.physicsParts.find((p) => p.id === trimmed);
+      if (legacy) {
+        const canonical = makeInstructionPart(legacy.op, legacy.val);
+        return canonical ? { ...canonical, ...legacy, comment: canonical.comment } : legacy;
+      }
+    }
+
+    // 2. Canonical ID 'ASM_OP_VAL'
+    const idMatch = trimmed.match(/^ASM_(LDI|ADD|SUB|JZ|LOOP)_(\d+)$/i);
+    if (idMatch) {
+      return makeInstructionPart(idMatch[1], Number(idMatch[2]));
+    }
+
+    // 3. Raw assembly syntax 'LDI 5'
+    const parsed = parseAssemblyLine(trimmed, { allowLoop: true });
+    if (parsed.ok && parsed.part) {
+      return parsed.part;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Formats the stage's current ROM slots as a clean multi-line ARK-4 assembly listing.
+ */
+export function formatProgramText(stage, slots = {}) {
+  const rows = stage?.asmProgramSpec?.rows || [];
+  return rows
+    .map((r) => {
+      if (r.locked) {
+        const fp = r.fixedPart;
+        return `${r.addr}: ${fp.name.padEnd(6, ' ')} ; [固定回路] ${r.label || fp.rule || ''}`.trimEnd();
+      }
+      const part = resolveSlotInstruction(slots[r.slotId], stage);
+      if (!part) {
+        return `${r.addr}: `;
+      }
+      return `${r.addr}: ${part.name.padEnd(6, ' ')} ; ${part.comment}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Assembles multi-line raw ARK-4 assembly source text into stage ROM slots.
+ * Each line corresponds to ROM address 0..N-1 (or explicit "N: ..." prefix).
+ */
+export function assembleProgramText(sourceText, stage) {
+  const rows = stage?.asmProgramSpec?.rows || [];
+  const rawLines = String(sourceText ?? '').split(/\r?\n/);
+  const nextSlots = {};
+  const errors = [];
+
+  for (const r of rows) {
+    if (!r.locked) nextSlots[r.slotId] = null;
+  }
+
+  // Map lines to ROM addresses (supports explicit "2: JZ 4" or positional line index)
+  const usedAddrs = new Set();
+  rawLines.forEach((rawLine, lineIdx) => {
+    const stripped = rawLine.replace(/;.*$/, '').replace(/\/\/.*$/, '').trim();
+    if (!stripped) return;
+
+    let targetAddr = lineIdx;
+    const explicitAddr = stripped.match(/^\[?(\d+)番地\]?\s*:?\s*(.*)$/) || stripped.match(/^(\d+)\s*:\s*(.*)$/);
+    if (explicitAddr) {
+      targetAddr = Number(explicitAddr[1]);
+      if (!explicitAddr[2].trim()) return;
+    }
+
+    const row = rows.find((r) => r.addr === targetAddr);
+    if (!row) {
+      errors.push({
+        line: lineIdx + 1,
+        addr: targetAddr,
+        message: `${lineIdx + 1}行目: ${targetAddr}番地はこのステージのROM範囲外です（0〜${rows.length - 1}番地）`,
+      });
+      return;
+    }
+
+    if (row.locked) {
+      // Allow the locked instruction line to remain untouched in text mode
+      const parsedLocked = parseAssemblyLine(rawLine, { allowLoop: true });
+      if (
+        parsedLocked.ok &&
+        parsedLocked.part &&
+        (parsedLocked.part.op !== row.fixedPart.op || parsedLocked.part.val !== row.fixedPart.val)
+      ) {
+        errors.push({
+          line: lineIdx + 1,
+          addr: row.addr,
+          message: `${row.addr}番地はハードウェア固定命令（${row.fixedPart.name}）のため変更できません`,
+        });
+      }
+      return;
+    }
+
+    if (usedAddrs.has(row.addr)) {
+      errors.push({
+        line: lineIdx + 1,
+        addr: row.addr,
+        message: `${row.addr}番地が重複して書かれています`,
+      });
+      return;
+    }
+    usedAddrs.add(row.addr);
+
+    const parsed = parseAssemblyLine(rawLine, { allowLoop: false });
+    if (!parsed.ok) {
+      errors.push({
+        line: lineIdx + 1,
+        addr: row.addr,
+        message: `${row.addr}番地: ${parsed.error}`,
+      });
+      return;
+    }
+    if (parsed.part) {
+      nextSlots[row.slotId] = parsed.part.id;
+    }
+  });
+
+  return {
+    ok: errors.length === 0,
+    slots: nextSlots,
+    errors,
+  };
+}
+
+/**
+ * Probes the player's own compiled INST_DEC circuit to show live control wires
+ * (OP, SET, WE, BR) for any instruction being edited or executed.
+ */
+export function probeInstructionDecode(hw, part) {
+  if (!part) {
+    return {
+      i0: 0,
+      i1: 0,
+      imm: [0, 0, 0, 0],
+      ret: 0,
+      opcodeBits: '00',
+      immBits: '0000',
+      opFlag: 0,
+      setFlag: 0,
+      weFlag: 0,
+      brFlag: 0,
+    };
+  }
+  const pins = encodeInstructionPins(part);
+  let opFlag = part.op === 'SUB' ? 1 : 0;
+  let setFlag = part.op === 'LDI' ? 1 : 0;
+  let weFlag = part.op === 'JZ' || part.op === 'LOOP' ? 0 : 1;
+  let brFlag = part.op === 'JZ' || part.op === 'LOOP' ? 1 : 0;
+  if (hw?.instDecSim) {
+    hw.instDecSim.reset();
+    const decOut = hw.instDecSim.evaluate([pins.i0, pins.i1]).outputs;
+    opFlag = decOut[0] ? 1 : 0;
+    setFlag = decOut[1] ? 1 : 0;
+    weFlag = decOut[2] ? 1 : 0;
+    brFlag = decOut[3] ? 1 : 0;
+  }
+  return {
+    ...pins,
+    opFlag,
+    setFlag,
+    weFlag,
+    brFlag,
+  };
+}
+
+/**
+ * Decodes an assembly instruction into the exact `[I0, I1]` and `RET` hardware lines.
  * - `00` (LDI)  -> `I0=0, I1=0, RET=0`
  * - `01` (ADD)  -> `I0=1, I1=0, RET=0`
  * - `10` (SUB)  -> `I0=0, I1=1, RET=0`
@@ -233,7 +594,7 @@ export function buildRomRowMap(stage, slots = {}) {
   for (const r of rows) {
     const part = r.locked
       ? r.fixedPart
-      : (stage.physicsParts || []).find((p) => p.id === slots[r.slotId]) || null;
+      : resolveSlotInstruction(slots[r.slotId], stage);
     rowMap.set(r.addr, { row: r, part });
   }
   return rowMap;
@@ -416,11 +777,11 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
   const spec = stage?.asmProgramSpec;
   const rows = spec?.rows || [];
   const editableRows = rows.filter((r) => !r.locked);
-  const missing = editableRows.find((r) => !slots[r.slotId]);
+  const missing = editableRows.find((r) => !resolveSlotInstruction(slots[r.slotId], stage));
   if (missing) {
     return {
       passed: false,
-      error: `まだ「${missing.label}」が空欄です！ 下の命令カードをすべての番地にセットしよう。`,
+      error: `まだ「${missing.addr}番地」が空欄です！ すべての番地にアセンブリ命令を書き込もう。`,
       results: [],
       trace: [],
       passedCount: 0,
@@ -470,9 +831,11 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
   } else if (stage.id === 'stage_22') {
     // Stage 22 Specification:
     // 1. 0番地で初期基準内圧 ACC=5 をセットすること
-    // 2. 1〜2番地で加圧(+7)と減圧(-4)を行い（順不同OK: 5+7-4=8 も 5-4+7=8 も両方安全）、
-    //    3命令完了時に最終気圧 ACC=8 かつ 次PC=3番地 に到達すること
+    // 2. 1〜2番地では LDI 上書きではなく ADD / SUB を使って加減算すること
+    //    （例: LDI 5 → ADD 7 → SUB 4 でも LDI 5 → SUB 4 → ADD 7 でも合格！）
+    // 3. 3命令完了時に最終気圧 ACC=8 かつ 次PC=3番地 に到達すること
     const step0 = trace[0];
+    const overwriteStep = trace.slice(1, 3).find((t) => t.op === 'LDI');
     if (!step0 || step0.pc !== 0 || step0.acc !== 5) {
       passed = false;
       failureStepIdx = 0;
@@ -481,6 +844,10 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
       passed = false;
       failureStepIdx = trace.length - 1;
       error = `2番地まで最後まで実行されませんでした（次PC=${finalPc}番地）。`;
+    } else if (overwriteStep) {
+      passed = false;
+      failureStepIdx = overwriteStep.stepIdx;
+      error = `${overwriteStep.pc}番地の条件違反：LDI で数値を直接上書きするのではなく、0番地の内圧 5 から ADD / SUB を使って 8 を計算してください！`;
     } else if (finalAcc !== 8 || finalPc !== 3) {
       passed = false;
       failureStepIdx = trace.length - 1;
@@ -490,26 +857,39 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
     }
   } else if (stage.id === 'stage_23') {
     // Stage 23 Specification:
-    // 1. 0〜2番地の足し算・代入で油圧ジャッキ推力「3×4＝12」（2番地完了時 ACC=12）を合成すること
-    //    （LDI 3 -> ADD 3 -> ADD 6 でも LDI 3 -> ADD 6 -> ADD 3 でも両方合格！）
-    // 2. 3番地で目標推力 12 を引いて差圧 ACC=0 (Z=1) にすること
+    // 1. 0〜2番地の足し算（LDI + ADD + ADD）で油圧ジャッキ推力「3×4＝12」（2番地完了時 ACC=12）を合成すること
+    //    （LDI 3 -> ADD 3 -> ADD 6 でも LDI 3 -> ADD 6 -> ADD 3 でも合格！ いきなり LDI 12 は不可）
+    // 2. 3番地で目標推力 12 を SUB で引いて差圧 ACC=0 (Z=1) にすること（LDI 0 での誤魔化しは不可）
     // 3. 4番地の JZ 6 で 6番地（開錠承認）へジャンプ完了（finalAcc=0, finalPc=6）すること
     const step0 = trace[0];
+    const step1 = trace[1];
     const step2 = trace[2];
     const step3 = trace[3];
     const step4 = trace[4];
+    const nonAddStep = [step1, step2].find((t) => t && t.op !== 'ADD');
     if (!step0 || step0.acc === 0) {
       passed = false;
       failureStepIdx = 0;
-      error = `0番地の条件違反：まず0番地でポンプ初期推力（LDI 3）をセットしてください（0番地実行後の ACC=${step0?.acc ?? '?'}）。`;
+      error = `0番地の条件違反：まず0番地でポンプ初期推力（LDI 3 など）をセットしてください（0番地実行後の ACC=${step0?.acc ?? '?'}）。`;
+    } else if (step0.acc >= 12) {
+      passed = false;
+      failureStepIdx = 0;
+      error = `0番地の条件違反：12 を直接代入するのではなく、ポンプ1基ぶんの推力（3 など）から ADD を重ねて 3×4=12 を合成しよう！`;
+    } else if (nonAddStep) {
+      passed = false;
+      failureStepIdx = nonAddStep.stepIdx;
+      error = `${nonAddStep.pc}番地の条件違反：0〜2番地では ADD（足し算）を重ねて推力 3×4=12 を合成してください（現在: ${nonAddStep.opName}）。`;
     } else if (!step2 || step2.pc !== 2 || step2.acc !== 12) {
       passed = false;
       failureStepIdx = Math.min(2, trace.length - 1);
       error = `2番地完了時の条件違反：0〜2番地で「3×4＝12」を合成して ACC=12 にする必要がありますが、2番地実行後の ACC=${step2?.acc ?? '?'} でした。`;
-    } else if (!step3 || step3.pc !== 3 || step3.acc !== 0) {
+    } else if (!step3 || step3.pc !== 3 || step3.op !== 'SUB' || step3.acc !== 0) {
       passed = false;
       failureStepIdx = Math.min(3, trace.length - 1);
-      error = `3番地の条件違反：目標推力12を引いて差を 0（ACC=0, Z=1）にする必要がありますが、3番地実行後の ACC=${step3?.acc ?? '?'} でした。`;
+      error =
+        step3 && step3.op !== 'SUB'
+          ? `3番地の条件違反：LDI 0 などで直接消すのではなく、目標推力 12 を SUB 12 で引いて差圧が 0 になることを確認しよう！`
+          : `3番地の条件違反：目標推力12を引いて差を 0（ACC=0, Z=1）にする必要がありますが、3番地実行後の ACC=${step3?.acc ?? '?'} でした。`;
     } else if (!step4 || finalAcc !== 0 || finalPc !== 6) {
       passed = false;
       failureStepIdx = trace.length - 1;

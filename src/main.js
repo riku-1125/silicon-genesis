@@ -2,7 +2,7 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=32';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=33';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -21,15 +21,16 @@ import {
   persistSaveData,
   resetSaveData,
   isChapter2Unlocked,
-} from './state/storage.js?v=32';
-import { sound } from './audio/sound.js?v=32';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=32';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=32';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=32';
-import { DialogueController } from './ui/dialogue.js?v=32';
-import { ModalManager } from './ui/modals.js?v=32';
-import { PrologueOverlay } from './ui/prologue.js?v=32';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=32';
+} from './state/storage.js?v=33';
+import { sound } from './audio/sound.js?v=33';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=33';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=33';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=33';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=33';
+import { DialogueController } from './ui/dialogue.js?v=33';
+import { ModalManager } from './ui/modals.js?v=33';
+import { PrologueOverlay } from './ui/prologue.js?v=33';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=33';
 
 class SiliconGenesisApp {
   constructor() {
@@ -116,6 +117,49 @@ class SiliconGenesisApp {
         });
       },
     });
+    this.assemblyIde = new AssemblyIdePanel(this.dom.assemblyIde, this.dom.paletteScroll, {
+      onSlotsChange: (slots) => {
+        if (!this.stage) return;
+        this.save.physicsDrafts[this.stage.id] = slots;
+        persistSaveData(this.save);
+      },
+      onSound: (kind) => {
+        if (kind === 'place') sound.playChipPlace();
+        else if (kind === 'clock') sound.playClockPulse();
+        else if (kind === 'error') sound.playTestStep(0, false);
+        else sound.playSwitch(true);
+      },
+      onInspectArk4: () => {
+        const inspectChips = { ...this.save.customChips };
+        if (!inspectChips.ARK4_SYS) {
+          provisionStandardChips(inspectChips, { includeChapter2Hardware: true, provisioned: true });
+        }
+        this.modals.openChipInspector('ARK4_SYS', inspectChips);
+      },
+      onOpenSpec: () => {
+        const isCleared = this.stage ? this.save.clearedStages.includes(this.stage.id) : false;
+        this.modals.openSpec(this.stage, isCleared);
+      },
+      onFinalClockTrigger: () => {
+        if (this._pendingFinalClockResolve) {
+          const resolve = this._pendingFinalClockResolve;
+          this._pendingFinalClockResolve = null;
+          resolve();
+        }
+      },
+      onLiveState: ({ inputs, outputs, unstable }) => {
+        this.inputBits = inputs;
+        if (unstable) sound.playAlarm();
+        this.sceneCanvas.setState({
+          stage: this.stage,
+          inputs,
+          outputs,
+          cleared: this.save.clearedStages.includes(this.stage.id),
+          testing: this.isRunningTest,
+          unstable,
+        });
+      },
+    });
 
     this._bindUiEvents();
     this._syncQuickAudioButtons();
@@ -151,6 +195,8 @@ class SiliconGenesisApp {
       storyTheater: $('story-theater'),
       workbenchCanvas: $('workbench-canvas'),
       physicsLabCanvas: $('physics-lab-canvas'),
+      assemblyIde: $('assembly-ide'),
+      wbToolsTl: $('wb-tools-tl'),
       selectionToolbar: $('selection-toolbar'),
       btnUndo: $('btn-undo'),
       btnZoomOut: $('btn-zoom-out'),
@@ -159,6 +205,7 @@ class SiliconGenesisApp {
       btnClearBoard: $('btn-clear-board'),
       btnClockPulse: $('btn-clock-pulse'),
       btnNextStageQuick: $('btn-next-stage-quick'),
+      paletteLabel: $('palette-label'),
       paletteScroll: $('palette-scroll'),
       btnSpec: $('btn-spec'),
       btnHint: $('btn-hint'),
@@ -323,6 +370,11 @@ class SiliconGenesisApp {
       this.workbench.zoomBy(1.22);
     });
     this.dom.btnClearBoard.addEventListener('click', () => {
+      if (this.stage.kind === 'assembly_program') {
+        this.assemblyIde.clearAll();
+        sound.playDelete();
+        return;
+      }
       if (this.stage.mode === 'physics') {
         this.physicsLab.clearAll();
         sound.playDelete();
@@ -378,6 +430,10 @@ class SiliconGenesisApp {
         if (e.key === 'Escape') this.modals.close();
         return;
       }
+      const tag = e.target?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT' || e.target?.isContentEditable) {
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         this.undo();
@@ -402,6 +458,9 @@ class SiliconGenesisApp {
   }
 
   _fitActiveCanvas() {
+    if (this.stage?.kind === 'assembly_program') {
+      return;
+    }
     if (this.stage?.mode === 'physics') {
       this.physicsLab.fitToView();
     } else {
@@ -554,18 +613,33 @@ class SiliconGenesisApp {
       this.dialogue.showGoal(this.stage.plainGoal, 'hako', this.stage.incidentBrief || null);
     }
 
-    this._renderPalette();
-
+    const isAssembly = this.stage.kind === 'assembly_program';
     const isPhysics = this.stage.mode === 'physics';
+    const isPhysicsCanvas = isPhysics && !isAssembly;
+
+    this.dom.app.classList.toggle('mode-assembly', isAssembly);
     this.dom.workbenchCanvas.classList.toggle('hidden', isPhysics);
-    this.dom.physicsLabCanvas.classList.toggle('hidden', !isPhysics);
+    this.dom.physicsLabCanvas.classList.toggle('hidden', !isPhysicsCanvas);
+    this.dom.assemblyIde.classList.toggle('hidden', !isAssembly);
+    this.dom.wbToolsTl?.classList.toggle('hidden', isAssembly);
+    if (this.dom.paletteLabel) {
+      this.dom.paletteLabel.textContent = isAssembly ? '命令' : '部品';
+    }
     this.dom.btnUndo.classList.toggle('hidden', isPhysics);
     this.dom.btnZoomOut?.classList.toggle('hidden', isPhysics);
     this.dom.btnZoomIn?.classList.toggle('hidden', isPhysics);
     this.selection = { nodeId: null, wireId: null, pendingPin: null, armedChipType: null };
     this._renderSelectionToolbar();
 
-    if (isPhysics) {
+    if (isAssembly) {
+      this.simulator = null;
+      this.assemblyIde.setStage(
+        this.stage,
+        this.save.physicsDrafts?.[this.stage.id] || null,
+        this.save.customChips
+      );
+    } else if (isPhysicsCanvas) {
+      this._renderPalette();
       this.simulator = null;
       this.physicsLab.setStage(
         this.stage,
@@ -574,6 +648,7 @@ class SiliconGenesisApp {
       );
       requestAnimationFrame(() => this.physicsLab.fitToView());
     } else {
+      this._renderPalette();
       this._rebuildSimulator({ reset: true });
       this.workbench.setContext({
         stage: this.stage,
@@ -1059,7 +1134,10 @@ class SiliconGenesisApp {
   }
 
   async _runPhysicsTestSuite({ skipFinalClockPause = false } = {}) {
-    const evalResult = this.physicsLab.evaluatePhysics();
+    const isAsm = this.stage.kind === 'assembly_program';
+    const evalResult = isAsm
+      ? this.assemblyIde.evaluateAssembly()
+      : this.physicsLab.evaluatePhysics();
     this.lastEvalResult = evalResult;
     if (!evalResult.results || evalResult.results.length === 0) {
       sound.playTestStep(0, false);
@@ -1072,9 +1150,8 @@ class SiliconGenesisApp {
     this.dom.btnRunTest.disabled = true;
     this.dom.testProgressBar.classList.remove('hidden');
 
-    const isAsm = this.stage.kind === 'assembly_program';
     const prefix = isAsm ? '実機CPU実行' : '物理検証';
-    const stepDelay = evalResult.results.length > 5 ? 280 : 520;
+    const stepDelay = evalResult.results.length > 5 ? 300 : 520;
 
     // On Stage 24 (Grand Finale II), pause right before the final hatch-opening command (4番地: LDI 15)
     // on a first-time clear so the player personally delivers the final clock pulse!
@@ -1089,11 +1166,16 @@ class SiliconGenesisApp {
       ? evalResult.results.length - 1
       : evalResult.results.length;
 
+    const showStep = (idxVal) => {
+      if (isAsm) this.assemblyIde.setTraceStep(idxVal);
+      else this.physicsLab.setControlBit(idxVal);
+    };
+
     for (let i = 0; i < preLoopEnd; i++) {
       if (token !== this._testRunToken) return;
       const step = evalResult.results[i];
       this.dom.testProgressLabel.textContent = `${prefix} ${i + 1}/${evalResult.results.length}: ${step.label}`;
-      this.physicsLab.setControlBit(step.input[0]);
+      showStep(step.input[0]);
       sound.playTestStep(i, step.passed);
       await new Promise((r) => setTimeout(r, stepDelay));
     }
@@ -1103,7 +1185,8 @@ class SiliconGenesisApp {
     if (shouldPauseBeforeFinalOpen) {
       const finalIdx = evalResult.results.length - 1;
       const finalStep = evalResult.results[finalIdx];
-      this.physicsLab.setAwaitingFinalClock(true);
+      if (isAsm) this.assemblyIde.setAwaitingFinalClock(true);
+      else this.physicsLab.setAwaitingFinalClock(true);
       this.dom.testProgressLabel.textContent =
         '⚡ カウント0達成・4番地到達！ 最終開門クロックを入力せよ！';
       this.dom.btnRunTest.disabled = false;
@@ -1114,10 +1197,11 @@ class SiliconGenesisApp {
       });
       if (token !== this._testRunToken) return;
 
-      this.physicsLab.setAwaitingFinalClock(false);
+      if (isAsm) this.assemblyIde.setAwaitingFinalClock(false);
+      else this.physicsLab.setAwaitingFinalClock(false);
       this.dom.btnRunTest.disabled = true;
       this.dom.testProgressLabel.textContent = `⚡ 最終開門クロック実行: ${finalStep.label}`;
-      this.physicsLab.setControlBit(finalStep.input[0]);
+      showStep(finalStep.input[0]);
       sound.playClockPulse();
       sound.playTestStep(finalIdx, true);
       await new Promise((r) => setTimeout(r, 420));
@@ -1134,7 +1218,7 @@ class SiliconGenesisApp {
     } else {
       this.modals.openTestDiagnostics(this.stage, evalResult, (caseIdx) => {
         const step = evalResult.results[caseIdx];
-        if (step) this.physicsLab.setControlBit(step.input[0]);
+        if (step) showStep(step.input[0]);
       });
     }
   }
@@ -1309,7 +1393,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=32', { updateViaCache: 'none' })
+        .register('./sw.js?v=33', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

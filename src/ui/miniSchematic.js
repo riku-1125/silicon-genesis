@@ -9,7 +9,7 @@
  * and drives real-time signal animation through the compiled logic engine!
  */
 
-import { STAGES } from '../data/stages.js?v=32';
+import { STAGES } from '../data/stages.js?v=33';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 
