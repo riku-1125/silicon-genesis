@@ -317,7 +317,7 @@ export class SceneCanvas {
       const i1 = this.outputs[0] ? 1 : 0;
       const i0 = this.outputs[1] ? 1 : 0;
       const key = this.outputs[2] ? 1 : 0;
-      const opNames = ['LDI', 'ADD', 'SUB', 'JZ'];
+      const opNames = ['LDI', 'ADD', 'SUB', 'JNZ'];
       const opLabel = key ? opNames[(i1 << 1) | i0] : 'IDLE';
       ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#ffd166';
@@ -336,7 +336,7 @@ export class SceneCanvas {
       const i1 = this.outputs[0] ? 1 : 0;
       const i0 = this.outputs[1] ? 1 : 0;
       const imm = this._bitsToNum(this.outputs, 2, 4);
-      const opNames = ['LDI', 'ADD', 'SUB', 'JZ'];
+      const opNames = ['LDI', 'ADD', 'SUB', 'JNZ'];
       ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#52e3b6';
       ctx.fillText(`ROM_4W [ADDR ${addr}]`, bx + 9, hdrY, boxW - 16);

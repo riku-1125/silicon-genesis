@@ -10,7 +10,7 @@
  *     and watch the 5.0V <-> 0.0V voltage meter flip cleanly!
  */
 
-import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js?v=36';
+import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js?v=37';
 
 const W = 640;
 const H = 360;
@@ -87,7 +87,6 @@ export class PhysicsLabCanvas {
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
-      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
@@ -102,8 +101,10 @@ export class PhysicsLabCanvas {
   setAwaitingFinalClock(awaiting) {
     this.awaitingFinalClock = Boolean(awaiting);
     if (this.awaitingFinalClock) {
+      const rows = this.stage?.asmProgramSpec?.rows || [];
+      const finalAddr = rows.length > 0 ? rows[rows.length - 1].addr : 3;
       this.feedbackMsg =
-        '⚡ カウントダウン 0 達成・4番地到達！ 右上の「⚡最終開門クロック」または右下ボタンを押して大ハッチ全開信号 1111(15) を送出せよ！';
+        `⚡ カウントダウン 0 達成・${finalAddr}番地到達！ 右上の「⚡最終開門クロック」または右下ボタンを押して大ハッチ全開信号 1111(15) を送出せよ！`;
       this.feedbackColor = '#ffd166';
     }
   }
@@ -1147,7 +1148,6 @@ export class PhysicsLabCanvas {
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
-      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
@@ -1241,9 +1241,9 @@ export class PhysicsLabCanvas {
       84
     );
     ctx.font = 'bold 10.5px -apple-system, sans-serif';
-    ctx.fillStyle = st.retBit ? '#ffbe76' : st.jmpFired ? '#72f2c8' : '#9bb4cc';
+    ctx.fillStyle = st.jmpFired ? '#72f2c8' : '#9bb4cc';
     ctx.fillText(
-      st.retBit ? '🔄 外部帰還(RET=1)' : st.jmpFired ? '⚡ JZジャンプ発火!' : '通常 +1 進行',
+      st.jmpFired ? '⚡ JNZジャンプ発火!' : '通常 +1 進行',
       274,
       102,
       158
@@ -1262,7 +1262,7 @@ export class PhysicsLabCanvas {
     ctx.font = 'bold 12px monospace';
     ctx.fillStyle = '#ffd166';
     ctx.fillText(
-      `機械語 ${st.opcodeBits}:${st.immBits}${st.retBit ? '+RET' : ''}`,
+      `機械語 ${st.opcodeBits}:${st.immBits}`,
       100,
       147,
       158
@@ -1286,7 +1286,7 @@ export class PhysicsLabCanvas {
     ctx.fillText(`Z = ${st.z}`, 274, 148);
     ctx.font = 'bold 10.5px -apple-system, sans-serif';
     ctx.fillStyle = st.z ? '#a8ffe2' : '#859db3';
-    ctx.fillText(st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ', 274, 165);
+    ctx.fillText(st.z ? 'Z=1 (JNZ不発・通過)' : 'Z=0 (非ゼロ→JNZ発火)', 274, 165, 158);
 
     // -------------------------------------------------------------------------
     // 2. LOWER SECTION: LARGE FULL-WIDTH ROM PROGRAM CARDS (y = 192..516)
@@ -1315,9 +1315,10 @@ export class PhysicsLabCanvas {
     const sx = 12;
     const sw = pw - 24;
 
+    const finalAddr = rows.length > 0 ? rows[rows.length - 1].addr : 3;
     rows.forEach((r, idx) => {
       const ry = startY + idx * (rowH + gap);
-      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === 4;
+      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === finalAddr;
       const isCurrentPc = isAwaitingOpenRow || (st.stepIdx >= 0 && st.pc === r.addr);
       const part = r.locked
         ? r.fixedPart
@@ -1354,7 +1355,7 @@ export class PhysicsLabCanvas {
         ctx.font = `${spacious ? 11 : 10}px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif`;
         ctx.fillStyle = '#b4c9dd';
         ctx.fillText(
-          r.label || (r.locked ? '外部帰還回路' : ''),
+          r.label || (r.locked ? '固定命令' : ''),
           sx + 16 + addrW,
           topY,
           sw - addrW - 114
@@ -1398,11 +1399,9 @@ export class PhysicsLabCanvas {
           const niceMeta =
             part.meta && !part.meta.includes('機械語')
               ? part.meta
-              : part.op === 'LOOP'
-                ? '1番地へ強制帰還 (RET=1)'
-                : part.op === 'JZ'
-                  ? `0なら${part.val}番地へ飛ぶ`
-                  : part.name;
+              : part.op === 'JNZ'
+                ? `≠0なら${part.val}番地へ飛ぶ`
+                : part.name;
 
           ctx.textAlign = 'left';
           ctx.font = 'bold 11.5px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
@@ -1459,7 +1458,6 @@ export class PhysicsLabCanvas {
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
-      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
@@ -1484,7 +1482,7 @@ export class PhysicsLabCanvas {
     ctx.textAlign = 'left';
     ctx.fillText(
       this.awaitingFinalClock
-        ? '⚡ [ARK4_SYS] 4番地・最終開門クロック待機中！（右上のボタンで全開信号送出）'
+        ? `⚡ [ARK4_SYS] ${rows.length > 0 ? rows[rows.length - 1].addr : 3}番地・最終開門クロック待機中！（右上のボタンで全開信号送出）`
         : '🖥 あなたの自作ノイマン型計算機 [ARK4_SYS] ライブ稼働モニタ',
       24,
       28
@@ -1526,13 +1524,9 @@ export class PhysicsLabCanvas {
       82
     );
     ctx.font = 'bold 9.5px sans-serif';
-    ctx.fillStyle = st.retBit ? '#ffbe76' : st.jmpFired ? '#72f2c8' : '#9bb0c4';
+    ctx.fillStyle = st.jmpFired ? '#72f2c8' : '#9bb0c4';
     ctx.fillText(
-      st.retBit
-        ? '🔄 外部帰還(RET=1)'
-        : st.jmpFired
-          ? '⚡ JZジャンプ発火!'
-          : '通常 +1 進行',
+      st.jmpFired ? '⚡ JNZジャンプ発火!' : '通常 +1 進行',
       84,
       108
     );
@@ -1558,7 +1552,7 @@ export class PhysicsLabCanvas {
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#ffd166';
     ctx.fillText(
-      `機械語 ${st.opcodeBits}:${st.immBits}${st.retBit ? '+RET' : ''}`,
+      `機械語 ${st.opcodeBits}:${st.immBits}`,
       237,
       81
     );
@@ -1621,7 +1615,7 @@ export class PhysicsLabCanvas {
     ctx.fillText(`Z = ${st.z}`, 558, 92);
     ctx.font = 'bold 9.5px sans-serif';
     ctx.fillStyle = st.z ? '#a8ffe2' : '#7c92a8';
-    ctx.fillText(st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ', 558, 112);
+    ctx.fillText(st.z ? 'Z=1 (JNZ不発)' : 'Z=0 (JNZ発火)', 558, 112, 104);
 
     // -------------------------------------------------------------------------
     // 2. LOWER HALF: ROM ASSEMBLY PROGRAM TABLE (y = 144..348)
@@ -1636,9 +1630,10 @@ export class PhysicsLabCanvas {
     const gap = n <= 3 ? 8 : 5;
     const startY = 166;
 
+    const finalAddr = rows.length > 0 ? rows[rows.length - 1].addr : 3;
     rows.forEach((r, idx) => {
       const ry = startY + idx * (rowH + gap);
-      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === 4;
+      const isAwaitingOpenRow = this.awaitingFinalClock && r.addr === finalAddr;
       const isCurrentPc = isAwaitingOpenRow || (st.stepIdx >= 0 && st.pc === r.addr);
 
       // Left Address Pill
@@ -1657,7 +1652,7 @@ export class PhysicsLabCanvas {
 
       ctx.font = '9.5px -apple-system, sans-serif';
       ctx.fillStyle = '#b4c7da';
-      ctx.fillText(r.label || (r.locked ? '外部帰還回路' : ''), 24, ry + rowH * 0.72, 138);
+      ctx.fillText(r.label || (r.locked ? '固定命令' : ''), 24, ry + rowH * 0.72, 138);
 
       // Right Instruction Slot
       const sx = 176;

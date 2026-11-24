@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=36';
+import { sound } from '../audio/sound.js?v=37';
 
 const W = 340;
 const H = 126;
@@ -161,11 +161,11 @@ const GOAL_SPECS = {
   },
   goal_cond_pc: {
     boxTitle: '？ 条件分岐カウンタ',
-    boxSub: '0のときだけ飛ぶ',
+    boxSub: '≠0のときだけ飛ぶ',
     accent: '#56ccf2',
     steps: [
-      { ins: [['値 V = 3 (非0)', 1], ['BR = 1 (分岐)', 1], ['飛び先 J = 10', 1]], outs: [['PC: 1→2 (通常+1)', 0]], msg: '① BR=1 でも V が 0 でないとき ▶ ジャンプせず次の番地(+1)へ進む！' },
-      { ins: [['値 V = 0 (ゼロ!)', 0], ['BR = 1 (分岐)', 1], ['飛び先 J = 10', 1]], outs: [['PC → 10番地! (JZ)', 1]], msg: '② BR=1 かつ V=0（ゼロ達成！）の瞬間だけ ▶ 指定番地 J=10 へジャンプ！' },
+      { ins: [['値 V = 3 (非0)', 1], ['BR = 1 (分岐)', 1], ['飛び先 J = 10', 1]], outs: [['PC → 10番地! (JNZ)', 1]], msg: '① BR=1 かつ V≠0（まだゼロじゃない！）の瞬間だけ ▶ 指定番地 J=10 へジャンプ！' },
+      { ins: [['値 V = 0 (ゼロ!)', 0], ['BR = 1 (分岐)', 1], ['飛び先 J = 10', 1]], outs: [['PC: 1→2 (不発・通過!)', 0]], msg: '② V=0（ゼロ達成！）のときはジャンプ不発 ▶ 次の番地(+1)へ通過して脱出！' },
     ],
   },
   goal_inst_dec: {
@@ -176,7 +176,7 @@ const GOAL_SPECS = {
       { ins: [['命令 00 (LDI)', 0]], outs: [['SET=1, WE=1', 1], ['OP=0, BR=0', 0]], msg: '① 命令 00 (LDI: 代入) ▶ SET=1, WE=1 を出して数値を直接保存！' },
       { ins: [['命令 01 (ADD)', 1]], outs: [['OP=0, WE=1', 1], ['SET=0, BR=0', 0]], msg: '② 命令 01 (ADD: 加算) ▶ OP=0, WE=1 を出して足し算結果を保存！' },
       { ins: [['命令 10 (SUB)', 1]], outs: [['OP=1, WE=1', 1], ['SET=0, BR=0', 0]], msg: '③ 命令 10 (SUB: 減算) ▶ OP=1, WE=1 を出して引き算結果を保存！' },
-      { ins: [['命令 11 (JZ)', 1]], outs: [['BR=1 (分岐!)', 1], ['WE=0 (値保持)', 0]], msg: '④ 命令 11 (JZ: 0なら飛べ) ▶ WE=0 で値を守りつつ BR=1 で分岐判定！' },
+      { ins: [['命令 11 (JNZ)', 1]], outs: [['BR=1 (分岐!)', 1], ['WE=0 (値保持)', 0]], msg: '④ 命令 11 (JNZ: ≠0なら飛べ) ▶ WE=0 で値を守りつつ BR=1 で分岐判定！' },
     ],
   },
   goal_ark4_sys: {
@@ -184,9 +184,10 @@ const GOAL_SPECS = {
     boxSub: '解読＋演算＋分岐',
     accent: '#6fcf97',
     steps: [
-      { ins: [['命令 00:LDI', 1], ['IMM = 2', 1], ['CLK ↑', 1]], outs: [['ACC = 2', 1], ['次 PC = 1', 1]], msg: '① LDI 2 ▶ 命令を解読し ACC=2 を保存、次番地 PC=1 へ自動進行！' },
-      { ins: [['命令 10:SUB', 1], ['IMM = 2', 1], ['CLK ↑', 1]], outs: [['ACC = 0!', 1], ['次 PC = 2', 1]], msg: '② SUB 2 ▶ 2−2=0 を計算して ACC=0 に更新、次番地 PC=2 へ！' },
-      { ins: [['命令 11:JZ', 1], ['IMM = 10', 1], ['CLK ↑', 1]], outs: [['ACC = 0 (保持)', 0], ['PC → 10! (飛躍)', 1]], msg: '③ JZ 10 ▶ ACC=0 を見抜いて PC が 10番地へ自動ジャンプ！' },
+      { ins: [['命令 00:LDI', 1], ['IMM = 3', 1], ['CLK ↑', 1]], outs: [['ACC = 3', 1], ['次 PC = 1', 1]], msg: '① LDI 3 ▶ 命令を解読し ACC=3 を保存、次番地 PC=1 へ自動進行！' },
+      { ins: [['命令 11:JNZ', 1], ['IMM = 8', 1], ['CLK ↑', 1]], outs: [['ACC = 3 (保持)', 1], ['PC → 8! (飛躍)', 1]], msg: '② JNZ 8 ▶ ACC≠0 (Z=0) を見抜いて PC が 8番地へ自動ジャンプ！' },
+      { ins: [['命令 10:SUB', 1], ['IMM = 3', 1], ['CLK ↑', 1]], outs: [['ACC = 0! (Z=1)', 1], ['次 PC = 9', 1]], msg: '③ SUB 3 ▶ 3−3=0 を計算して ACC=0 に更新、次番地 PC=9 へ！' },
+      { ins: [['命令 11:JNZ', 1], ['IMM = 1', 1], ['CLK ↑', 1]], outs: [['ACC = 0 (保持)', 0], ['PC → 10 (通過!)', 0]], msg: '④ JNZ 1 ▶ ACC=0 (Z=1) なのでジャンプ不発 → ループ脱出(+1)！' },
     ],
   },
   goal_asm_enc: {
@@ -198,7 +199,7 @@ const GOAL_SPECS = {
       { ins: [['LDI 押下', 1]], outs: [['I = 00', 0], ['KEY = 1', 1]], msg: '② LDI キー押下 ▶ 機械語 00 と KEY=1 を出力（無入力と区別!）' },
       { ins: [['ADD 押下', 1]], outs: [['I = 01 (I0=1)', 1], ['KEY = 1', 1]], msg: '③ ADD キー押下 ▶ 機械語 01（I1=0, I0=1）＋ KEY=1 を出力！' },
       { ins: [['SUB 押下', 1]], outs: [['I = 10 (I1=1)', 1], ['KEY = 1', 1]], msg: '④ SUB キー押下 ▶ 機械語 10（I1=1, I0=0）＋ KEY=1 を出力！' },
-      { ins: [['JZ 押下', 1]], outs: [['I = 11 (両方1)', 1], ['KEY = 1', 1]], msg: '⑤ JZ キー押下 ▶ 機械語 11（I1=1, I0=1）＋ KEY=1 を出力！' },
+      { ins: [['JNZ 押下', 1]], outs: [['I = 11 (両方1)', 1], ['KEY = 1', 1]], msg: '⑤ JNZ キー押下 ▶ 機械語 11（I1=1, I0=1）＋ KEY=1 を出力！' },
     ],
   },
   goal_rom_4w: {
@@ -209,7 +210,7 @@ const GOAL_SPECS = {
       { ins: [['番地 A = 00 (0番)', 0]], outs: [['I = 00 (LDI)', 0], ['IMM = 0101 (5)', 1]], msg: '① 0番地 ▶ LDI 5（機械語 00:0101）が自動で出力される！' },
       { ins: [['番地 A = 01 (1番)', 1]], outs: [['I = 01 (ADD)', 1], ['IMM = 0011 (3)', 1]], msg: '② 1番地 ▶ ADD 3（機械語 01:0011）が自動で出力される！' },
       { ins: [['番地 A = 10 (2番)', 1]], outs: [['I = 10 (SUB)', 1], ['IMM = 0100 (4)', 1]], msg: '③ 2番地 ▶ SUB 4（機械語 10:0100）が自動で出力される！' },
-      { ins: [['番地 A = 11 (3番)', 1]], outs: [['I = 11 (JZ)', 1], ['IMM = 1000 (8)', 1]], msg: '④ 3番地 ▶ JZ 8（機械語 11:1000）が自動で出力される！' },
+      { ins: [['番地 A = 11 (3番)', 1]], outs: [['I = 11 (JNZ)', 1], ['IMM = 1000 (8)', 1]], msg: '④ 3番地 ▶ JNZ 8（機械語 11:1000）が自動で出力される！' },
     ],
   },
 };
@@ -1442,32 +1443,35 @@ export class StoryDiagramPlayer {
     this._caption(ctx, p.msg, this.stepIdx, 3, p.z ? '#52e3b6' : '#56ccf2');
   }
 
-  // 19: CONDITIONAL BRANCH PROGRAM COUNTER (ZERO_4B + AND + PC_4B)
+  // 19: CONDITIONAL BRANCH PROGRAM COUNTER (ZERO_4B + NOT + AND + PC_4B -> JNZ!)
   _drawCondBranchPc(ctx) {
     const phases = [
-      { v: 2, z: 0, br: 1, jmp: 0, pc: '1→2 (+1)', msg: '① V=2(非0), BR=1 ▶ Z=0 なので AND=0 → ジャンプせず +1 進行！' },
-      { v: 0, z: 1, br: 1, jmp: 1, pc: '→10番地!', msg: '② V=0(ゼロ!), BR=1 ▶ Z=1 かつ BR=1 で JMP=1 → J=10番地へ飛ぶ！' },
-      { v: 0, z: 1, br: 0, jmp: 0, pc: '10→11 (+1)', msg: '③ V=0, BR=0(通常命令) ▶ BR=0 なのでジャンプせず +1 進行！' },
+      { v: 2, z: 0, nz: 1, br: 1, jmp: 1, pc: '→10番!', msg: '① V=2(非0), BR=1 ▶ Z=0 → NOT=1 → AND=1！ J=10番地へ飛ぶ(JNZ)！' },
+      { v: 0, z: 1, nz: 0, br: 1, jmp: 0, pc: '1→2(+1)', msg: '② V=0(ゼロ!), BR=1 ▶ Z=1 → NOT=0 → JMP=0！ 飛ばず次へ通過！' },
+      { v: 2, z: 0, nz: 1, br: 0, jmp: 0, pc: '2→3(+1)', msg: '③ V=2, BR=0(通常命令) ▶ BR=0 なので JMP=0 → 通常+1 進行！' },
     ];
     const p = phases[this.stepIdx % 3];
 
-    this._pill(ctx, 8, 16, 58, 20, `値V = ${p.v}`, p.v === 0, '#56ccf2');
-    this._pill(ctx, 8, 46, 58, 20, `分岐BR=${p.br}`, p.br === 1, '#ffd166');
-    this._pill(ctx, 8, 76, 58, 20, '先J = 10', p.jmp === 1, '#52e3b6');
+    this._pill(ctx, 6, 14, 48, 20, `V = ${p.v}`, p.v !== 0, '#56ccf2');
+    this._pill(ctx, 6, 46, 48, 20, `BR=${p.br}`, p.br === 1, '#ffd166');
+    this._pill(ctx, 6, 78, 48, 20, 'J = 10', p.jmp === 1, '#52e3b6');
 
-    this._wire(ctx, [[66, 26], [84, 26]], p.v === 0, '#56ccf2');
-    this._chip(ctx, 84, 12, 58, 28, 'ZERO_4B', `Z = ${p.z}`, '#56ccf2', p.z === 1);
+    this._wire(ctx, [[54, 24], [62, 24]], p.v !== 0, '#56ccf2');
+    this._chip(ctx, 62, 10, 52, 28, 'ZERO_4B', `Z=${p.z}`, '#56ccf2', p.z === 1);
 
-    this._wire(ctx, [[142, 26], [156, 32]], p.z === 1, '#56ccf2');
-    this._wire(ctx, [[66, 56], [156, 46]], p.br === 1, '#ffd166');
-    this._chip(ctx, 156, 22, 48, 34, 'AND', `JMP=${p.jmp}`, '#ffb84d', p.jmp === 1);
+    this._wire(ctx, [[114, 24], [122, 24]], p.z === 1, '#56ccf2');
+    this._chip(ctx, 122, 10, 34, 28, 'NOT', `!Z=${p.nz}`, '#c89bff', p.nz === 1);
 
-    this._wire(ctx, [[204, 39], [220, 39]], p.jmp === 1, '#52e3b6');
-    this._wire(ctx, [[66, 86], [220, 62]], p.jmp === 1, '#52e3b6');
-    this._chip(ctx, 220, 20, 56, 54, 'PC_4B', p.jmp ? 'JZ飛躍!' : '通常+1', '#ff8a7a', true);
+    this._wire(ctx, [[156, 24], [166, 32]], p.nz === 1, '#c89bff');
+    this._wire(ctx, [[54, 56], [160, 56], [160, 46], [166, 46]], p.br === 1, '#ffd166');
+    this._chip(ctx, 166, 22, 42, 34, 'AND', `JMP=${p.jmp}`, '#ffb84d', p.jmp === 1);
 
-    this._wire(ctx, [[276, 47], [286, 47]], true, p.jmp ? '#52e3b6' : '#ff8a7a');
-    this._pill(ctx, 286, 33, 48, 28, p.pc, p.jmp === 1, '#52e3b6');
+    this._wire(ctx, [[208, 39], [218, 39]], p.jmp === 1, '#52e3b6');
+    this._wire(ctx, [[54, 88], [212, 88], [212, 64], [218, 64]], p.jmp === 1, '#52e3b6');
+    this._chip(ctx, 218, 20, 54, 56, 'PC_4B', p.jmp ? 'JNZ飛躍!' : '通常+1', '#ff8a7a', true);
+
+    this._wire(ctx, [[272, 48], [280, 48]], true, p.jmp ? '#52e3b6' : '#ff8a7a');
+    this._pill(ctx, 280, 34, 54, 28, p.pc, p.jmp === 1, '#52e3b6');
 
     this._caption(ctx, p.msg, this.stepIdx, 3, p.jmp ? '#52e3b6' : '#56ccf2');
   }
@@ -1478,7 +1482,7 @@ export class StoryDiagramPlayer {
       { code: '00', asm: 'LDI (代入)', op: 0, set: 1, we: 1, br: 0, msg: '① 00 (LDI) ▶ Y0=1 → SET=1, WE=1（数値をそのままACCへ保存！）' },
       { code: '01', asm: 'ADD (加算)', op: 0, set: 0, we: 1, br: 0, msg: '② 01 (ADD) ▶ Y1=1 → OP=0, WE=1（足し算してACCへ保存！）' },
       { code: '10', asm: 'SUB (減算)', op: 1, set: 0, we: 1, br: 0, msg: '③ 10 (SUB) ▶ Y2=1 → OP=1, WE=1（引き算してACCへ保存！）' },
-      { code: '11', asm: 'JZ (0分岐)', op: 0, set: 0, we: 0, br: 1, msg: '④ 11 (JZ) ▶ Y3=1 → BR=1, WE=NOT(Y3)=0（値を守り0なら飛ぶ！）' },
+      { code: '11', asm: 'JNZ (≠0飛)', op: 0, set: 0, we: 0, br: 1, msg: '④ 11 (JNZ) ▶ Y3=1 → BR=1, WE=NOT(Y3)=0（値を守り≠0なら飛ぶ！）' },
     ];
     const p = phases[this.stepIdx % 4];
 
@@ -1505,11 +1509,12 @@ export class StoryDiagramPlayer {
   // 21: COMPLETE VON NEUMANN COMPUTER (INST_DEC + ARK4_CPU + COND_PC)
   _drawArk4VonNeumann(ctx) {
     const phases = [
-      { inst: '00:LDI 2', acc: 2, z: 0, pc: '0→1', msg: '① LDI 2 ▶ INST_DECが翻訳 → ARK4_CPUが ACC=2 保存 → PC=1へ！' },
-      { inst: '10:SUB 2', acc: 0, z: 1, pc: '1→2', msg: '② SUB 2 ▶ 2−2=0 で ACC=0！ ZERO_4B が Z=1（ゼロ！）を検知！' },
-      { inst: '11:JZ 10', acc: 0, z: 1, pc: '2→10!', msg: '③ JZ 10 ▶ Z=1 かつ BR=1！ COND_PC が 10番地へ自動ジャンプ！' },
+      { inst: '00:LDI 3', acc: 3, z: 0, jmp: false, pc: '0→1', msg: '① LDI 3 ▶ INST_DECが翻訳 → ARK4_CPUが ACC=3 保存 → PC=1へ！' },
+      { inst: '11:JNZ 8', acc: 3, z: 0, jmp: true,  pc: '1→8!', msg: '② JNZ 8 ▶ ACC≠0 (Z=0) かつ BR=1！ COND_PC が 8番地へ自動ジャンプ！' },
+      { inst: '10:SUB 3', acc: 0, z: 1, jmp: false, pc: '8→9', msg: '③ SUB 3 ▶ 3−3=0 で ACC=0！ ZERO_4B が Z=1（ゼロ！）を検知！' },
+      { inst: '11:JNZ 1', acc: 0, z: 1, jmp: false, pc: '9→10', msg: '④ JNZ 1 ▶ Z=1 なのでジャンプ不発！ 通常+1でループ脱出！' },
     ];
-    const p = phases[this.stepIdx % 3];
+    const p = phases[this.stepIdx % 4];
 
     this._pill(ctx, 8, 34, 68, 24, p.inst, true, '#ffd166');
     this._wire(ctx, [[76, 46], [96, 46]], true, '#ffd166');
@@ -1519,29 +1524,29 @@ export class StoryDiagramPlayer {
     this._wire(ctx, [[158, 56], [178, 68]], p.inst.startsWith('11'), '#c89bff');
 
     this._chip(ctx, 178, 12, 72, 36, 'ARK4_CPU', `ACC = ${p.acc}`, '#ffbe76', true);
-    this._chip(ctx, 178, 54, 72, 36, 'COND_PC', `Z=${p.z} / PC:${p.pc}`, '#6fcf97', p.z === 1);
+    this._chip(ctx, 178, 54, 72, 36, 'COND_PC', `Z=${p.z} / PC:${p.pc}`, '#6fcf97', p.jmp);
 
     // Feedback wire from ARK4_CPU.ACC to COND_PC.V
-    this._wire(ctx, [[250, 30], [264, 30], [264, 72], [250, 72]], p.z === 1, '#52e3b6');
+    this._wire(ctx, [[250, 30], [264, 30], [264, 72], [250, 72]], p.z === 0, '#52e3b6');
 
     this._wire(ctx, [[250, 26], [276, 26]], true, '#ffbe76');
     this._wire(ctx, [[250, 72], [276, 72]], true, '#6fcf97');
     this._pill(ctx, 276, 14, 56, 22, `ACC=${p.acc}`, true, '#ffbe76');
-    this._pill(ctx, 276, 60, 56, 22, `PC:${p.pc}`, p.inst.startsWith('11'), '#6fcf97');
+    this._pill(ctx, 276, 60, 56, 22, `PC:${p.pc}`, p.jmp, '#6fcf97');
 
-    this._caption(ctx, p.msg, this.stepIdx, 3, '#6fcf97');
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.jmp ? '#52e3b6' : '#6fcf97');
   }
 
   // 22: ASM_ENC (4-to-2 Command Key Encoder)
   _drawAsmEnc(ctx) {
     const phases = [
       { k: 0, name: 'LDI', i1: 0, i0: 0, msg: '① LDI 押下 ▶ I1=0, I0=0 (00) ＋ KEY=1 を物理生成！' },
-      { k: 1, name: 'ADD', i1: 0, i0: 1, msg: '② ADD 押下 ▶ I0=ADD OR JZ が光り 01 ＋ KEY=1 を生成！' },
-      { k: 2, name: 'SUB', i1: 1, i0: 0, msg: '③ SUB 押下 ▶ I1=SUB OR JZ が光り 10 ＋ KEY=1 を生成！' },
-      { k: 3, name: 'JZ',  i1: 1, i0: 1, msg: '④ JZ 押下  ▶ I1・I0 の両ORが光り 11 ＋ KEY=1 を生成！' },
+      { k: 1, name: 'ADD', i1: 0, i0: 1, msg: '② ADD 押下 ▶ I0=ADD OR JNZ が光り 01 ＋ KEY=1 を生成！' },
+      { k: 2, name: 'SUB', i1: 1, i0: 0, msg: '③ SUB 押下 ▶ I1=SUB OR JNZ が光り 10 ＋ KEY=1 を生成！' },
+      { k: 3, name: 'JNZ', i1: 1, i0: 1, msg: '④ JNZ 押下 ▶ I1・I0 の両ORが光り 11 ＋ KEY=1 を生成！' },
     ];
     const p = phases[this.stepIdx % 4];
-    const keys = ['LDI', 'ADD', 'SUB', 'JZ'];
+    const keys = ['LDI', 'ADD', 'SUB', 'JNZ'];
     keys.forEach((lbl, idx) => {
       const on = p.k === idx;
       this._pill(ctx, 10, 10 + idx * 21, 56, 17, lbl, on, '#ffd166');
@@ -1567,7 +1572,7 @@ export class StoryDiagramPlayer {
       { addr: 0, a: '00', cmd: 'LDI 5', bits: '00:0101', msg: '① PC=0番地 ▶ DEC2_4 の Y0 が点灯 → OR網から LDI 5 (00:0101)！' },
       { addr: 1, a: '01', cmd: 'ADD 3', bits: '01:0011', msg: '② PC=1番地 ▶ DEC2_4 の Y1 が点灯 → OR網から ADD 3 (01:0011)！' },
       { addr: 2, a: '10', cmd: 'SUB 4', bits: '10:0100', msg: '③ PC=2番地 ▶ DEC2_4 の Y2 が点灯 → OR網から SUB 4 (10:0100)！' },
-      { addr: 3, a: '11', cmd: 'JZ  8', bits: '11:1000', msg: '④ PC=3番地 ▶ DEC2_4 の Y3 が点灯 → OR網から JZ 8 (11:1000)！' },
+      { addr: 3, a: '11', cmd: 'JNZ 8', bits: '11:1000', msg: '④ PC=3番地 ▶ DEC2_4 の Y3 が点灯 → OR網から JNZ 8 (11:1000)！' },
     ];
     const p = phases[this.stepIdx % 4];
 
@@ -1588,19 +1593,19 @@ export class StoryDiagramPlayer {
     this._caption(ctx, p.msg, this.stepIdx, 4, '#52e3b6');
   }
 
-  // 24..26: ASSEMBLY PROGRAM FLOW ON ARK4_SYS
+  // 24..26: ASSEMBLY PROGRAM FLOW ON ARK4_SYS (Pure 4-line JNZ loop!)
   _drawAsmProgramFlow(ctx) {
     const phases = [
       { row: 0, line: '0番: LDI 2', bits: '00:0010', acc: 2, z: 0, msg: '① 0番地 [LDI 2] ▶ 機械語 00:0010 → ACC に 2 をセット！' },
-      { row: 1, line: '1番: SUB 1', bits: '10:0001', acc: 1, z: 0, msg: '② 1番地 [SUB 1] ▶ 機械語 10:0001 → ACC=1 (まだ Z=0)' },
-      { row: 1, line: '1番: SUB 1', bits: '10:0001', acc: 0, z: 1, msg: '③ ループ2周目 [SUB 1] ▶ ACC=0 達成！ ZERO_4B が Z=1 点灯！' },
-      { row: 2, line: '2番: JZ 4', bits: '11:0100', acc: 0, z: 1, msg: '④ 2番地 [JZ 4] ▶ Z=1 なのでループ脱出 → 4番地（開門）へ飛躍！' },
+      { row: 1, line: '1番: SUB 1', bits: '10:0001', acc: 1, z: 0, msg: '② 1番地 [SUB 1] ▶ 機械語 10:0001 → ACC=1（まだ Z=0 非ゼロ！）' },
+      { row: 2, line: '2番: JNZ 1', bits: '11:0001', acc: 1, z: 0, msg: '③ 2番地 [JNZ 1] ▶ Z=0 (非ゼロ) なので 1番地へ戻りループ反復！' },
+      { row: 3, line: '3番: LDI 15', bits: '00:1111', acc: 0, z: 1, msg: '④ ACC=0 (Z=1) で JNZ不発・通過 ▶ 3番地 [LDI 15] で大ハッチ全開！' },
     ];
     const p = phases[this.stepIdx % 4];
-    const rows = ['0: LDI 2', '1: SUB 1', '2: JZ 4', '4: LDI 15'];
+    const rows = ['0: LDI 2', '1: SUB 1', '2: JNZ 1', '3: LDI 15'];
 
     rows.forEach((txt, i) => {
-      const active = (p.row === i) || (this.stepIdx % 4 === 3 && i === 3);
+      const active = p.row === i;
       this._pill(ctx, 10, 12 + i * 21, 92, 18, `${active ? '▶ ' : '  '}${txt}`, active, '#6fcf97');
     });
 

@@ -8,16 +8,16 @@
  */
 
 import { CHARACTERS, SCENES } from '../data/characters.js';
-import { STAGES } from '../data/stages.js?v=36';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=36';
-import { sound } from '../audio/sound.js?v=36';
+import { STAGES } from '../data/stages.js?v=37';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=37';
+import { sound } from '../audio/sound.js?v=37';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=36';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=36';
+} from './glossaryPopover.js?v=37';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=37';
 
 export class DialogueController {
   constructor(stripEl, theaterEl) {

@@ -4457,6 +4457,202 @@ textarea:focus-visible {
   background: #4e3818;
 }
 
+/* Mask ROM Fuse-Burn Toggle + Silicon Verilog Export Subtool Row */
+.asm-hw-subtools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.asm-subtool-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 25px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  transition: background 0.14s, border-color 0.14s, box-shadow 0.14s, transform 0.08s;
+}
+.asm-subtool-btn:active {
+  transform: scale(0.98);
+}
+.asm-subtool-btn.fuse {
+  color: #ffe2a8;
+  background: rgba(66, 38, 16, 0.72);
+  border: 1px solid rgba(255, 166, 77, 0.48);
+}
+.asm-subtool-btn.fuse.active {
+  color: #fff6dc;
+  background: rgba(112, 58, 16, 0.92);
+  border-color: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 184, 77, 0.36);
+}
+.asm-subtool-btn.blueprint {
+  color: #b4ffe5;
+  background: rgba(15, 52, 43, 0.78);
+  border: 1px solid rgba(82, 227, 182, 0.52);
+}
+
+/* Expandable Mask ROM Fuse-Burn Matrix (DEC_2TO4 x OR Plane) */
+.asm-fuse-matrix-panel {
+  background: linear-gradient(180deg, #070e16 0%, #0a141f 100%);
+  border: 1px solid rgba(255, 184, 77, 0.45);
+  border-radius: 7px;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.asm-fuse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.asm-fuse-title {
+  font-size: 10px;
+  font-weight: 900;
+  color: #ffd98a;
+  letter-spacing: 0.01em;
+}
+.asm-fuse-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #7ef7d0;
+  background: rgba(82, 227, 182, 0.12);
+  border: 1px solid rgba(82, 227, 182, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.asm-fuse-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 5px;
+  border: 1px solid rgba(72, 104, 132, 0.4);
+  background: #060b12;
+}
+.asm-fuse-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  table-layout: fixed;
+}
+.asm-fuse-table th {
+  padding: 3px 2px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 900;
+  color: #8fa9c2;
+  background: rgba(20, 34, 48, 0.9);
+  border-bottom: 1px solid rgba(72, 104, 132, 0.45);
+}
+.asm-fuse-table th.fuse-th-word {
+  width: 34px;
+}
+.asm-fuse-table th.fuse-th-cmd {
+  width: 64px;
+  text-align: left;
+  padding-left: 4px;
+}
+.asm-fuse-table th.fuse-th-op {
+  color: #ffd166;
+}
+.asm-fuse-table th.fuse-th-imm {
+  color: #7ee8ff;
+}
+.asm-fuse-row {
+  border-bottom: 1px solid rgba(46, 68, 88, 0.35);
+  transition: background 0.12s;
+  cursor: pointer;
+}
+.asm-fuse-row:last-child {
+  border-bottom: none;
+}
+.asm-fuse-row.is-locked {
+  cursor: default;
+}
+.asm-fuse-row.is-selected {
+  background: rgba(255, 209, 102, 0.11);
+}
+.asm-fuse-row.pc-live {
+  background: rgba(82, 227, 182, 0.2);
+  box-shadow: inset 3px 0 0 #52e3b6;
+}
+.asm-fuse-row.is-empty {
+  opacity: 0.58;
+}
+.fuse-word-cell {
+  padding: 3px 2px;
+  text-align: center;
+  font-weight: 900;
+  color: #a9c4dc;
+  white-space: nowrap;
+}
+.asm-fuse-row.pc-live .fuse-word-cell {
+  color: #8affdb;
+}
+.fuse-pc-mark {
+  color: #52e3b6;
+  font-size: 8.5px;
+  margin-right: 1px;
+}
+.fuse-cmd-cell {
+  padding: 3px 4px;
+  font-weight: 800;
+  color: #e4f1fc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fuse-cell {
+  padding: 2px 1px;
+  text-align: center;
+  border-left: 1px solid rgba(46, 68, 88, 0.28);
+}
+.fuse-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+.fuse-cell.unburned .fuse-dot {
+  color: #3a5066;
+}
+.fuse-cell.burned.op-fuse .fuse-dot {
+  color: #ffd166;
+  background: rgba(255, 184, 77, 0.2);
+  text-shadow: 0 0 6px rgba(255, 209, 102, 0.85);
+}
+.fuse-cell.burned.imm-fuse .fuse-dot {
+  color: #6ce3ff;
+  background: rgba(86, 204, 242, 0.2);
+  text-shadow: 0 0 6px rgba(86, 204, 242, 0.85);
+}
+.asm-fuse-row.pc-live .fuse-cell.burned .fuse-dot {
+  color: #9effdf;
+  background: rgba(82, 227, 182, 0.3);
+  text-shadow: 0 0 8px rgba(82, 227, 182, 0.95);
+}
+.asm-fuse-legend {
+  font-size: 9px;
+  font-weight: 700;
+  color: #89a5bf;
+  line-height: 1.3;
+}
+
 .asm-hw-controls {
   display: flex;
   align-items: center;
@@ -4607,12 +4803,6 @@ textarea:focus-visible {
   color: #e4f8ff;
   box-shadow: 0 0 8px rgba(86, 204, 242, 0.45);
 }
-.asm-pin.on.ret-pin {
-  background: rgba(255, 138, 122, 0.26);
-  border-color: #ff8a7a;
-  color: #ffe3de;
-  box-shadow: 0 0 8px rgba(255, 138, 122, 0.45);
-}
 
 .asm-bus-caption {
   font-size: 10px;
@@ -4648,6 +4838,9 @@ textarea:focus-visible {
 .asm-chip-card.chip-zero.active-z {
   background: #103227;
   border-color: #52e3b6;
+}
+.asm-chip-card.chip-zero.nonzero-z {
+  border-color: rgba(200, 155, 255, 0.52);
 }
 .asm-chip-card.chip-pc {
   border-color: rgba(86, 204, 242, 0.55);
@@ -4735,12 +4928,14 @@ textarea:focus-visible {
 }
 
 .asm-chip-foot {
-  font-size: 10px;
+  font-size: 9.2px;
   font-weight: 800;
   color: #a8c1d8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.24;
+  word-break: keep-all;
+}
+.asm-chip-card.nonzero-z .asm-chip-foot {
+  color: #dfc2ff;
 }
 .asm-chip-card.active-z .asm-chip-foot,
 .asm-chip-card.active-jmp .asm-chip-foot {
@@ -4953,15 +5148,10 @@ textarea:focus-visible {
   color: #ffb0a6;
   border: 1px solid rgba(255, 138, 122, 0.55);
 }
-.asm-op-token.op-jz {
+.asm-op-token.op-jnz {
   background: rgba(110, 69, 156, 0.38);
   color: #dfc2ff;
   border: 1px solid rgba(200, 155, 255, 0.55);
-}
-.asm-op-token.op-loop {
-  background: rgba(40, 82, 122, 0.42);
-  color: #9ce6ff;
-  border: 1px solid rgba(86, 204, 242, 0.55);
 }
 .asm-val-token {
   color: #ffffff;
@@ -5195,37 +5385,101 @@ textarea:focus-visible {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   background: #111a24;
   border: 1px solid #31475e;
   border-radius: 7px;
   padding: 2px;
 }
 .asm-step-pm {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 28px;
   border-radius: 5px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   color: #e8f3ff;
   background: #1e2e3f;
   border: 1px solid #3f5870;
 }
 .asm-val-readout {
-  min-width: 44px;
+  min-width: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   line-height: 1.05;
   font-family: var(--font-mono);
 }
 .asm-val-readout strong {
-  font-size: 12.5px;
+  font-size: 13px;
   color: #ffd166;
 }
 .asm-val-readout small {
   font-size: 8.5px;
   color: #8ee5ff;
+}
+
+/* Altair-8800-Style Physical 4-Bit DIP Switches (IMM3..0: 8 | 4 | 2 | 1) */
+.asm-dip-bank {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #0a1017;
+  border: 1px solid #364d63;
+  border-radius: 7px;
+  padding: 2px;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+.asm-dip-sw {
+  width: 26px;
+  height: 30px;
+  padding: 2px 1px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #131c26 0%, #0d141c 100%);
+  border: 1px solid #2a3c4f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  line-height: 1;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.08s;
+}
+.asm-dip-sw:active {
+  transform: scale(0.94);
+}
+.asm-dip-sw.on {
+  background: linear-gradient(180deg, #1b485b 0%, #112d3b 100%);
+  border-color: #56ccf2;
+  box-shadow: 0 0 8px rgba(86, 204, 242, 0.38);
+}
+.asm-dip-led {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: #283848;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.asm-dip-sw.on .asm-dip-led {
+  background: #52e3b6;
+  box-shadow: 0 0 6px #52e3b6;
+}
+.asm-dip-w {
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #829cb5;
+}
+.asm-dip-sw.on .asm-dip-w {
+  color: #ffe8a3;
+}
+.asm-dip-v {
+  font-size: 10px;
+  font-weight: 900;
+  color: #586f85;
+}
+.asm-dip-sw.on .asm-dip-v {
+  color: #9effdf;
 }
 
 .asm-num-strip {
@@ -5298,13 +5552,16 @@ textarea:focus-visible {
     padding: 2px 4px;
     font-size: 9.5px;
   }
+  .asm-cpu-nand-part {
+    display: none;
+  }
   .asm-step-btn {
     padding: 0 8px;
     font-size: 10.5px;
   }
 }
 
-/* Give JZ / op-meta labels crisp breathing room on 360-390px portrait phones */
+/* Give JNZ / op-meta labels crisp breathing room on 360-390px portrait phones */
 @media (max-width: 400px) {
   .asm-op-btn {
     padding: 2px 1px;
@@ -5325,6 +5582,15 @@ textarea:focus-visible {
   .asm-row-bits {
     min-width: 58px;
     font-size: 9.5px;
+  }
+  .asm-dip-sw {
+    width: 23px;
+  }
+  .asm-step-pm {
+    width: 20px;
+  }
+  .asm-val-readout {
+    min-width: 20px;
   }
 }
 
@@ -5355,7 +5621,8 @@ textarea:focus-visible {
     padding: 5px 7px;
     gap: 4px;
   }
-  .asm-inspect-btn {
+  .asm-inspect-btn,
+  .asm-subtool-btn {
     min-height: 22px;
     padding: 2px 5px;
     font-size: 9.5px;
@@ -5385,6 +5652,10 @@ textarea:focus-visible {
     width: 22px;
     height: 22px;
   }
+  .asm-dip-sw {
+    height: 24px;
+    padding: 1px;
+  }
   #app.mode-assembly .bottom-dock {
     padding: 3px 8px 4px;
     gap: 6px;
@@ -5392,6 +5663,224 @@ textarea:focus-visible {
   #app.mode-assembly .asm-composer {
     gap: 3px;
   }
+}
+
+/* ============================================================================
+   SILICON BLUEPRINT / VERILOG HDL EXPORT MODAL & PHYSICAL SILICON BADGES
+   ============================================================================ */
+.stat-pill.silicon {
+  background: rgba(16, 56, 44, 0.72);
+  border-color: rgba(82, 227, 182, 0.5);
+  color: #b4ffe6;
+}
+.stat-pill.silicon b {
+  color: #7ef7d0;
+}
+
+.btn-silicon {
+  background: linear-gradient(180deg, #165243 0%, #0e382e 100%);
+  border: 1.5px solid #52e3b6;
+  color: #e4fff6;
+  font-weight: 800;
+}
+
+.btn-silicon-pill {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  color: #dcfff3;
+  background: linear-gradient(180deg, #195e4c 0%, #103d32 100%);
+  border: 1.5px solid #52e3b6;
+  box-shadow: 0 2px 8px rgba(82, 227, 182, 0.22);
+  white-space: nowrap;
+  transition: filter 0.14s, transform 0.08s;
+}
+.btn-silicon-pill:active {
+  transform: scale(0.97);
+}
+.btn-silicon-pill.cert {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 12px;
+}
+
+.vcert-export-row {
+  margin-top: 10px;
+}
+
+.codex-silicon-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(14, 46, 40, 0.85) 0%, rgba(13, 27, 41, 0.92) 100%);
+  border: 1px solid rgba(82, 227, 182, 0.48);
+}
+.codex-silicon-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.codex-silicon-title {
+  font-size: 12px;
+  font-weight: 900;
+  color: #9effdf;
+}
+.codex-silicon-sub {
+  font-size: 10.5px;
+  color: #b4d2c9;
+  line-height: 1.3;
+}
+
+.silicon-bom-hero {
+  background: linear-gradient(180deg, #0b1924 0%, #09121a 100%);
+  border: 1.5px solid rgba(82, 227, 182, 0.5);
+  border-radius: 10px;
+  padding: 11px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.silicon-bom-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  color: #52e3b6;
+}
+.silicon-bom-tagline {
+  font-size: 13px;
+  font-weight: 900;
+  color: #fff2c6;
+  line-height: 1.4;
+}
+.silicon-bom-summary {
+  margin: 0;
+  font-size: 11.5px;
+  color: #bfd6ea;
+  line-height: 1.5;
+}
+.silicon-bom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (min-width: 540px) {
+  .silicon-bom-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.silicon-bom-cell {
+  background: rgba(7, 13, 20, 0.85);
+  border: 1px solid rgba(72, 108, 138, 0.45);
+  border-radius: 8px;
+  padding: 7px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.bom-lbl {
+  font-size: 10px;
+  font-weight: 800;
+  color: #93afc7;
+}
+.bom-val {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 900;
+  color: #eaf5ff;
+  line-height: 1.2;
+}
+.bom-val.amber {
+  color: #ffd166;
+}
+.bom-val.emerald {
+  color: #52e3b6;
+}
+.bom-val.sky {
+  color: #7ee8ff;
+}
+.bom-unit {
+  font-size: 10px;
+  color: #84a0b8;
+}
+
+.silicon-sub-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.silicon-sub-pill {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #cde3f5;
+  background: rgba(20, 34, 48, 0.85);
+  border: 1px solid rgba(86, 204, 242, 0.35);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.silicon-sub-pill.cpu {
+  border-color: rgba(255, 184, 77, 0.45);
+  color: #ffe8b0;
+}
+
+.verilog-preview-wrap {
+  border: 1.5px solid #2b4459;
+  border-radius: 9px;
+  background: #060b11;
+  overflow: hidden;
+  max-width: 100%;
+}
+.verilog-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #101b27;
+  border-bottom: 1px solid #24384c;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.verilog-file-name {
+  font-weight: 900;
+  color: #7ee8ff;
+}
+.verilog-file-meta {
+  color: #8ca8c2;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.verilog-code-pre {
+  margin: 0;
+  padding: 10px 11px;
+  max-height: 40vh;
+  max-width: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #a6f7dc;
+  tab-size: 2;
+  white-space: pre;
+}
+
+#btn-verilog-copy.is-copied {
+  background: linear-gradient(180deg, #1b6b50 0%, #114736 100%);
+  border-color: #52e3b6;
+  color: #ffffff;
 }
 
 /* ============================================================================
@@ -5409,10 +5898,13 @@ textarea:focus-visible {
   .palette-chip:hover,
   .pchip-info:hover,
   .asm-inspect-btn:hover,
+  .asm-subtool-btn:hover,
+  .asm-dip-sw:hover,
   .asm-code-row:hover,
   .asm-op-btn:hover,
   .asm-num-pill:hover,
   .asm-mode-btn:hover,
+  .btn-silicon-pill:hover,
   .pro-choice-btn:hover,
   .st-prev-btn:hover:not(:disabled),
   .st-next-btn:hover:not(:disabled),

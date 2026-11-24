@@ -7,10 +7,13 @@
  *      player's own forged `ARK4_SYS` circuit (Stage 21), driving `INST_DEC`,
  *      `ARK4_CPU`, `ZERO_4B`, and `COND_PC` in real time.
  *   2. Real ARK-4 Assembly Editor (`main.asm`): write any valid opcode
- *      (`LDI`, `ADD`, `SUB`, `JZ`) + 4-bit operand (`0..15`) via either a
- *      thumb-friendly mobile Assembly Composer OR direct raw-text typing mode.
- *   3. 100% gate-level execution through `romRunner.js` on the player's actual
- *      compiled `ARK4_SYS` circuit.
+ *      (`LDI`, `ADD`, `SUB`, `JNZ`) + 4-bit operand (`0..15`) via either a
+ *      thumb-friendly mobile Assembly Composer with Altair-8800 4-bit physical
+ *      DIP switches OR direct raw-text typing mode.
+ *   3. Mask ROM Fuse-Burn Matrix viewer (`DEC_2TO4 × OR`) & Silicon Blueprint
+ *      Verilog HDL export trigger.
+ *   4. 100% physical MOSFET+resistor gate-level execution through `romRunner.js`
+ *      on the player's actual compiled `ARK4_SYS` circuit.
  */
 
 import {
@@ -19,14 +22,34 @@ import {
   makeInstructionPart,
   resolveSlotInstruction,
   probeInstructionDecode,
+  buildRomRowMap,
+  buildProgrammableRomCircuit,
+  getRomFuseMatrix,
   runRomProgram,
   evaluateRomStage,
   formatProgramText,
   assembleProgramText,
-} from '../engine/romRunner.js?v=36';
+} from '../engine/romRunner.js?v=37';
 
-const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JZ'];
+const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JNZ'];
+const FALLBACK_OPCODES = {
+  JNZ: {
+    op: 'JNZ',
+    bits: '11',
+    i1: 1,
+    i0: 1,
+    shortJa: '≠0で飛ぶ',
+    english: 'Jump if Not Zero',
+    color: '#6e459c',
+    accent: '#c89bff',
+    wireHint: 'WE=0, BR=1（ACC≠0なら指定番地へジャンプ）',
+  },
+};
 const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';
+
+function getOpcodeDef(op) {
+  return ARK4_OPCODES?.[op] || FALLBACK_OPCODES[op] || null;
+}
 
 function escapeHtml(str) {
   return String(str ?? '')
@@ -38,8 +61,7 @@ function escapeHtml(str) {
 
 function summarizeDecodeAction(dec, part) {
   if (!part) return '待機中';
-  if (part.op === 'LOOP') return '外部帰還(RET=1)';
-  if (dec.brFlag && !dec.weFlag) return '0なら分岐(ACC保持)';
+  if (dec.brFlag && !dec.weFlag) return '≠0なら分岐(ACC保持)';
   if (dec.setFlag && dec.weFlag) return 'そのままACCへ代入';
   if (dec.opFlag && dec.weFlag) return '引き算してACC保存';
   if (!dec.opFlag && dec.weFlag) return '足し算してACC保存';
@@ -64,6 +86,7 @@ export class AssemblyIdePanel {
     this.asmTrace = [];
     this.asmState = this._makeIdleState();
     this.awaitingFinalClock = false;
+    this.showFuseMatrix = false;
     this.statusMsg = '';
     this.statusTone = 'info'; // 'info' | 'ok' | 'warn' | 'err'
     this._clearArmed = false;
@@ -79,7 +102,6 @@ export class AssemblyIdePanel {
       z: 1,
       opcodeBits: '00',
       immBits: '0000',
-      retBit: 0,
       opName: '待機中',
       setFlag: 0,
       opFlag: 0,
@@ -91,10 +113,16 @@ export class AssemblyIdePanel {
     };
   }
 
+  _getFinalRowAddr() {
+    const rows = this.stage?.asmProgramSpec?.rows || [];
+    return rows.length > 0 ? rows[rows.length - 1].addr : 3;
+  }
+
   setStage(stage, savedSlots = null, customChips = null) {
     this.stage = stage;
     if (customChips) this.customChips = customChips;
     this.awaitingFinalClock = false;
+    this.showFuseMatrix = false;
     this.editorMode = 'visual';
     this.textErrors = [];
     this.statusMsg = '';
@@ -181,8 +209,9 @@ export class AssemblyIdePanel {
   setAwaitingFinalClock(awaiting) {
     this.awaitingFinalClock = Boolean(awaiting);
     if (this.awaitingFinalClock) {
+      const finalAddr = this._getFinalRowAddr();
       this.statusMsg =
-        '⚡ カウントダウン 0 達成・4番地到達！「⚡ 最終開門CLK」を押して全開信号 1111(15) を送出せよ！';
+        `⚡ カウントダウン 0 達成・${finalAddr}番地到達！「⚡ 最終開門CLK」を押して全開信号 1111(15) を送出せよ！`;
       this.statusTone = 'warn';
     }
     this.render();
@@ -366,13 +395,159 @@ export class AssemblyIdePanel {
     });
   }
 
+  _getSiliconCounts() {
+    const stats = this._hw?.siliconStats;
+    const nandCount = stats?.nandCount ?? this._hw?.metrics?.nandCount ?? 0;
+    const swCount = stats?.swCount ?? this._hw?.metrics?.swCount ?? (nandCount > 0 ? nandCount * 2 : 0);
+    const pullCount = stats?.pullCount ?? this._hw?.metrics?.pullCount ?? nandCount;
+    const isPhysicalSilicon = Boolean(stats?.isPhysicalSilicon ?? swCount > 0);
+    return { nandCount, swCount, pullCount, isPhysicalSilicon };
+  }
+
+  _buildCurrentRowMap() {
+    if (typeof buildRomRowMap === 'function') {
+      return buildRomRowMap(this.stage, this.slots);
+    }
+    const rows = this.stage?.asmProgramSpec?.rows || [];
+    const rowMap = new Map();
+    for (const r of rows) {
+      const part = r.locked
+        ? r.fixedPart
+        : resolveSlotInstruction(this.slots[r.slotId], this.stage);
+      rowMap.set(r.addr, { row: r, part });
+    }
+    return rowMap;
+  }
+
+  _computeFuseMatrix() {
+    const rowMap = this._buildCurrentRowMap();
+    if (typeof getRomFuseMatrix === 'function') {
+      try {
+        const mat = getRomFuseMatrix(rowMap, this._hw);
+        if (mat && Array.isArray(mat.rows)) return mat;
+      } catch {
+        // Fallback below if pre-merge engine check
+      }
+    }
+    const rows = [];
+    let totalBurnedFuses = 0;
+    for (const [addr, entry] of rowMap.entries()) {
+      const part = entry?.part || null;
+      const dec = probeInstructionDecode(this._hw, part);
+      const valid = Boolean(part);
+      const i1 = valid ? (dec.i1 ? 1 : 0) : 0;
+      const i0 = valid ? (dec.i0 ? 1 : 0) : 0;
+      const imm = valid && Array.isArray(dec.imm) ? dec.imm.map((b) => (b ? 1 : 0)) : [0, 0, 0, 0];
+      if (valid) {
+        totalBurnedFuses += i1 + i0 + imm[3] + imm[2] + imm[1] + imm[0];
+      }
+      rows.push({
+        addr,
+        addrBits: (addr & 15).toString(2).padStart(4, '0'),
+        part,
+        i1,
+        i0,
+        imm,
+        valid,
+      });
+    }
+    return {
+      rows,
+      totalBurnedFuses,
+      wordCount: rows.filter((r) => r.valid).length,
+    };
+  }
+
+  getExportPayload() {
+    const rowMap = this._buildCurrentRowMap();
+    const fuseMatrix = this._computeFuseMatrix();
+    let romCircuit = null;
+    if (this._hw && typeof buildProgrammableRomCircuit === 'function') {
+      try {
+        romCircuit = buildProgrammableRomCircuit(rowMap, this._hw);
+      } catch {
+        romCircuit = null;
+      }
+    }
+    return {
+      customChips: this._hw?.workingChips || this.customChips,
+      romCircuit,
+      romRows: fuseMatrix.rows,
+      stageTitle: this.stage ? `STAGE ${this.stage.code} ${this.stage.revealedTitle || this.stage.title}` : '',
+    };
+  }
+
+  _renderFuseMatrixHtml(fuseMatrix, isStepping, st) {
+    const finalAddr = this._getFinalRowAddr();
+    const fuseCell = (bit, valid, kindClass, colName) => {
+      const burned = Boolean(valid && bit);
+      return `<td class="fuse-cell ${burned ? `burned ${kindClass}` : 'unburned'}" title="${colName}: ${burned ? '焼付済 (OR接続 = 1)' : '未焼付 (0)'}"><span class="fuse-dot">${burned ? '●' : '·'}</span></td>`;
+    };
+
+    const rowsHtml = fuseMatrix.rows
+      .map((r) => {
+        const isLivePc =
+          (this.awaitingFinalClock && r.addr === finalAddr) ||
+          (isStepping && st.pc === r.addr);
+        const isSelected = !isStepping && this.selectedAddr === r.addr;
+        const specRow = this._getRowByAddr(r.addr);
+        const isLocked = Boolean(specRow?.locked);
+        const imm = Array.isArray(r.imm) ? r.imm : [0, 0, 0, 0];
+        const cmdLabel = r.part ? `${r.part.op} ${r.part.val}` : '---';
+        return `
+          <tr class="asm-fuse-row ${isLivePc ? 'pc-live' : ''} ${isSelected ? 'is-selected' : ''} ${!r.valid ? 'is-empty' : ''} ${isLocked ? 'is-locked' : ''}"
+            data-fuse-addr="${r.addr}"
+            data-locked="${isLocked ? '1' : '0'}">
+            <td class="fuse-word-cell" title="番地 ${r.addr} (${r.addrBits})">
+              <span class="fuse-pc-mark">${isLivePc ? '▶' : ''}</span>W${r.addr}
+            </td>
+            <td class="fuse-cmd-cell">${escapeHtml(cmdLabel)}${isLocked ? '🔒' : ''}</td>
+            ${fuseCell(r.i1, r.valid, 'op-fuse', 'I1')}
+            ${fuseCell(r.i0, r.valid, 'op-fuse', 'I0')}
+            ${fuseCell(imm[3], r.valid, 'imm-fuse', 'IMM3(8)')}
+            ${fuseCell(imm[2], r.valid, 'imm-fuse', 'IMM2(4)')}
+            ${fuseCell(imm[1], r.valid, 'imm-fuse', 'IMM1(2)')}
+            ${fuseCell(imm[0], r.valid, 'imm-fuse', 'IMM0(1)')}
+          </tr>
+        `;
+      })
+      .join('');
+
+    return `
+      <div class="asm-fuse-matrix-panel" role="region" aria-label="焼付ROM配線図">
+        <div class="asm-fuse-head">
+          <span class="asm-fuse-title">🔥 焼付ROM配線図（DEC2_4 × OR ヒューズ）</span>
+          <span class="asm-fuse-badge">${fuseMatrix.totalBurnedFuses}箇所焼付 · ${fuseMatrix.wordCount}語</span>
+        </div>
+        <div class="asm-fuse-table-wrap">
+          <table class="asm-fuse-table">
+            <thead>
+              <tr>
+                <th class="fuse-th-word">語線</th>
+                <th class="fuse-th-cmd">命令</th>
+                <th class="fuse-th-op" title="命令上位ビット I1">I1</th>
+                <th class="fuse-th-op" title="命令下位ビット I0">I0</th>
+                <th class="fuse-th-imm" title="即値 IMM3 (重み 8)">8</th>
+                <th class="fuse-th-imm" title="即値 IMM2 (重み 4)">4</th>
+                <th class="fuse-th-imm" title="即値 IMM1 (重み 2)">2</th>
+                <th class="fuse-th-imm" title="即値 IMM0 (重み 1)">1</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        <div class="asm-fuse-legend">● = OR配線焼付(1) ／ · = 未接続(0) ／ 緑行 = 実行中のPC語線</div>
+      </div>
+    `;
+  }
+
   _getHardwareBridgeViewModel() {
     const st = this.asmState;
     const isStepping = st.stepIdx >= 0;
     const rows = this.stage?.asmProgramSpec?.rows || [];
 
     // Determine which instruction is currently driving the 6 input pins of ARK4_SYS:
-    // - While awaiting Stage 24 final clock: row 4 (LDI 15)
+    // - While awaiting Stage 26 final clock: final row (3: LDI 15)
     // - While stepping: the executed cycle's instruction
     // - While idle/editing: the currently selected line so edits flip the 6 wire LEDs LIVE!
     let activeAddr = this.selectedAddr;
@@ -381,9 +556,10 @@ export class AssemblyIdePanel {
     let decode = probeInstructionDecode(this._hw, activePart);
 
     if (this.awaitingFinalClock) {
-      const r4 = rows.find((r) => r.addr === 4);
-      activeAddr = 4;
-      activePart = r4 ? resolveSlotInstruction(this.slots[r4.slotId], this.stage) : null;
+      const finalAddr = this._getFinalRowAddr();
+      const rFinal = rows.find((r) => r.addr === finalAddr) || rows[rows.length - 1] || null;
+      activeAddr = rFinal ? rFinal.addr : finalAddr;
+      activePart = rFinal ? resolveSlotInstruction(this.slots[rFinal.slotId], this.stage) : null;
       decode = probeInstructionDecode(this._hw, activePart);
       modeLabel = '⚡ 最終開門クロック待機中';
     } else if (isStepping) {
@@ -403,7 +579,6 @@ export class AssemblyIdePanel {
           st.immBits?.[1] === '1' ? 1 : 0,
           st.immBits?.[0] === '1' ? 1 : 0,
         ],
-        ret: st.retBit ? 1 : 0,
         opcodeBits: st.opcodeBits || '00',
         immBits: st.immBits || '0000',
         opFlag: st.opFlag ? 1 : 0,
@@ -445,7 +620,14 @@ export class AssemblyIdePanel {
     const opNameDisp = activePart ? activePart.name : '空欄';
     const opBadgeColor = activePart?.color || '#33465a';
     const decSummary = summarizeDecodeAction(decode, activePart);
-    const nandCount = this._hw?.metrics?.nandCount || 0;
+    const { nandCount, swCount, pullCount } = this._getSiliconCounts();
+    const fuseMatrix = this._computeFuseMatrix();
+    const zeroFootText = st.z ? 'Z=1 (ゼロ検知 → JNZ不発・通過!)' : 'Z=0 (非ゼロ → JNZ発火!)';
+    const pcFootText = st.jmpFired
+      ? '⚡ JNZジャンプ発火! (Z=0)'
+      : isStepping && st.brFlag && st.z
+        ? '✔ JNZ不発・通過! (Z=1)'
+        : '通常 +1 進行';
 
     return `
       <div class="asm-hw-head">
@@ -465,8 +647,21 @@ export class AssemblyIdePanel {
         <span class="asm-chain-arrow" aria-hidden="true">▸</span>
         <button type="button" class="asm-inspect-btn" data-inspect-chip="ROM_4W" title="自作 配線ROM (ROM_4W) の内部回路を見る">🔍 ROM</button>
         <span class="asm-chain-arrow" aria-hidden="true">▸</span>
-        <button type="button" class="asm-inspect-btn cpu" id="btn-asm-inspect" data-inspect-chip="ARK4_SYS" title="自作 ノイマン型計算機 (ARK4_SYS) の内部回路を見る">🔍 CPU${nandCount > 0 ? ` (${nandCount}N)` : ''}</button>
+        <button type="button" class="asm-inspect-btn cpu" id="btn-asm-inspect" data-inspect-chip="ARK4_SYS" title="自作 ノイマン型計算機 (ARK4_SYS) の内部回路を見る${nandCount > 0 ? `（${nandCount} NAND ＝ MOSFET ${swCount}個 ＋ 抵抗 ${pullCount}本）` : ''}">
+          🔍 CPU${nandCount > 0 ? ` (<span class="asm-cpu-nand-part">${nandCount}N · </span>${swCount}FET)` : ''}
+        </button>
       </div>
+
+      <div class="asm-hw-subtools">
+        <button type="button" class="asm-subtool-btn fuse ${this.showFuseMatrix ? 'active' : ''}" id="btn-asm-fuse-toggle" aria-expanded="${this.showFuseMatrix ? 'true' : 'false'}" title="Mask ROM 焼付ヒューズ配線図（DEC2_4 × OR）を表示/折りたたみ">
+          🔥 焼付ROM図${fuseMatrix.totalBurnedFuses > 0 ? ` (${fuseMatrix.totalBurnedFuses})` : ''} ${this.showFuseMatrix ? '▴' : '▾'}
+        </button>
+        <button type="button" class="asm-subtool-btn blueprint" id="btn-asm-export-verilog" title="全MOSFET・抵抗ネットリストをVerilog HDL設計図として出力">
+          💾 設計図(Verilog)
+        </button>
+      </div>
+
+      ${this.showFuseMatrix ? this._renderFuseMatrixHtml(fuseMatrix, isStepping, st) : ''}
 
       <!-- PHYSICAL BRIDGE: KEY -> ASM_ENC -> ROM -> 6 ELECTRIC SWITCH PINS -->
       <div class="asm-bus-bridge">
@@ -481,7 +676,6 @@ export class AssemblyIdePanel {
             <div class="asm-pin-cells">
               ${pinBit('I1', decode.i1, 'op-pin')}
               ${pinBit('I0', decode.i0, 'op-pin')}
-              ${decode.ret ? `<span class="asm-pin on ret-pin"><span class="asm-pin-lbl">RET</span><span class="asm-pin-val">1</span></span>` : ''}
             </div>
           </div>
           <div class="asm-pin-group">
@@ -517,10 +711,10 @@ export class AssemblyIdePanel {
           <div class="asm-bit-leds" title="2進数 ${accBits}">${accLedRow}</div>
         </div>
 
-        <div class="asm-chip-card chip-zero ${st.z ? 'active-z' : ''}">
+        <div class="asm-chip-card chip-zero ${st.z ? 'active-z' : 'nonzero-z'}">
           <div class="asm-chip-hdr"><span>ZERO_4B</span><span class="asm-chip-sub">ゼロ目</span></div>
           <div class="asm-chip-big">Z = <strong>${st.z}</strong></div>
-          <div class="asm-chip-foot">${st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ'}</div>
+          <div class="asm-chip-foot" title="${escapeHtml(zeroFootText)}">${escapeHtml(zeroFootText)}</div>
         </div>
 
         <div class="asm-chip-card chip-pc ${st.jmpFired ? 'active-jmp' : ''}">
@@ -528,7 +722,7 @@ export class AssemblyIdePanel {
           <div class="asm-chip-big">
             ${isStepping ? `${st.pc} → <strong>${st.pcNext}番</strong>` : `PC = <strong>${st.pc}番</strong>`}
           </div>
-          <div class="asm-chip-foot">${st.retBit ? '🔄 外部帰還' : st.jmpFired ? '⚡ ジャンプ!' : '通常 +1 進行'}</div>
+          <div class="asm-chip-foot" title="${escapeHtml(pcFootText)}">${escapeHtml(pcFootText)}</div>
         </div>
       </div>
     `;
@@ -538,6 +732,26 @@ export class AssemblyIdePanel {
     if (!panelEl) return;
     panelEl.querySelector('#btn-asm-step')?.addEventListener('click', () => this.stepOnce());
     panelEl.querySelector('#btn-asm-reset')?.addEventListener('click', () => this.resetPc());
+    panelEl.querySelector('#btn-asm-fuse-toggle')?.addEventListener('click', () => {
+      this.showFuseMatrix = !this.showFuseMatrix;
+      this.cb.onSound?.('switch');
+      this._syncHardwarePanelInPlace();
+    });
+    panelEl.querySelector('#btn-asm-export-verilog')?.addEventListener('click', () => {
+      this.cb.onSound?.('switch');
+      this.cb.onExportSilicon?.(this.getExportPayload());
+    });
+    panelEl.querySelectorAll('[data-fuse-addr]').forEach((tr) => {
+      tr.addEventListener('click', () => {
+        if (tr.dataset.locked === '1') return;
+        const addr = Number(tr.dataset.fuseAddr);
+        if (Number.isNaN(addr)) return;
+        this.selectedAddr = addr;
+        this.cb.onSound?.('switch');
+        this.render();
+        this.renderComposer();
+      });
+    });
     panelEl.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const chipId = btn.dataset.inspectChip || 'ARK4_SYS';
@@ -576,6 +790,7 @@ export class AssemblyIdePanel {
     const rows = spec?.rows || [];
     const st = this.asmState;
     const isStepping = st.stepIdx >= 0;
+    const finalAddr = this._getFinalRowAddr();
 
     // Build visual code rows or raw text editor
     let editorContentHtml = '';
@@ -585,16 +800,14 @@ export class AssemblyIdePanel {
           const part = r.locked
             ? r.fixedPart
             : resolveSlotInstruction(this.slots[r.slotId], this.stage);
-          const isAwaitingOpen = this.awaitingFinalClock && r.addr === 4;
+          const isAwaitingOpen = this.awaitingFinalClock && r.addr === finalAddr;
           const isPcNow = isAwaitingOpen || (isStepping && st.pc === r.addr);
           const isSelected = !r.locked && this.selectedAddr === r.addr;
           const opCls = part ? `op-${part.op.toLowerCase()}` : 'op-empty';
           const bits = part ? `${part.opcodeBits} ${part.immBits}` : '-- ----';
           const commentText = part
             ? r.locked
-              ? r.addr === 3 && part.op === 'LOOP'
-                ? '固定回路: RET=1で1番地へ帰還'
-                : `固定命令: ${part.meta || part.rule}`
+              ? `固定命令: ${part.meta || part.rule}`
               : part.comment
             : 'タップして命令を書く';
 
@@ -633,7 +846,7 @@ export class AssemblyIdePanel {
 
       editorContentHtml = `
         <div class="asm-text-editor-wrap">
-          <div class="asm-text-help">書式: <code>0: LDI 3</code> ／ 命令: <code>LDI</code> <code>ADD</code> <code>SUB</code> <code>JZ</code> ／ 数値: <code>0〜15</code> (2進数 <code>0b1111</code> も可)</div>
+          <div class="asm-text-help">書式: <code>0: LDI 3</code> ／ 命令: <code>LDI</code> <code>ADD</code> <code>SUB</code> <code>JNZ</code> ／ 数値: <code>0〜15</code> (2進数 <code>0b1111</code> も可)</div>
           <textarea id="asm-raw-textarea" class="asm-raw-textarea" rows="${Math.max(5, rows.length + 1)}" spellcheck="false" autocomplete="off" autocapitalize="characters">${escapeHtml(this.rawText)}</textarea>
           ${errBanner}
         </div>
@@ -793,7 +1006,7 @@ export class AssemblyIdePanel {
     if (this.editorMode === 'text') {
       this.paletteHost.innerHTML = `
         <div class="asm-composer-text-tip">
-          <span>⌨ テキスト直打ちモード中：<code>LDI 3</code> / <code>ADD 7</code> / <code>SUB 1</code> / <code>JZ 4</code> のように1行1命令で記述しよう</span>
+          <span>⌨ テキスト直打ちモード中：<code>LDI 3</code> / <code>ADD 7</code> / <code>SUB 1</code> / <code>JNZ 1</code> のように1行1命令で記述しよう</span>
           <button type="button" class="asm-comp-help-btn" id="btn-asm-comp-isa">📖 命令表</button>
         </div>
       `;
@@ -807,10 +1020,10 @@ export class AssemblyIdePanel {
     const curPart = this._getCurrentSelectedPart();
     const curOp = curPart?.op || null;
     const curVal = curPart ? curPart.val : 0;
-    const curValBits = curVal.toString(2).padStart(4, '0');
 
     const opButtons = EDITABLE_OPCODES.map((op) => {
-      const def = ARK4_OPCODES[op];
+      const def = getOpcodeDef(op);
+      if (!def) return '';
       const active = curOp === op;
       return `
         <button type="button"
@@ -823,6 +1036,24 @@ export class AssemblyIdePanel {
         </button>
       `;
     }).join('');
+
+    const dipSwitches = [3, 2, 1, 0]
+      .map((bitIdx) => {
+        const weight = 1 << bitIdx;
+        const isOn = Boolean((curVal >> bitIdx) & 1);
+        return `
+          <button type="button"
+            class="asm-dip-sw ${isOn ? 'on' : 'off'}"
+            data-dip-bit="${bitIdx}"
+            aria-pressed="${isOn ? 'true' : 'false'}"
+            title="物理スイッチ IMM${bitIdx} (重み ${weight}) を ${isOn ? '0(OFF)' : '1(ON)'} に切替">
+            <span class="asm-dip-led" aria-hidden="true"></span>
+            <span class="asm-dip-w">${weight}</span>
+            <span class="asm-dip-v">${isOn ? '1' : '0'}</span>
+          </button>
+        `;
+      })
+      .join('');
 
     const numPills = Array.from({ length: 16 }, (_, n) => {
       const active = curPart !== null && curVal === n;
@@ -840,9 +1071,10 @@ export class AssemblyIdePanel {
         <div class="asm-comp-row asm-comp-vals">
           <div class="asm-val-stepper">
             <button type="button" class="asm-step-pm" data-asm-delta="-1" aria-label="値を1減らす">−</button>
-            <span class="asm-val-readout"><strong>${curVal}</strong><small>${curValBits}</small></span>
+            <span class="asm-val-readout" title="10進数 ${curVal}（2進数 ${curVal.toString(2).padStart(4, '0')}）"><strong>${curVal}</strong></span>
             <button type="button" class="asm-step-pm" data-asm-delta="1" aria-label="値を1増やす">＋</button>
           </div>
+          <div class="asm-dip-bank" role="group" aria-label="4bit物理DIPスイッチ (8 4 2 1)">${dipSwitches}</div>
           <div class="asm-num-strip" role="group" aria-label="即値 0〜15">${numPills}</div>
         </div>
       </div>
@@ -860,6 +1092,16 @@ export class AssemblyIdePanel {
         const nextVal = curPart ? curPart.val : 0;
         this.cb.onSound?.('place');
         this._setInstructionAt(this.selectedAddr, op, nextVal);
+      });
+    });
+
+    this.paletteHost.querySelectorAll('[data-dip-bit]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bitIdx = Number(btn.dataset.dipBit);
+        const nextOp = curOp || 'LDI';
+        const nextVal = curVal ^ (1 << bitIdx);
+        this.cb.onSound?.('switch');
+        this._setInstructionAt(this.selectedAddr, nextOp, nextVal);
       });
     });
 

@@ -4,13 +4,13 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=36';
-import { CODEX_ENTRIES } from '../data/codex.js?v=36';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=37';
+import { CODEX_ENTRIES } from '../data/codex.js?v=37';
 import {
   ARK4_ISA_TABLE,
   getStageSymbolReferences,
   stageUsesIsaTable,
-} from '../data/symbolReference.js?v=36';
+} from '../data/symbolReference.js?v=37';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -19,13 +19,29 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=36';
-import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
-import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=36';
-import { sound } from '../audio/sound.js?v=36';
-import { StoryDiagramGroup } from './storyDiagram.js?v=36';
-import { glossaryPopover } from './glossaryPopover.js?v=36';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=36';
+} from '../data/glossary.js?v=37';
+import { PRIMITIVE_CHIPS, getChipDef, computeCircuitMetrics } from '../engine/circuit.js';
+import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=37';
+import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=37';
+import { sound } from '../audio/sound.js?v=37';
+import { StoryDiagramGroup } from './storyDiagram.js?v=37';
+import { glossaryPopover } from './glossaryPopover.js?v=37';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=37';
+
+function resolveSiliconStats(defOrMetrics, circuit = null, customChips = {}) {
+  const calc = circuit ? computeCircuitMetrics(circuit, customChips) : null;
+  const nandCount = defOrMetrics?.nandCount ?? calc?.nandCount ?? 0;
+  const isNandChip = defOrMetrics?.id === 'NAND';
+  const swCount =
+    defOrMetrics?.swCount ??
+    calc?.swCount ??
+    (isNandChip ? 2 : nandCount * 2);
+  const pullCount =
+    defOrMetrics?.pullCount ??
+    calc?.pullCount ??
+    (isNandChip ? 1 : nandCount);
+  return { nandCount, swCount, pullCount };
+}
 
 function esc(str) {
   return String(str ?? '')
@@ -183,14 +199,14 @@ export class ModalManager {
               ? '0番地で初期基準内圧「5」をセット（ACC=5）した上で、加圧(+7)と減圧(-4)を実行すること（加圧・減圧の順序はどちらが先でも合格！）'
               : stage.id === 'stage_23'
                 ? '0〜2番地の足し算で「3×4＝12」（2番地完了時 ACC=12）を合成し、3番地で目標値12を引いて差を 0（Z=1）にすること（ADD 3 と ADD 6 の順序はどちらが先でも合格！）'
-                : '0番地で初期値「3」をセットし、1〜3番地の帰還ループで ACC を「3 → 2 → 1 → 0」と1ずつ減らし、0 (Z=1) の瞬間に2番地の JZ 4 で4番地へ脱出すること'
+                : '0番地で初期値「3」をセットし、1〜2番地の自作ループ（SUB 1 → JNZ 1）で ACC を「3 → 2 → 1 → 0」と1ずつ減らし、ACC=0 (Z=1) の瞬間に2番地の JNZ 1 が不発となって3番地へ脱出すること'
           )}</li>
           <li><b>成功条件</b>：${esc(
             stage.id === 'stage_22'
               ? '3命令完了時に最終気圧 ACC=8 (1000)、次PC=3番地に到達していること'
               : stage.id === 'stage_23'
-                ? '4番地の JZ 6 が発火し、ACC=0 (Z=1) のまま次PC=6番地（開錠承認）へジャンプしていること'
-                : 'ループ脱出後に4番地で地上大ハッチ全開信号 ACC=15 (1111)、次PC=5番地を出力すること'
+                ? '4番地の JNZ 0 を通過（ACC=0 なので Z=1 → ジャンプ不発！）し、ACC=0 のまま次PC=5番地（開錠承認）へ進んでいること'
+                : 'ループ脱出後に3番地で地上大ハッチ全開信号 ACC=15 (1111)、次PC=4番地を出力すること'
           )}</li>
         </ul>
       </div>
@@ -273,18 +289,6 @@ export class ModalManager {
                   </tr>
                 `
                 ).join('')}
-                ${
-                  stage.id === 'stage_24'
-                    ? `
-                  <tr>
-                    <td class="mono amber bold">LOOP 1</td>
-                    <td class="spec-en-cell">Loop（外部帰還・固定）</td>
-                    <td>外部帰還線 RET=1 で判定を0に接地し、ACCを保ったまま1番地へ強制帰還</td>
-                    <td class="mono emerald">11 + RET</td>
-                  </tr>
-                `
-                    : ''
-                }
               </tbody>
             </table>
           </div>
@@ -292,7 +296,7 @@ export class ModalManager {
       `
       : '';
 
-    const isaKeys = new Set(stage.id === 'stage_24' ? ['LDI', 'ADD', 'SUB', 'JZ', 'LOOP'] : ['LDI', 'ADD', 'SUB', 'JZ']);
+    const isaKeys = new Set(['LDI', 'ADD', 'SUB', 'JNZ']);
     const symRefs = getStageSymbolReferences(stage).filter(
       (item) => !(showIsa && isaKeys.has(item.key))
     );
@@ -504,7 +508,7 @@ export class ModalManager {
     chipDef,
     metrics,
     hasNextStage,
-    { onNext, onOpenCodex, onStay, onReplayEnding, journeyStats = null }
+    { onNext, onOpenCodex, onStay, onReplayEnding, onExportSilicon = null, journeyStats = null }
   ) {
     const codexCards = (stage.codexUnlock || [])
       .map((cid) => CODEX_ENTRIES[cid])
@@ -520,25 +524,39 @@ export class ModalManager {
       )
       .join('');
 
+    const metricSw = metrics?.swCount ?? (stage.id === 'stage_00' ? 2 : (metrics?.nandCount || 0) * 2);
+    const metricPull = metrics?.pullCount ?? (stage.id === 'stage_00' ? 1 : metrics?.nandCount || 0);
+
     let finaleBanner = '';
     if (stage.isChapter2Finale) {
-      const sysNand = journeyStats?.ark4SysNandCount ?? metrics.nandCount ?? 479;
+      const sysNand = journeyStats?.ark4SysNandCount ?? metrics.nandCount ?? 480;
+      const sysSw = journeyStats?.ark4SysSwCount ?? sysNand * 2;
+      const sysPull = journeyStats?.ark4SysPullCount ?? sysNand;
       const forgedCount = journeyStats?.forgedChipCount ?? 21;
       const clearedCount = journeyStats?.clearedCount ?? STAGES.length;
       finaleBanner = `
         <div class="victory-cert-card sky">
           <div class="vcert-eyebrow">☀ SILICON GENESIS // ALL CHAPTERS COMPLETE</div>
           <div class="vcert-title">第二章完結 — 42年ぶりの青空への帰還！！</div>
-          <p class="vcert-desc">砂（シリコン）と1個のスイッチから始まったあなたの自作計算機 <code>ARK4_SYS</code> とアセンブリ・プログラムが、地上大ハッチを全開にし、118人全員を本物の青空の下へ導きました！</p>
+          <p class="vcert-desc">砂（シリコン）と1個のスイッチから始まったあなたの自作計算機 <code>ARK4_SYS</code> と純粋4命令アセンブリ・プログラムが、地上大ハッチを全開にし、118人全員を本物の青空の下へ導きました！</p>
           <div class="vcert-grid">
             <div class="vcert-stat"><span class="vcert-lbl">最終称号</span><strong>アーク7 最高主任技師</strong></div>
-            <div class="vcert-stat"><span class="vcert-lbl">自作計算機</span><strong>${sysNand} NAND</strong><small>TR換算 ${sysNand * 2}個</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">自作計算機</span><strong>${sysNand} NAND</strong><small>MOSFET ${sysSw}個 ＋ 抵抗 ${sysPull}本</small></div>
             <div class="vcert-stat"><span class="vcert-lbl">復元レコード</span><strong>${clearedCount} / ${STAGES.length}</strong><small>自作チップ ${forgedCount}種</small></div>
           </div>
           <div class="vcert-chain">砂(MOSFET) → NAND → 加算器 → ラッチ → CPU → ENC＋ROM → アセンブリ → ☀青空</div>
+          ${
+            onExportSilicon
+              ? `<div class="vcert-export-row">
+                  <button type="button" class="btn-silicon-pill cert" id="btn-victory-cert-verilog">💾 実シリコン設計図 (Verilog HDL) を書き出す</button>
+                </div>`
+              : ''
+          }
         </div>`;
     } else if (stage.isFinale) {
       const cpuNand = journeyStats?.ark4NandCount ?? metrics.nandCount ?? 240;
+      const cpuSw = journeyStats?.ark4SwCount ?? cpuNand * 2;
+      const cpuPull = journeyStats?.ark4PullCount ?? cpuNand;
       const forgedCount = journeyStats?.forgedChipCount ?? 18;
       finaleBanner = `
         <div class="victory-cert-card">
@@ -547,7 +565,7 @@ export class ModalManager {
           <p class="vcert-desc">地上ビーコンから <code>"HELLO, WORLD."</code> が届き、生存シェルター『アーク3』と繋がりました！ <b>☀ 第二章「青空への帰還」（STAGE 18〜26）</b> が解放されました！</p>
           <div class="vcert-grid">
             <div class="vcert-stat"><span class="vcert-lbl">昇格称号</span><strong>アーク7 主任技師</strong></div>
-            <div class="vcert-stat"><span class="vcert-lbl">自作CPU規模</span><strong>${cpuNand} NAND</strong><small>TR換算 ${cpuNand * 2}個</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">自作CPU規模</span><strong>${cpuNand} NAND</strong><small>MOSFET ${cpuSw}個 ＋ 抵抗 ${cpuPull}本</small></div>
             <div class="vcert-stat"><span class="vcert-lbl">鍛えたチップ</span><strong>${forgedCount} 種</strong><small>全${MODULE_ENCYCLOPEDIA_IDS.length}図鑑連動</small></div>
           </div>
           <div class="vcert-chain">砂(MOSFET) → NAND → 論理ゲート → 4bit加算器 → 記憶回路 → 🧠ARK-4</div>
@@ -560,10 +578,10 @@ export class ModalManager {
         : stage.id === 'stage_00b'
           ? `物理回路：<b>プルアップ抵抗 ＋ 接地スイッチ</b>`
           : stage.id === 'stage_00'
-            ? `物理スイッチ(TR): <b>${metrics.nodeCount}</b>部品`
+            ? `物理シリコン：<b>MOSFET ${metricSw}個 ＋ 抵抗 ${metricPull}本</b>`
             : stage.kind === 'assembly_program'
-              ? `ROM命令数: <b>${metrics.nodeCount}行</b> <span class="dim">(ARK4_SYS 実効 ${metrics.nandCount} NAND)</span>`
-              : `実効NAND: <b>${metrics.nandCount}</b>個 <span class="dim">(TR換算 ${metrics.nandCount * 2}個)</span>`;
+              ? `ROM命令数: <b>${metrics.nodeCount}行</b> <span class="dim">(ARK4_SYS ${metrics.nandCount}N · MOSFET ${metricSw}個＋抵抗 ${metricPull}本)</span>`
+              : `実効NAND: <b>${metrics.nandCount}</b>個 <span class="dim">(MOSFET ${metricSw}個 ＋ 抵抗 ${metricPull}本)</span>`;
 
     const forgedCaption =
       stage.id === 'stage_00a'
@@ -625,11 +643,24 @@ export class ModalManager {
               }</button>`
             : ''
         }
+        ${
+          onExportSilicon
+            ? `<button class="btn btn-silicon" id="btn-victory-verilog">💾 設計図(Verilog)</button>`
+            : ''
+        }
         <button class="btn btn-amber" id="btn-victory-codex">📖 CS図鑑を読む</button>
         <button class="btn btn-ghost" id="btn-victory-stay">この回路に留まる</button>
       `,
     });
 
+    this.bodyEl.querySelector('#btn-victory-cert-verilog')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      onExportSilicon?.();
+    });
+    this.footerEl.querySelector('#btn-victory-verilog')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      onExportSilicon?.();
+    });
     this.footerEl.querySelector('#btn-victory-next')?.addEventListener('click', () => {
       this.close();
       onNext();
@@ -844,6 +875,8 @@ export class ModalManager {
       onNextStage = null,
       nextStageLabel = '次のミッションへ進む ▶',
       onBackToVictory = null,
+      onExportSilicon = null,
+      onToast = null,
     } = {}
   ) {
     const isSaveObj = saveOrUnlockedIds && !Array.isArray(saveOrUnlockedIds) && typeof saveOrUnlockedIds === 'object';
@@ -960,10 +993,18 @@ export class ModalManager {
               `;
             }
 
+            const forgedSilicon = forged
+              ? resolveSiliconStats(forged, forged.circuit || null, customChips)
+              : null;
+            const siliconBadgeStr = forgedSilicon
+              ? term.chipId === 'NAND'
+                ? `MOSFET ${forgedSilicon.swCount}個＋抵抗 ${forgedSilicon.pullCount}本`
+                : `実効 ${forgedSilicon.nandCount} NAND（MOSFET ${forgedSilicon.swCount}個＋抵抗 ${forgedSilicon.pullCount}本）`
+              : '';
             const detailBadge = isProvisionedOnly
-              ? `<span class="mod-status-badge provisioned">📦 標準支給品（未自作）${forged ? ` · 実効 ${forged.nandCount ?? 0} NAND` : ''}</span>`
+              ? `<span class="mod-status-badge provisioned">📦 標準支給品（未自作）${siliconBadgeStr ? ` · ${siliconBadgeStr}` : ''}</span>`
               : forged
-                ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · 実効 ${forged.nandCount ?? 0} NAND</span>`
+                ? `<span class="mod-status-badge forged">✔ 自作チップ登録済 · ${siliconBadgeStr}</span>`
                 : cleared
                   ? `<span class="mod-status-badge cleared">✔ クリア・習得済</span>`
                   : `<span class="mod-status-badge">📖 動的図解</span>`;
@@ -1212,6 +1253,24 @@ export class ModalManager {
       const allHistoryExpanded =
         unlockedHistoryEntries.length > 0 && unlockedHistoryEntries.every((e) => expandedCodexIds.has(e.id));
 
+      const canExportSilicon = Boolean(
+        isChapter1Cleared(save) ||
+          clearedSet.has('stage_21') ||
+          customChips?.ARK4_CORE ||
+          customChips?.ARK4_SYS
+      );
+      const siliconHeaderBarHtml = canExportSilicon
+        ? `
+          <div class="codex-silicon-bar">
+            <div class="codex-silicon-info">
+              <span class="codex-silicon-title">🔬 シリコン設計図・実ネットリスト</span>
+              <span class="codex-silicon-sub">自作チップをそのまま Verilog HDL (.v) で出力</span>
+            </div>
+            <button type="button" id="btn-codex-export-silicon" class="btn-silicon-pill">💾 設計図(Verilog)</button>
+          </div>
+        `
+        : '';
+
       const bodyHtml = `
         <div class="codex-tabs-bar">
           <button type="button" class="codex-tab-btn ${activeTab === 'modules' ? 'active' : ''}" data-codex-tab="modules">
@@ -1221,6 +1280,8 @@ export class ModalManager {
             📜 CS歴史図鑑 (${unlockedHistoryCount}/${allHistoryEntries.length})
           </button>
         </div>
+
+        ${siliconHeaderBarHtml}
 
         <div id="codex-back-bar" class="codex-back-bar ${prevNav ? '' : 'hidden'}">
           <button type="button" id="btn-codex-history-back" class="btn btn-amber codex-history-back-btn">
@@ -1277,6 +1338,30 @@ export class ModalManager {
       if (activeTab === 'modules') {
         this.diagramGroup.mountAll(this.bodyEl);
       }
+
+      // Bind Silicon Blueprint Verilog export button in Codex header
+      this.bodyEl.querySelector('#btn-codex-export-silicon')?.addEventListener('click', () => {
+        sound.playSwitch(true);
+        if (onExportSilicon) {
+          onExportSilicon();
+        } else {
+          this.openSiliconExport(customChips, {
+            onToast,
+            backLabel: '◀ 図鑑へ戻る',
+            onBack: () => {
+              this.openCodex(saveOrUnlockedIds, {
+                highlightIds,
+                initialTab: activeTab,
+                onNextStage,
+                nextStageLabel,
+                onBackToVictory,
+                onExportSilicon,
+                onToast,
+              });
+            },
+          });
+        }
+      });
 
       // Bind tab switching
       this.bodyEl.querySelectorAll('[data-codex-tab]').forEach((btn) => {
@@ -1472,6 +1557,8 @@ export class ModalManager {
                 onNextStage,
                 nextStageLabel,
                 onBackToVictory,
+                onExportSilicon,
+                onToast,
               });
             },
           });
@@ -1581,6 +1668,13 @@ export class ModalManager {
       (chipType === 'NAND' ? customChips?.NAND?.provisioned : def.provisioned)
     );
 
+    const siliconStats = resolveSiliconStats(
+      chipType === 'NAND' ? { ...def, id: 'NAND' } : def,
+      circuitToShow || null,
+      customChips
+    );
+    const hasSiliconCount = siliconStats.swCount > 0 || siliconStats.pullCount > 0;
+
     const trail = [...breadcrumb, def.name];
     const breadcrumbHtml =
       trail.length > 1
@@ -1623,7 +1717,12 @@ export class ModalManager {
         <div class="chip-stats-row" style="margin-top:10px;margin-bottom:0;">
           <div class="stat-pill">入力: <b>${def.inputs.length}</b> (${esc(def.inputs.join(', ') || 'なし')})</div>
           <div class="stat-pill">出力: <b>${def.outputs.length}</b> (${esc(def.outputs.join(', '))})</div>
-          <div class="stat-pill">実効NAND: <b>${def.nandCount ?? 0}</b></div>
+          <div class="stat-pill">実効NAND: <b>${siliconStats.nandCount}</b></div>
+          ${
+            hasSiliconCount
+              ? `<div class="stat-pill silicon">物理素子: <b>MOSFET ${siliconStats.swCount}個 ＋ 抵抗 ${siliconStats.pullCount}本</b></div>`
+              : ''
+          }
           <div class="stat-pill">抽象階層: <b>Lv.${def.depth ?? 0}</b></div>
         </div>
       </div>
@@ -1632,10 +1731,10 @@ export class ModalManager {
     let schematicHtml = '';
     if (circuitToShow) {
       const heading = isProvisioned
-        ? `📦 標準支給回路の内部配線（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`
+        ? `📦 標準支給回路の内部配線（${circuitToShow.nodes.length}チップ / ${siliconStats.nandCount}N · MOSFET ${siliconStats.swCount}個＋抵抗 ${siliconStats.pullCount}本）`
         : chipType === 'NAND'
-          ? `🔧 あなたが物理スイッチから創り上げた NAND 原板（${circuitToShow.nodes.length}部品）`
-          : `🔧 あなたが設計した内部回路（${circuitToShow.nodes.length}チップ / 実効 ${def.nandCount} NAND）`;
+          ? `🔧 あなたが物理スイッチから創り上げた NAND 原板（MOSFET ${siliconStats.swCount}個 ＋ 抵抗 ${siliconStats.pullCount}本）`
+          : `🔧 あなたが設計した内部回路（${circuitToShow.nodes.length}チップ / ${siliconStats.nandCount}N · MOSFET ${siliconStats.swCount}個＋抵抗 ${siliconStats.pullCount}本）`;
 
       // Sub-chip drill-down buttons so player can trace signals deeper into sub-modules!
       const drillableNodes = circuitToShow.nodes.filter((n) => {
@@ -1747,7 +1846,189 @@ export class ModalManager {
   }
 
   // ===========================================================================
-  // 8. SETTINGS MODAL (AUDIO, VOLUME SLIDER, SOUND TEST, RESET SAVE)
+  // 8. REAL SILICON BLUEPRINT / VERILOG HDL EXPORT MODAL
+  // ===========================================================================
+  openSiliconExport(
+    customChips = {},
+    {
+      romCircuit = null,
+      romRows = null,
+      stageTitle = '',
+      onToast = null,
+      onBack = null,
+      backLabel = '◀ 戻る',
+    } = {}
+  ) {
+    let exported = null;
+    try {
+      exported = exportSiliconBlueprint(customChips, { romCircuit, romRows, stageTitle });
+    } catch (err) {
+      exported = {
+        verilog: `// Verilog HDL Export Error: ${err?.message || 'unknown'}\n`,
+        summaryJa: '設計図の生成中にエラーが発生しました。',
+        stats: {
+          cpuNandCount: 0,
+          cpuSwCount: 0,
+          cpuPullCount: 0,
+          encNandCount: 0,
+          encSwCount: 0,
+          encPullCount: 0,
+          romNandCount: 0,
+          romSwCount: 0,
+          romPullCount: 0,
+          totalNandCount: 0,
+          totalSwCount: 0,
+          totalPullCount: 0,
+          moduleCount: 0,
+        },
+      };
+    }
+
+    const verilog = String(exported?.verilog || '');
+    const summaryJa = String(exported?.summaryJa || '');
+    const stats = exported?.stats || {};
+    const totalNand = stats.totalNandCount ?? 0;
+    const totalSw = stats.totalSwCount ?? 0;
+    const totalPull = stats.totalPullCount ?? 0;
+    const moduleCount = stats.moduleCount ?? 0;
+    const lineCount = verilog ? verilog.split('\n').length : 0;
+    const sizeKb = (new Blob([verilog]).size / 1024).toFixed(1);
+
+    const subPills = [];
+    if ((stats.cpuNandCount ?? 0) > 0) {
+      subPills.push(
+        `<span class="silicon-sub-pill cpu">CPU: <b>${stats.cpuNandCount}N</b> (${stats.cpuSwCount}FET + ${stats.cpuPullCount}抵抗)</span>`
+      );
+    }
+    if ((stats.encNandCount ?? 0) > 0) {
+      subPills.push(
+        `<span class="silicon-sub-pill enc">ENC: <b>${stats.encNandCount}N</b> (${stats.encSwCount}FET)</span>`
+      );
+    }
+    if ((stats.romNandCount ?? 0) > 0) {
+      subPills.push(
+        `<span class="silicon-sub-pill rom">ROM: <b>${stats.romNandCount}N</b> (${stats.romSwCount}FET)</span>`
+      );
+    }
+
+    this.open({
+      title: '💾 シリコン設計図（Verilog HDL ネットリスト）',
+      bodyHtml: `
+        <div class="silicon-bom-hero">
+          <div class="silicon-bom-eyebrow">PHOTOLITHOGRAPHY &amp; FPGA READY // REAL VERILOG HDL</div>
+          <div class="silicon-bom-tagline">このまま半導体露光・FPGA合成に持ち込める実ネットリスト</div>
+          ${summaryJa ? `<p class="silicon-bom-summary">${esc(summaryJa)}</p>` : ''}
+          <div class="silicon-bom-grid">
+            <div class="silicon-bom-cell">
+              <span class="bom-lbl">合計 NAND</span>
+              <strong class="bom-val amber">${totalNand}</strong>
+              <span class="bom-unit">ゲート</span>
+            </div>
+            <div class="silicon-bom-cell">
+              <span class="bom-lbl">MOSFET (SW)</span>
+              <strong class="bom-val emerald">${totalSw}</strong>
+              <span class="bom-unit">個</span>
+            </div>
+            <div class="silicon-bom-cell">
+              <span class="bom-lbl">プルアップ抵抗</span>
+              <strong class="bom-val sky">${totalPull}</strong>
+              <span class="bom-unit">本</span>
+            </div>
+            <div class="silicon-bom-cell">
+              <span class="bom-lbl">モジュール階層</span>
+              <strong class="bom-val">${moduleCount}</strong>
+              <span class="bom-unit">種</span>
+            </div>
+          </div>
+          ${subPills.length > 0 ? `<div class="silicon-sub-row">${subPills.join('')}</div>` : ''}
+        </div>
+
+        <div class="verilog-preview-wrap">
+          <div class="verilog-preview-head">
+            <span class="verilog-file-name">📄 ark4_silicon_genesis.v</span>
+            <span class="verilog-file-meta">${lineCount}行 · ${sizeKb} KB</span>
+          </div>
+          <pre class="verilog-code-pre" id="verilog-code-pre"><code>${esc(verilog)}</code></pre>
+        </div>
+      `,
+      footerHtml: `
+        <button type="button" class="btn btn-amber" id="btn-verilog-copy">📋 Verilogコピー</button>
+        <button type="button" class="btn btn-emerald" id="btn-verilog-download">⬇ .v ファイル保存</button>
+        ${onBack ? `<button type="button" class="btn btn-ghost" id="btn-verilog-back">${esc(backLabel)}</button>` : ''}
+        <button type="button" class="btn btn-ghost" data-close-modal>閉じる</button>
+      `,
+    });
+
+    const copyBtn = this.footerEl.querySelector('#btn-verilog-copy');
+    copyBtn?.addEventListener('click', async () => {
+      let copied = false;
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(verilog);
+          copied = true;
+        }
+      } catch {
+        copied = false;
+      }
+      if (!copied) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = verilog;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          copied = document.execCommand('copy');
+          ta.remove();
+        } catch {
+          copied = false;
+        }
+      }
+      sound.playSwitch(copied);
+      if (copied) {
+        copyBtn.textContent = '✔ コピー完了！';
+        copyBtn.classList.add('is-copied');
+        onToast?.('Verilog HDL 設計図をクリップボードにコピーしました！');
+        setTimeout(() => {
+          if (copyBtn.isConnected) {
+            copyBtn.textContent = '📋 Verilogコピー';
+            copyBtn.classList.remove('is-copied');
+          }
+        }, 2000);
+      } else {
+        onToast?.('コピーできませんでした。下のコードを選択してコピーしてください。');
+      }
+    });
+
+    this.footerEl.querySelector('#btn-verilog-download')?.addEventListener('click', () => {
+      try {
+        const blob = new Blob([verilog], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ark4_silicon_genesis.v';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        sound.playSwitch(true);
+        onToast?.('ark4_silicon_genesis.v を保存しました！');
+      } catch {
+        sound.playSwitch(false);
+        onToast?.('ファイル保存に失敗しました。コピーボタンをお試しください。');
+      }
+    });
+
+    this.footerEl.querySelector('#btn-verilog-back')?.addEventListener('click', () => {
+      sound.playSwitch(false);
+      onBack?.();
+    });
+    this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
+  }
+
+  // ===========================================================================
+  // 9. SETTINGS MODAL (AUDIO, VOLUME SLIDER, SOUND TEST, RESET SAVE)
   // ===========================================================================
   openSettings(
     save,

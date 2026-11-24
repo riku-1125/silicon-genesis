@@ -17,12 +17,12 @@ import {
   hasGlossaryTerms,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
-} from '../data/glossary.js?v=36';
-import { getChipDef } from '../engine/circuit.js';
-import { persistSaveData } from '../state/storage.js?v=36';
-import { sound } from '../audio/sound.js?v=36';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=36';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=36';
+} from '../data/glossary.js?v=37';
+import { getChipDef, computeCircuitMetrics } from '../engine/circuit.js';
+import { persistSaveData } from '../state/storage.js?v=37';
+import { sound } from '../audio/sound.js?v=37';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=37';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=37';
 
 let _saveProvider = null;
 
@@ -354,10 +354,14 @@ class GlossaryPopoverController {
     if (this.circuitMetaEl) {
       const nodeCount = circuit.nodes?.length || 0;
       const wireCount = circuit.wires?.length || 0;
+      const calcMetrics = computeCircuitMetrics(circuit, customChips);
+      const nandCount = forged.nandCount ?? calcMetrics?.nandCount ?? 0;
+      const swCount = forged.swCount ?? calcMetrics?.swCount ?? (chipId === 'NAND' ? 2 : nandCount * 2);
+      const pullCount = forged.pullCount ?? calcMetrics?.pullCount ?? (chipId === 'NAND' ? 1 : nandCount);
       const nandLabel =
         chipId === 'NAND'
-          ? `物理部品: ${nodeCount}個`
-          : `実効NAND: ${forged.nandCount ?? 0}個`;
+          ? `MOSFET ${swCount}個 ＋ 抵抗 ${pullCount}本`
+          : `実効NAND: ${nandCount}個（MOSFET ${swCount}個＋抵抗 ${pullCount}本）`;
       this.circuitMetaEl.innerHTML = `
         <span class="gp-meta-pill">部品 <b>${nodeCount}</b></span>
         <span class="gp-meta-pill">配線 <b>${wireCount}</b></span>
