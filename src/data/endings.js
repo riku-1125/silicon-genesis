@@ -10,14 +10,24 @@
 function formatStats(stats = {}) {
   const ark4Nand = Number.isFinite(stats.ark4NandCount) && stats.ark4NandCount > 0 ? stats.ark4NandCount : 240;
   const ark4SysNand =
-    Number.isFinite(stats.ark4SysNandCount) && stats.ark4SysNandCount > 0 ? stats.ark4SysNandCount : 479;
+    Number.isFinite(stats.ark4SysNandCount) && stats.ark4SysNandCount > 0 ? stats.ark4SysNandCount : 480;
+  const ark4Tr =
+    Number.isFinite(stats.ark4SwCount) && stats.ark4SwCount > 0 ? stats.ark4SwCount : ark4Nand * 2;
+  const ark4Pull =
+    Number.isFinite(stats.ark4PullCount) && stats.ark4PullCount > 0 ? stats.ark4PullCount : ark4Nand;
+  const ark4SysTr =
+    Number.isFinite(stats.ark4SysSwCount) && stats.ark4SysSwCount > 0 ? stats.ark4SysSwCount : ark4SysNand * 2;
+  const ark4SysPull =
+    Number.isFinite(stats.ark4SysPullCount) && stats.ark4SysPullCount > 0 ? stats.ark4SysPullCount : ark4SysNand;
   const forgedChips = Number.isFinite(stats.forgedChipCount) && stats.forgedChipCount > 0 ? stats.forgedChipCount : 18;
   const clearedCount = Number.isFinite(stats.clearedCount) && stats.clearedCount > 0 ? stats.clearedCount : 20;
   return {
     ark4Nand,
-    ark4Tr: ark4Nand * 2,
+    ark4Tr,
+    ark4Pull,
     ark4SysNand,
-    ark4SysTr: ark4SysNand * 2,
+    ark4SysTr,
+    ark4SysPull,
     forgedChips,
     clearedCount,
   };
@@ -37,7 +47,7 @@ export function buildChapter1EndingSteps(rawStats = {}) {
       bgm: 'finale',
       sfx: 'powerup',
       speaker: 'hako',
-      text: `『……全6命令シーケンス正常完了！ LDI 5 → ADD 3 → SUB 2 → NOP → ADD 7 → SUB 13 → ZERO！ お前が積み上げた ${s.ark4Nand} 個の NAND ゲート（トランジスタ換算 ${s.ark4Tr} 個）が、いまひとつの頭脳【ARK-4】として完全に目を覚ました！』`,
+      text: `『……全6命令シーケンス正常完了！ LDI 5 → ADD 3 → SUB 2 → NOP → ADD 7 → SUB 13 → ZERO！ お前が砂から積み上げた ${s.ark4Nand} 個の NAND ゲート（実機 MOSFET ${s.ark4Tr} 個＋プルアップ抵抗 ${s.ark4Pull} 本）が、いまひとつの頭脳【ARK-4】として完全に目を覚ました！』`,
     },
     {
       scene: './assets/scene_machinery.jpg',
@@ -186,7 +196,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       fx: 'shake',
       sfx: 'powerup',
       speaker: 'hako',
-      text: `『……主任による最終開門クロック入力を確認！ カウントダウン 3 → 2 → 1 → 0 ➔ 4番地【LDI 15 (00:1111)】が、お前自身の【ASM_ENC】・配線ROM・【ARK4_SYS（実効 ${s.ark4SysNand} NAND）】を完全通過！！\n全開信号 1111 出力──地上メインハッチ、全4基の爆破ボルト同時開放！！』`,
+      text: `『……主任による最終開門クロック入力を確認！ 外部回路ゼロ・純粋4行 JNZ ループ（LDI 3 → SUB 1 → JNZ 1）のカウントダウン 3 → 2 → 1 → 0 ➔ 3番地【LDI 15 (00:1111)】が、お前自身の【ASM_ENC】・4ワード焼付マスクROM・【ARK4_SYS（${s.ark4SysNand} NAND／実機 MOSFET ${s.ark4SysTr} 個＋抵抗 ${s.ark4SysPull} 本）】を完全通過！！\n全開信号 1111 出力──地上メインハッチ、全4基の爆破ボルト同時開放！！』`,
     },
     {
       scene: './assets/scene_shelter_hub.jpg',
@@ -283,7 +293,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       dateline: '2094.11.25 06:50 // 砂からOSまでの軌跡',
       mood: 'bluesky',
       speaker: 'hako',
-      text: `『たった1個のトランジスタから NAND を生み、論理ゲート、加算器、記憶ラッチ、CPU、命令エンコーダと配線ROM、そして自分で書いたアセンブリ言語まで──合計 ${s.ark4SysNand} 個の NAND ゲート（トランジスタ換算 ${s.ark4SysTr} 個）を積み上げて、本当に自分の計算機でこの扉を開けちまった。\n……お前は紛れもなく、新時代最高のエンジニアだぜ。』`,
+      text: `『たった1粒の砂から MOSFET と抵抗を鍛え上げ、${s.ark4SysNand} 個の NAND ゲート（実機 MOSFET ${s.ark4SysTr} 個＋プルアップ抵抗 ${s.ark4SysPull} 本）の自律CPU【ARK4_SYS】、命令エンコーダ【ASM_ENC】、4ワード焼付マスクROM、そして外部回路ゼロの純粋な4行 JNZ ループまで──このまま本物のシリコンウェハーへ焼き付けられるお前だけの計算機で、本当にこの扉を開けちまった。\n……お前は紛れもなく、新時代最高のエンジニアだぜ。』`,
     },
     {
       scene: './assets/scene_ending_bluesky.jpg',
@@ -327,10 +337,10 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       chapterCard: {
         roman: 'SILICON GENESIS · FIN',
         title: '砂とスイッチから、青空へ',
-        sub: `全ミッション完結 · 自作CPU ARK4_SYS (${s.ark4SysNand} NAND / TR ${s.ark4SysTr}個)`,
+        sub: `全ミッション完結 · 自作CPU ARK4_SYS (${s.ark4SysNand} NAND / MOSFET ${s.ark4SysTr}個＋抵抗 ${s.ark4SysPull}本)`,
       },
       speaker: null,
-      text: `たった1粒の砂（シリコン）と1個のスイッチから始まり、論理ゲート・加算器・記憶回路・CPU・命令エンコーダ・配線ROM、そしてアセンブリ言語まで──あなた自身が創り上げた計算機が、118人全員を本物の青空の下へ導きました。\n【SILICON GENESIS】を最後までプレイしていただき、本当にありがとうございました！`,
+      text: `たった1粒の砂（シリコン）から MOSFET トランジスタと抵抗を生み出し、論理ゲート・加算器・記憶回路・480 NAND の自律CPU・命令エンコーダ・4ワード焼付マスクROM、そして外部回路ゼロの純粋4行 JNZ ループまで──1ミリの飛躍もなくあなた自身が創り上げた本物のシリコン計算機が、118人全員を青空の下へ導きました。\n【SILICON GENESIS】を最後までプレイしていただき、本当にありがとうございました！`,
     },
   ];
 }

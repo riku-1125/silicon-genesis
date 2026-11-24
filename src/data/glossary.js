@@ -731,21 +731,21 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['A0..3'], outputs: ['Z'] },
     anim: 'zero_flag_4b',
     summary:
-      '4ビットの数値（A0..A3）がすべて0（0000）になった瞬間だけ Z=1 を出力し、1本でも1があれば Z=0 を返す検知モジュール。OR×3で全ビットをまとめ、最後にNOTで反転して作ります。ALUの引き算（A−B）と組み合わせることで「2つの数が一致した（差が0）」ことを見抜くCPUの『目』になります。',
+      '4ビットの数値（A0..A3）がすべて0（0000）になった瞬間だけ Z=1 を出力し、1本でも1があれば Z=0 を返す検知モジュール。OR×3で全ビットをまとめ、最後にNOTで反転して作ります。ALUの引き算（A−B）と組み合わせることで「2つの数が一致した（差が0）」や「カウントダウンが0に到達した」ことを見抜くCPUの『目』になります。',
     analogy: '気圧差やカウントダウンの残り時間が「ぴったりゼロ」になった瞬間だけ青ランプを灯す確認センサー。',
     related: ['or_gate', 'not_gate', 'alu', 'cond_pc'],
   },
   conditional_branch: {
     id: 'conditional_branch',
-    title: '条件分岐（if文・JZジャンプ）',
-    reading: 'Conditional Branch / Jump if Zero',
+    title: '条件分岐（if文・JNZジャンプ）',
+    reading: 'Conditional Branch / Jump if Not Zero',
     category: 'コンピュータ科学基礎',
     unlockReachedStage: 'stage_19',
     unlockLabel: 'STAGE 19 到達',
     summary:
-      '「もし今の計算結果が0なら指定番地へ飛び、0でなければ次の行へ進む」という、状況に応じてプログラムの進む道を変える仕組み。プログラミングの if文 や whileループ はすべてこの条件分岐回路から生まれています。',
-    analogy: '「まだ氷が残っている（氷の厚さ≠0）なら加熱へ戻り、溶け切った（氷の厚さ＝0）ならハッチ開門へ進む」という自動判断！',
-    related: ['zero_flag', 'cond_pc', 'program_counter', 'assembly'],
+      '「もし今の計算結果が0でない（Z=0）なら指定番地へ戻り、0（Z=1）になったら通過して次の行へ進む」という、状況に応じてプログラムの進む道を変える仕組み。実在のCPU（x86の JNZ や 6502の BNE）でもループの主役であり、プログラミングの if文 や whileループ はすべてこの条件分岐回路から生まれています。',
+    analogy: '「まだ氷が残っている（氷の厚さ≠0）間は加熱へ戻って繰り返し、溶け切った（氷の厚さ＝0）らハッチ開門へ進む」という自律判断！',
+    related: ['zero_flag', 'cond_pc', 'program_counter', 'assembly', 'jnz_op'],
   },
   cond_pc: {
     id: 'cond_pc',
@@ -761,9 +761,9 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['V0..3', 'J0..3', 'BR', 'CLK'], outputs: ['PC0..3'] },
     anim: 'cond_branch_pc',
     summary:
-      'ZERO_4B（ゼロ検知の目）と AND と PC_4B（手順カウンタ）を合体させた自律司令塔モジュール。普段はクロックごとに「+1」ずつ次の行へ進みますが、分岐命令（BR=1）のときに計算結果 V がちょうど 0（Z=1）であれば、自動で指定番地 J へジャンプ（JZ）します！',
-    analogy: '「もし結果が0なら○番地へ飛べ！」という条件つきジャンプ命令（if文・ループ）を判断して実行する司令塔。',
-    related: ['zero_flag', 'program_counter', 'and_gate', 'conditional_branch', 'ark4_sys'],
+      'ZERO_4B（ゼロ検知の目）の出力 Z を NOT で反転し、AND と PC_4B（手順カウンタ）を合体させた自律司令塔モジュール（標準229 NAND）。普段はクロックごとに「+1」ずつ次の行へ進みますが、分岐命令（BR=1）のときに計算結果 V が 0 でない（Z=0）間は自動で指定番地 J へジャンプ（JNZ）し、V=0 になった瞬間に通過してループを脱出します！',
+    analogy: '「まだ結果が0でないなら○番地へ戻れ、0になったら次へ進め！」という条件つきジャンプ命令（JNZ・ループ）を外部回路ゼロで実行する司令塔。',
+    related: ['zero_flag', 'not_gate', 'program_counter', 'and_gate', 'conditional_branch', 'ark4_sys'],
   },
   machine_code: {
     id: 'machine_code',
@@ -773,7 +773,7 @@ export const GLOSSARY_TERMS = {
     unlockReachedStage: 'stage_20',
     unlockLabel: 'STAGE 20 到達',
     summary:
-      'CPUに直接命令を伝えるための「0と1の番号」。ARK-4では2ビットの命令番号（00＝代入, 01＝加算, 10＝減算, 11＝ゼロなら飛べ）と4ビットの数値を合わせたビット列が機械語になり、これを命令デコーダ（INST_DEC）が翻訳してCPUを動かします。',
+      'CPUに直接命令を伝えるための「0と1の番号」。ARK-4では2ビットの命令番号（00＝代入, 01＝加算, 10＝減算, 11＝0でなければ飛べ）と4ビットの数値を合わせたビット列が機械語になり、これを命令デコーダ（INST_DEC）が翻訳してCPUを動かします。',
     analogy: '食堂の厨房へ「00番＝カレー、01番＝スープ」と番号札で注文を伝える仕組み。',
     related: ['inst_dec', 'assembly', 'decoder'],
   },
@@ -791,7 +791,7 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['I0', 'I1'], outputs: ['OP', 'SET', 'WE', 'BR'] },
     anim: 'inst_decoder',
     summary:
-      '水耕栽培室で作った DEC2_4 と NOT を組み合わせ、2ビットの命令番号（00=LDI, 01=ADD, 10=SUB, 11=JZ）をCPUの4本の制御レバー（OP・SET・WE・BR）へ一発翻訳する通訳モジュール。0と1の機械語とアセンブリ言語を物理回路へ直結する要です。',
+      '水耕栽培室で作った DEC2_4 と NOT を組み合わせ、2ビットの命令番号（00=LDI, 01=ADD, 10=SUB, 11=JNZ）をCPUの4本の制御レバー（OP・SET・WE・BR）へ一発翻訳する通訳モジュール。0と1の機械語とアセンブリ言語を物理回路へ直結する要です。',
     analogy: '「ADD（足せ）」という一言の命令を聞いて、CPU内部の4本のレバーを正しい組み合わせにガチャンと一斉セットしてくれる通訳係。',
     related: ['decoder', 'machine_code', 'assembly', 'ark4_cpu', 'ark4_sys'],
   },
@@ -809,7 +809,7 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['I0..1', 'IMM0..3', 'CLK'], outputs: ['ACC0..3', 'PC0..3'] },
     anim: 'ark4_von_neumann',
     summary:
-      'INST_DEC（命令を翻訳する耳）・ARK4_CPU（計算して覚える頭脳）・COND_PC（結果が0か見て次の番地を決める足）の3大マイモジュールを1枚のボード上で統合した完全体ノイマン型コンピュータ！ 内部で470個以上のNANDが一斉に連動し、プログラムを自律実行します。',
+      'INST_DEC（命令を翻訳する耳）・ARK4_CPU（計算して覚える頭脳）・COND_PC（結果が0か見て次の番地を決める足）の3大マイモジュールを1枚のボード上で統合した完全体ノイマン型コンピュータ！ 内部で標準 480個の NAND──その実体である Stage 00 鍛造の MOSFET 960個＋抵抗 480本 が物理法則のまま一斉に連動し、プログラムを自律実行します。',
     analogy: '人間がいちいちレバーを動かさなくても、プログラム（命令表）を1行ずつ自分で読んで判断し続ける完全自律の電算機！',
     related: ['inst_dec', 'ark4_cpu', 'cond_pc', 'asm_enc', 'rom_4w', 'assembly'],
   },
@@ -824,10 +824,10 @@ export const GLOSSARY_TERMS = {
     unlockLabel: 'STAGE 22 クリア',
     codexIds: ['encoder_rom'],
     chipId: 'ASM_ENC',
-    pins: { inputs: ['LDI', 'ADD', 'SUB', 'JZ'], outputs: ['I0', 'I1', 'KEY'] },
+    pins: { inputs: ['LDI', 'ADD', 'SUB', 'JNZ'], outputs: ['I0', 'I1', 'KEY'] },
     anim: 'asm_enc',
     summary:
-      'Stage 10 の2→4デコーダのちょうど逆にあたる「4→2エンコーダ」。4つの命令ボタン（LDI / ADD / SUB / JZ）を OR ゲートで束ねて2ビット機械語（I0, I1）へ変換し、無入力（0000）と LDI（1000）を見分ける入力検知信号 KEY も同時に出力します。',
+      'Stage 10 の2→4デコーダのちょうど逆にあたる「4→2エンコーダ」。4つの命令ボタン（LDI / ADD / SUB / JNZ）を OR ゲートで束ねて2ビット機械語（I0, I1）へ変換し、無入力（0000）と LDI（1000）を見分ける入力検知信号 KEY も同時に出力します。',
     analogy: '4つの命令ボタンを押すだけで、CPUが読める2ビットの暗号番号（00〜11）へ即座に変換してくれる物理キーボード基板！',
     related: ['decoder', 'inst_dec', 'rom_4w', 'assembly'],
   },
@@ -845,13 +845,13 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['A0', 'A1'], outputs: ['I0', 'I1', 'IMM0..3'] },
     anim: 'rom_4w',
     summary:
-      'PC（番地 A0, A1）を DEC2_4 に入れて「選ばれた1行の電線だけ」を点灯させ、出力ビットを 1 にしたい番地同士を OR ゲートで束ねて6ビット命令（I0..1, IMM0..3）を自動出力する本物の配線メモリ（マスクROM）。',
-    analogy: 'アポロ11号の月着陸船でも使われた「配線あり＝1／なし＝0」の物理的な楽譜棚！ 番地を入れるだけで記憶した命令が自動で出てきます。',
+      'PC（番地 A0, A1）を DEC2_4 に入れて「選ばれた1行の電線だけ」を点灯させ、出力ビットを 1 にしたい番地同士を OR ゲート（ヒューズ結線）で束ねて6ビット命令（I0..1, IMM0..3）を自動出力する本物の配線メモリ（マスクROM）。',
+    analogy: 'アポロ11号の月着陸船でも使われた「配線あり＝1／なし＝0」の物理的な楽譜棚！ 番地を入れるだけで焼き込んだ命令が自動で出てきます。',
     related: ['decoder', 'asm_enc', 'ark4_sys', 'rom_mem', 'assembly'],
   },
   assembly: {
     id: 'assembly',
-    title: 'アセンブリ言語（LDI / ADD / SUB / JZ）',
+    title: 'アセンブリ言語（LDI / ADD / SUB / JNZ）',
     reading: 'Assembly Language & Software',
     category: 'ACT VII · ソフトウェア＆プログラム',
     act: 7,
@@ -863,7 +863,7 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['ROM命令表 (0〜4番地)'], outputs: ['ACC (演算結果)', 'PC (実行番地)'] },
     anim: 'asm_program_flow',
     summary:
-      '0と1の機械語（00, 01, 10, 11）に、人間が読める名前「LDI（代入）・ADD（加算）・SUB（減算）・JZ（0ならジャンプ）」を1対1で対応させたプログラミング言語。自作の ASM_ENC・ROM・ARK4_SYS を繋ぐことで、回路を変えずに命令の並びだけで掛け算も自動ハッチ開門も実現します！',
+      '0と1の機械語（00, 01, 10, 11）に、人間が読める名前「LDI（代入）・ADD（加算）・SUB（減算）・JNZ（0でなければジャンプ）」を1対1で対応させたプログラミング言語。自作の ASM_ENC・マスクROM・ARK4_SYS を繋ぐことで、外部補助回路ゼロのまま掛け算も自動カウントダウン開門も実現します！',
     analogy: '完成したオルゴール本体（ハードウェア）はそのままに、差し替えるだけでどんな曲でも奏でられる「楽譜シート（ソフトウェア）」。',
     related: ['asm_enc', 'rom_4w', 'inst_dec', 'ark4_sys', 'machine_code', 'algorithm_loop'],
   },
@@ -875,9 +875,9 @@ export const GLOSSARY_TERMS = {
     unlockReachedStage: 'stage_23',
     unlockLabel: 'STAGE 25 到達',
     summary:
-      'ハードウェア（ALU）に「足し算」と「引き算」しかなくても、命令の組み合わせと繰り返し（ループ・条件分岐 JZ）によって「掛け算（3×4＝3+3+3+3）」や「自動カウントダウン制御」を実現する手順の知恵。ハードの限界をソフトで超える計算機科学の真髄です。',
+      'ハードウェア（ALU）に「足し算」と「引き算」しかなくても、命令の組み合わせと繰り返し（条件分岐 JNZ による自律ループ）によって「掛け算（3×4＝3+3+3+3）」や「自動カウントダウン制御」を実現する手順の知恵。ハードの限界をソフトで超える計算機科学の真髄です。',
     analogy: '掛け算ボタンのない電卓でも、「＋3」を4回繰り返す手順（レシピ）を書けば掛け算ができる仕組み！',
-    related: ['assembly', 'conditional_branch', 'ark4_sys'],
+    related: ['assembly', 'conditional_branch', 'ark4_sys', 'jnz_op'],
   },
 
   // =========================================================================
@@ -891,7 +891,7 @@ export const GLOSSARY_TERMS = {
     summary:
       '「Load Immediate（ロード・イミディエイト）」の略。計算をせず、命令のすぐ後ろに書いた数値（IMM）をそのまま作業机レジスタ ACC へセットする命令です。例：「LDI 5」＝ ACC に 5 を入れる。',
     analogy: '電卓で最初に数字をポンッと打ち込んで画面にセットする操作。',
-    related: ['acc_reg', 'imm_val', 'add_op', 'sub_op', 'jz_op'],
+    related: ['acc_reg', 'imm_val', 'add_op', 'sub_op', 'jnz_op'],
   },
   add_op: {
     id: 'add_op',
@@ -911,27 +911,17 @@ export const GLOSSARY_TERMS = {
     summary:
       '「Subtract（引く）」の略。アセンブリ命令では今の ACC から後ろの数値を引いて保存します（例：「SUB 4」＝ ACC − 4）。ALU 回路のピンとしては「0なら足し算、1なら引き算」を切り替えるスイッチです。',
     analogy: '電卓の「−4＝」キー。結果がちょうど 0 になると ZERO_4B（Z=1）が光ります。',
-    related: ['ldi_op', 'add_op', 'jz_op', 'alu'],
+    related: ['ldi_op', 'add_op', 'jnz_op', 'alu'],
   },
-  jz_op: {
-    id: 'jz_op',
-    title: 'JZ（ゼロならジャンプ命令）',
-    reading: 'Jump if Zero',
+  jnz_op: {
+    id: 'jnz_op',
+    title: 'JNZ（0でなければジャンプ命令）',
+    reading: 'Jump if Not Zero',
     category: 'アセンブリ命令・記号',
     summary:
-      '「Jump if Zero（もし0なら飛べ）」の略。いま作業机 ACC がぴったり 0（Z=1）のときだけ、指定した番地へプログラムの実行位置（PC）をジャンプさせます。0でなければ普通に次の番地へ進みます（ACCの値は変わりません）。',
-    analogy: '「もし残りカウントが 0 になったら、4番地の開門手順へ進め！」という条件つきの分岐標識。',
-    related: ['pc_reg', 'acc_reg', 'zero_flag', 'cond_pc'],
-  },
-  loop_op: {
-    id: 'loop_op',
-    title: 'LOOP（繰り返し帰還）',
-    reading: 'Loop / Return',
-    category: 'アセンブリ命令・記号',
-    summary:
-      '指定した番地へ戻って同じ命令を繰り返す処理。STAGE 26 では3番地に固定された外部帰還線（RET=1）と JZ 1 の組み合わせにより、ACC の値を保ったまま1番地へ戻るハードウェア帰還ループを実現します。',
-    analogy: 'カウントが 0 になるまで「1引く→確認」をぐるぐる回り続けるタイマーの歯車。',
-    related: ['jz_op', 'pc_reg', 'algorithm_loop'],
+      '「Jump if Not Zero（もし0でなければ飛べ）」の略。いま作業机 ACC が 0 でない（Z=0）間は指定した番地へプログラムの実行位置（PC）をジャンプさせ、ぴったり 0（Z=1）になった瞬間に飛ばず次の番地へ進みます（ACCの値は変わりません）。実在の x86 CPU の JNZ や 6502 の BNE と同じ、自律ループの王道命令です。',
+    analogy: '「まだ残りカウントが 0 でない間は 1番地へ戻って繰り返し、0 になったら通過して開門手順へ進め！」という自律ループ標識。',
+    related: ['pc_reg', 'acc_reg', 'zero_flag', 'cond_pc', 'algorithm_loop'],
   },
   acc_reg: {
     id: 'acc_reg',
@@ -949,8 +939,8 @@ export const GLOSSARY_TERMS = {
     reading: 'Immediate Value',
     category: 'CPUレジスタ・記号',
     summary:
-      '「Immediate（すぐ目の前の値）」の略。たとえば「LDI 5」の「5」や「JZ 4」の「4」のように、命令カード自体に直接書き込まれている4ビット（0〜15）の数値データのことです。',
-    analogy: '「5を足せ」「4番地へ飛べ」の数字そのもの。',
+      '「Immediate（すぐ目の前の値）」の略。たとえば「LDI 5」の「5」や「JNZ 1」の「1」のように、命令カード自体に直接書き込まれている4ビット（0〜15）の数値データのことです。',
+    analogy: '「5を足せ」「1番地へ飛べ」の数字そのもの。',
     related: ['ldi_op', 'acc_reg', 'rom_mem'],
   },
   rom_mem: {
@@ -969,9 +959,9 @@ export const GLOSSARY_TERMS = {
     reading: 'Program Counter',
     category: 'CPUレジスタ・記号',
     summary:
-      '「Program Counter」の略。ROM に並んだ命令のうち「いま何番地（0〜15番地）を実行しているか」を覚えている番号札。ふだんは1拍ごとに +1 進み、JZ ジャンプが起きると飛び先の番地へ切り替わります。',
+      '「Program Counter」の略。ROM に並んだ命令のうち「いま何番地（0〜15番地）を実行しているか」を覚えている番号札。ふだんは1拍ごとに +1 進み、JNZ ジャンプが起きると飛び先の番地へ切り替わります。',
     analogy: '楽譜の「いま何小節目を弾いているか」を指さすしおり。',
-    related: ['rom_mem', 'jz_op', 'program_counter'],
+    related: ['rom_mem', 'jnz_op', 'program_counter'],
   },
   cin_cout: {
     id: 'cin_cout',
@@ -1009,9 +999,9 @@ export const GLOSSARY_TERMS = {
     reading: 'Branch',
     category: '回路ピン記号',
     summary:
-      '「Branch（枝分かれ・分岐）」の略。JZ 命令のときだけ 1 になり、「もし今の値が 0（Z=1）ならジャンプしてよい」と COND_PC へ許可を出す信号線です。',
+      '「Branch（枝分かれ・分岐）」の略。JNZ 命令のときだけ 1 になり、「もし今の値が 0 でない（Z=0）ならジャンプしてよい」と COND_PC へ許可を出す信号線です。',
     analogy: '分岐点にある「条件つきワープ許可スイッチ」。',
-    related: ['jz_op', 'cond_pc', 'zero_flag'],
+    related: ['jnz_op', 'cond_pc', 'zero_flag'],
   },
 };
 
@@ -1254,8 +1244,7 @@ const TERM_ALIASES = [
   ['LDI', 'ldi_op'],
   ['ADD', 'add_op'],
   ['SUB', 'sub_op'],
-  ['JZ', 'jz_op'],
-  ['LOOP', 'loop_op'],
+  ['JNZ', 'jnz_op'],
   ['ACC', 'acc_reg'],
   ['IMM', 'imm_val'],
   ['ROM', 'rom_mem'],

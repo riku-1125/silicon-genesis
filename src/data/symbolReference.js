@@ -30,17 +30,10 @@ export const SYMBOL_CATALOG = [
     category: 'opcode',
   },
   {
-    key: 'JZ',
-    tokens: ['JZ'],
-    en: 'Jump if Zero（ゼロならジャンプ）',
-    ja: 'もし今の ACC が 0（Z=1）なら指定番地へ飛ぶ。0でなければ次の番地へ進む（ACCは変えない）',
-    category: 'opcode',
-  },
-  {
-    key: 'LOOP',
-    tokens: ['LOOP'],
-    en: 'Loop（繰り返し帰還）',
-    ja: '指定した番地へ戻って処理を繰り返す（STAGE 26 では外部帰還線 RET=1＋JZ 1 で実現）',
+    key: 'JNZ',
+    tokens: ['JNZ'],
+    en: 'Jump if Not Zero（0でなければジャンプ）',
+    ja: 'もし今の ACC が 0 でない（Z=0）なら指定番地へ飛ぶ。0（Z=1）になったら飛ばず次の番地へ進む（ACCは変えない）',
     category: 'opcode',
   },
   {
@@ -84,7 +77,7 @@ export const SYMBOL_CATALOG = [
     key: 'I0..1',
     tokens: ['I0', 'I1'],
     en: 'Instruction Code（2ビット命令番号）',
-    ja: 'どの命令かを2ビット(0〜3)で表すコード（I1,I0: 00=LDI / 01=ADD / 10=SUB / 11=JZ）',
+    ja: 'どの命令かを2ビット(0〜3)で表すコード（I1,I0: 00=LDI / 01=ADD / 10=SUB / 11=JNZ）',
     category: 'signal',
   },
   {
@@ -112,7 +105,7 @@ export const SYMBOL_CATALOG = [
     key: 'BR',
     tokens: ['BR'],
     en: 'Branch（条件分岐フラグ）',
-    ja: '1のとき「もし値が0（Z=1）ならジャンプせよ」という条件分岐を許可する信号',
+    ja: '1のとき「もし値が0でない（Z=0）ならジャンプせよ」という条件分岐（JNZ）を許可する信号',
     category: 'signal',
   },
   {
@@ -120,13 +113,6 @@ export const SYMBOL_CATALOG = [
     tokens: ['Z'],
     en: 'Zero Flag（ゼロ検知フラグ）',
     ja: '4ビットの数値がぴったり 0（0000）のときだけ 1 に光る判定信号',
-    category: 'signal',
-  },
-  {
-    key: 'RET',
-    tokens: ['RET'],
-    en: 'Return（外部帰還プルダウン線）',
-    ja: 'STAGE 26 の固定帰還配線。1の間は COND_PC の V入力を 0000 に接地して1番地へ戻す',
     category: 'signal',
   },
   {
@@ -231,7 +217,7 @@ export const SYMBOL_CATALOG = [
     key: 'ENC',
     tokens: ['ENC', 'ASM_ENC'],
     en: 'Encoder（エンコーダ／符号器）',
-    ja: 'デコーダの逆。押された1本のボタン（LDI / ADD / SUB / JZ）を2ビット機械語（00〜11）へ変換する回路',
+    ja: 'デコーダの逆。押された1本のボタン（LDI / ADD / SUB / JNZ）を2ビット機械語（00〜11）へ変換する回路',
     category: 'module',
   },
   {
@@ -266,10 +252,10 @@ export const ARK4_ISA_TABLE = [
     ctrl: 'OP=1, SET=0, WE=1',
   },
   {
-    mnemonic: 'JZ n',
-    en: 'Jump if Zero（0ならジャンプ）',
+    mnemonic: 'JNZ n',
+    en: 'Jump if Not Zero（≠0ならジャンプ）',
     bits: '11 (I1=1, I0=1)',
-    effect: 'もし今の ACC が 0 (Z=1) なら n 番地へ飛ぶ。ACC は変えない',
+    effect: 'もし今の ACC が 0 でない (Z=0) なら n 番地へ飛ぶ。0 なら通過。ACC は変えない',
     ctrl: 'WE=0, BR=1',
   },
 ];
@@ -302,7 +288,7 @@ export function getStageSymbolReferences(stage) {
   for (const entry of SYMBOL_CATALOG) {
     // Avoid showing single-letter S/R/D/Q/Z on unrelated early stages unless actually a pin of this stage
     const isHit = entry.tokens.some((tok) => {
-      if (tok.length <= 2 && /^[A-Z][0-9]?$/.test(tok) && tok !== 'PC' && tok !== 'OP' && tok !== 'WE' && tok !== 'BR' && tok !== 'JZ') {
+      if (tok.length <= 2 && /^[A-Z][0-9]?$/.test(tok) && tok !== 'PC' && tok !== 'OP' && tok !== 'WE' && tok !== 'BR' && tok !== 'JNZ') {
         return exactPins.has(tok);
       }
       const re = new RegExp(`(?<![A-Za-z0-9_])${tok}(?![A-Za-z0-9_])`);
@@ -316,7 +302,7 @@ export function getStageSymbolReferences(stage) {
 }
 
 /**
- * Whether this stage involves the ARK-4 4-instruction set (LDI / ADD / SUB / JZ).
+ * Whether this stage involves the ARK-4 4-instruction set (LDI / ADD / SUB / JNZ).
  */
 export function stageUsesIsaTable(stage) {
   if (!stage) return false;
