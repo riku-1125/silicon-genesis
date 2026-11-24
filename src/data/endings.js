@@ -2,16 +2,16 @@
  * SILICON GENESIS — Cinematic Chapter I & Chapter II Ending Scripts
  *
  * Played in the full-screen Visual-Novel Theater (`PrologueOverlay.playSequence`)
- * upon clearing Stage 17 (Chapter I Finale) and Stage 24 (Chapter II Grand Finale),
+ * upon clearing Stage 17 (Chapter I Finale) and Stage 26 (id: stage_24, Chapter II Grand Finale),
  * using the game's authentic high-detail 32-bit pixel-art backgrounds paired with
  * subtle transparent lighting & radio signal VFX overlays.
  */
 
 function formatStats(stats = {}) {
-  const ark4Nand = Number.isFinite(stats.ark4NandCount) && stats.ark4NandCount > 0 ? stats.ark4NandCount : 270;
+  const ark4Nand = Number.isFinite(stats.ark4NandCount) && stats.ark4NandCount > 0 ? stats.ark4NandCount : 240;
   const ark4SysNand =
     Number.isFinite(stats.ark4SysNandCount) && stats.ark4SysNandCount > 0 ? stats.ark4SysNandCount : 479;
-  const forgedChips = Number.isFinite(stats.forgedChipCount) && stats.forgedChipCount > 0 ? stats.forgedChipCount : 17;
+  const forgedChips = Number.isFinite(stats.forgedChipCount) && stats.forgedChipCount > 0 ? stats.forgedChipCount : 18;
   const clearedCount = Number.isFinite(stats.clearedCount) && stats.clearedCount > 0 ? stats.clearedCount : 20;
   return {
     ark4Nand,
@@ -94,7 +94,7 @@ export function buildChapter1EndingSteps(rawStats = {}) {
       dateline: '2094.11.24 21:06 // 118人の歓声',
       mood: 'dawn',
       speaker: null,
-      text: 'ガラス扉の向こうに集まっていた住民たちから、地響きのような歓声が上がった。\n最初に NOT ゲートで酸欠から救ったB3機関員たち、4ビット加算器で夕方の配給行列から解放された配給係のおばちゃん、そして3区の子どもたち──118人全員が肩を抱き合って笑い、泣いていた。',
+      text: 'ガラス扉の向こうに集まっていた住民たちから、地響きのような歓声が上がった。\n最初に NOT ゲートで酸欠から救った地下3区の空気清浄プラントの整備員たち、4ビット加算器で夕方の配給行列から解放された配給係のおばちゃん、そして3区の子どもたち──118人全員が肩を抱き合って笑い、泣いていた。',
     },
     {
       scene: './assets/scene_ending_ch1.jpg',
@@ -153,7 +153,7 @@ export function buildChapter1EndingSteps(rawStats = {}) {
       mood: 'alert',
       sfx: 'alarm',
       speaker: 'hako',
-      text: '『……おっと待て、主任！ アーク3のカイから緊急の第2報が入電した！\n「朗報と緊急警告だ！ 地上の放射能雲はすでに晴れ、本物の青空が戻っている！ ……だが聞け、アーク7の真上にある旧地熱ダムの氷河湖が、融雪で決壊寸前だ！ 地下が水没する前に、地上大ハッチを開けて脱出しろ！！」』',
+      text: '『……おっと待て、主任！ アーク3のカイから緊急の第2報が入電した！\n「朗報と緊急警告だ！ 地上の放射能雲はすでに晴れ、本物の青空が戻っている！ ……だが聞け、アーク7の真上にある旧地熱ダムの氷河湖が、融雪で決壊寸前だ！ 明朝の融雪ピークで地下が水没する前に、地上大ハッチを開けて高台へ脱出しろ！！」』',
     },
     {
       scene: './assets/scene_ending_ch1.jpg',
@@ -167,13 +167,13 @@ export function buildChapter1EndingSteps(rawStats = {}) {
         sub: '解放：第二章「青空への帰還」（STAGE 18〜26）',
       },
       speaker: null,
-      text: '地下400メートルの長い夜が終わり、新しい物語の扉が開かれた。\n次なる挑戦は、君の自作CPUに「条件分岐」と「アセンブリ言語」を宿らせ、42年間閉ざされた地上大ハッチを自らの手で開くこと──第二章『青空への帰還』、いま開幕！',
+      text: '地下400メートルの長い夜が終わり、新しい物語の扉が開かれた。\n次なる挑戦は、君の自作CPUに「条件分岐」と「命令メモリ（ROM）」、そして「アセンブリ言語」を宿らせ、夜明け前に42年間閉ざされた地上大ハッチを自らの手で開くこと──第二章『青空への帰還』、いま開幕！',
     },
   ];
 }
 
 /**
- * CHAPTER II GRAND ENDING — Clearing Stage 24 (`青空へのカウントダウン・大ハッチ開門`)
+ * CHAPTER II GRAND ENDING — Clearing Stage 26 (id: stage_24, `青空へのカウントダウン・大ハッチ開門`)
  */
 export function buildChapter2EndingSteps(rawStats = {}) {
   const s = formatStats(rawStats);
@@ -186,7 +186,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       fx: 'shake',
       sfx: 'powerup',
       speaker: 'hako',
-      text: `『……主任による最終開門クロック入力を確認！ カウントダウン 3 → 2 → 1 → 0 ➔ 4番地【LDI 15 (00:1111)】、お前自身の自作計算機【ARK4_SYS（実効 ${s.ark4SysNand} NAND）】を完全通過！！\n全開信号 1111 出力──地上メインハッチ、全4基の爆破ボルト同時開放！！』`,
+      text: `『……主任による最終開門クロック入力を確認！ カウントダウン 3 → 2 → 1 → 0 ➔ 4番地【LDI 15 (00:1111)】が、お前自身の【ASM_ENC】・配線ROM・【ARK4_SYS（実効 ${s.ark4SysNand} NAND）】を完全通過！！\n全開信号 1111 出力──地上メインハッチ、全4基の爆破ボルト同時開放！！』`,
     },
     {
       scene: './assets/scene_shelter_hub.jpg',
@@ -242,7 +242,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       dateline: '2094.11.25 06:45 // すべての回路が結んだ命',
       mood: 'bluesky',
       speaker: null,
-      text: 'たった1個の NOT ゲートで酸欠の危機を乗り越えたB3機関室の整備員たち。4ビット加算器で公平な水配給を守り抜いた配給係のおばちゃん。SRラッチの揺れ警報を毎朝点検してくれた岩盤監視員さん。\nそして3区の子どもたちが、水耕室で大切に育てたレタスの鉢を本物の太陽へ向かって高く掲げて笑っている。',
+      text: 'たった1個の NOT ゲートで酸欠の危機を乗り越えた地下3区の空気清浄プラントの整備員たち。4ビット加算器で公平な水配給を守り抜いた配給係のおばちゃん。SRラッチの揺れ警報で頭上の氷河ダムの異変まで見抜いてくれた岩盤監視員さん。\nそして3区の子どもたちが、水耕室で大切に育てたレタスの鉢を本物の太陽へ向かって高く掲げて笑っている。',
     },
     {
       scene: './assets/scene_ending_bluesky.jpg',
@@ -283,7 +283,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
       dateline: '2094.11.25 06:50 // 砂からOSまでの軌跡',
       mood: 'bluesky',
       speaker: 'hako',
-      text: `『たった1個のトランジスタから NAND を生み、論理ゲート、加算器、記憶ラッチ、CPU、そして自分で書いたアセンブリ言語まで──合計 ${s.ark4SysNand} 個の NAND ゲート（トランジスタ換算 ${s.ark4SysTr} 個）を積み上げて、本当に自分の計算機でこの扉を開けちまった。\n……お前は紛れもなく、新時代最高のエンジニアだぜ。』`,
+      text: `『たった1個のトランジスタから NAND を生み、論理ゲート、加算器、記憶ラッチ、CPU、命令エンコーダと配線ROM、そして自分で書いたアセンブリ言語まで──合計 ${s.ark4SysNand} 個の NAND ゲート（トランジスタ換算 ${s.ark4SysTr} 個）を積み上げて、本当に自分の計算機でこの扉を開けちまった。\n……お前は紛れもなく、新時代最高のエンジニアだぜ。』`,
     },
     {
       scene: './assets/scene_ending_bluesky.jpg',
@@ -330,7 +330,7 @@ export function buildChapter2EndingSteps(rawStats = {}) {
         sub: `全ミッション完結 · 自作CPU ARK4_SYS (${s.ark4SysNand} NAND / TR ${s.ark4SysTr}個)`,
       },
       speaker: null,
-      text: `たった1粒の砂（シリコン）と1個のスイッチから始まり、論理ゲート・加算器・記憶回路・CPU・そしてアセンブリ言語まで──あなた自身が創り上げた計算機が、118人全員を本物の青空の下へ導きました。\n【SILICON GENESIS】を最後までプレイしていただき、本当にありがとうございました！`,
+      text: `たった1粒の砂（シリコン）と1個のスイッチから始まり、論理ゲート・加算器・記憶回路・CPU・命令エンコーダ・配線ROM、そしてアセンブリ言語まで──あなた自身が創り上げた計算機が、118人全員を本物の青空の下へ導きました。\n【SILICON GENESIS】を最後までプレイしていただき、本当にありがとうございました！`,
     },
   ];
 }

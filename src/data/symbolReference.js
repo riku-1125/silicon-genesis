@@ -40,7 +40,7 @@ export const SYMBOL_CATALOG = [
     key: 'LOOP',
     tokens: ['LOOP'],
     en: 'Loop（繰り返し帰還）',
-    ja: '指定した番地へ戻って処理を繰り返す（Stage 24では外部帰還線 RET=1＋JZ 1 で実現）',
+    ja: '指定した番地へ戻って処理を繰り返す（STAGE 26 では外部帰還線 RET=1＋JZ 1 で実現）',
     category: 'opcode',
   },
   {
@@ -126,7 +126,7 @@ export const SYMBOL_CATALOG = [
     key: 'RET',
     tokens: ['RET'],
     en: 'Return（外部帰還プルダウン線）',
-    ja: 'Stage 24 の固定帰還配線。1の間は COND_PC の V入力を 0000 に接地して1番地へ戻す',
+    ja: 'STAGE 26 の固定帰還配線。1の間は COND_PC の V入力を 0000 に接地して1番地へ戻す',
     category: 'signal',
   },
   {

@@ -744,7 +744,7 @@ export const GLOSSARY_TERMS = {
     unlockLabel: 'STAGE 19 到達',
     summary:
       '「もし今の計算結果が0なら指定番地へ飛び、0でなければ次の行へ進む」という、状況に応じてプログラムの進む道を変える仕組み。プログラミングの if文 や whileループ はすべてこの条件分岐回路から生まれています。',
-    analogy: '「まだ氷が溶けていない（温度≠0）なら加熱へ戻り、溶け切った（温度＝0）ならハッチ開門へ進む」という自動判断！',
+    analogy: '「まだ氷が残っている（氷の厚さ≠0）なら加熱へ戻り、溶け切った（氷の厚さ＝0）ならハッチ開門へ進む」という自動判断！',
     related: ['zero_flag', 'cond_pc', 'program_counter', 'assembly'],
   },
   cond_pc: {
@@ -809,7 +809,7 @@ export const GLOSSARY_TERMS = {
     pins: { inputs: ['I0..1', 'IMM0..3', 'CLK'], outputs: ['ACC0..3', 'PC0..3'] },
     anim: 'ark4_von_neumann',
     summary:
-      'INST_DEC（命令を翻訳する耳）・ARK4_CPU（計算して覚える頭脳）・COND_PC（結果が0か見て次の番地を決める足）の3大マイモジュールを1枚のボード上で統合した完全体ノイマン型コンピュータ！ 内部で280個以上のNANDが一斉に連動し、プログラムを自律実行します。',
+      'INST_DEC（命令を翻訳する耳）・ARK4_CPU（計算して覚える頭脳）・COND_PC（結果が0か見て次の番地を決める足）の3大マイモジュールを1枚のボード上で統合した完全体ノイマン型コンピュータ！ 内部で470個以上のNANDが一斉に連動し、プログラムを自律実行します。',
     analogy: '人間がいちいちレバーを動かさなくても、プログラム（命令表）を1行ずつ自分で読んで判断し続ける完全自律の電算機！',
     related: ['inst_dec', 'ark4_cpu', 'cond_pc', 'asm_enc', 'rom_4w', 'assembly'],
   },
@@ -929,7 +929,7 @@ export const GLOSSARY_TERMS = {
     reading: 'Loop / Return',
     category: 'アセンブリ命令・記号',
     summary:
-      '指定した番地へ戻って同じ命令を繰り返す処理。Stage 24 では3番地に固定された外部帰還線（RET=1）と JZ 1 の組み合わせにより、ACC の値を保ったまま1番地へ戻るハードウェア帰還ループを実現します。',
+      '指定した番地へ戻って同じ命令を繰り返す処理。STAGE 26 では3番地に固定された外部帰還線（RET=1）と JZ 1 の組み合わせにより、ACC の値を保ったまま1番地へ戻るハードウェア帰還ループを実現します。',
     analogy: 'カウントが 0 になるまで「1引く→確認」をぐるぐる回り続けるタイマーの歯車。',
     related: ['jz_op', 'pc_reg', 'algorithm_loop'],
   },
@@ -961,7 +961,7 @@ export const GLOSSARY_TERMS = {
     summary:
       '「Read-Only Memory（読み出し専用メモリ）」の略。0番地・1番地・2番地…と番地ごとに命令カードを並べておく棚で、PC（プログラムカウンタ）が指した番地の命令を1拍ずつ CPU へ渡します。',
     analogy: '番号のふられた作業手順書のページ棚。PC の番号と同じ行が読み上げられます。',
-    related: ['pc_reg', 'assembly', 'ark4_sys'],
+    related: ['pc_reg', 'rom_4w', 'assembly', 'ark4_sys'],
   },
   pc_reg: {
     id: 'pc_reg',
