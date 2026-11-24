@@ -3741,11 +3741,17 @@ textarea:focus-visible {
     align-items: stretch;
   }
   .scene-wrap {
-    flex: 0 0 210px;
-    width: 210px;
+    flex: 0 0 236px;
+    width: 236px;
     height: auto;
     min-height: 44px;
     border-right: 1px solid var(--brass-dim);
+  }
+  .scene-collapse-btn {
+    left: 5px;
+    bottom: 4px;
+    padding: 2px 6px;
+    font-size: 9.5px;
   }
   .dialogue-box {
     flex: 1 1 auto;
@@ -5295,6 +5301,17 @@ textarea:focus-visible {
   .asm-step-btn {
     padding: 0 8px;
     font-size: 10.5px;
+  }
+}
+
+/* Give JZ / op-meta labels crisp breathing room on 360-390px portrait phones */
+@media (max-width: 400px) {
+  .asm-op-btn {
+    padding: 2px 1px;
+  }
+  .asm-op-btn-meta {
+    font-size: 8.2px;
+    letter-spacing: -0.02em;
   }
 }
 

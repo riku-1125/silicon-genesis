@@ -26,6 +26,7 @@ import {
 } from '../engine/romRunner.js?v=36';
 
 const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JZ'];
+const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';
 
 function escapeHtml(str) {
   return String(str ?? '')
@@ -140,6 +141,18 @@ export class AssemblyIdePanel {
       clearTimeout(this._clearArmTimer);
       this._clearArmTimer = null;
     }
+    if (this.statusMsg === CLEAR_ARM_MSG) {
+      this.statusMsg = '';
+      this.statusTone = 'info';
+      const banner = this.container?.querySelector('.asm-live-banner');
+      if (banner) banner.remove();
+    }
+    const btn = this.container?.querySelector('#btn-asm-clear');
+    if (btn && btn.classList.contains('armed')) {
+      btn.classList.remove('armed');
+      btn.textContent = '✕';
+      btn.title = 'プログラムを全消去';
+    }
   }
 
   _hasAnyInstruction() {
@@ -187,6 +200,7 @@ export class AssemblyIdePanel {
 
   evaluateAssembly() {
     if (!this.stage) return { passed: false, results: [], error: 'ステージ未読込' };
+    this._disarmClear();
 
     if (this.editorMode === 'text' && this.textErrors.length > 0) {
       return {
@@ -214,6 +228,7 @@ export class AssemblyIdePanel {
 
   stepOnce() {
     if (!this.stage) return;
+    this._disarmClear();
     if (this.awaitingFinalClock) {
       this.cb.onFinalClockTrigger?.();
       return;
@@ -275,6 +290,7 @@ export class AssemblyIdePanel {
   }
 
   resetPc() {
+    this._disarmClear();
     this._resetExecution();
     this.statusMsg = '↺ 実機CPUを電源リセット（PC=0, ACC=0）しました。';
     this.statusTone = 'info';
@@ -297,6 +313,7 @@ export class AssemblyIdePanel {
   _setInstructionAt(addr, op, val) {
     const row = this._getRowByAddr(addr);
     if (!row || row.locked) return;
+    this._disarmClear();
     if (!op) {
       this.slots[row.slotId] = null;
     } else {
@@ -330,6 +347,7 @@ export class AssemblyIdePanel {
   _selectNextEditableAddr() {
     const editable = (this.stage?.asmProgramSpec?.rows || []).filter((r) => !r.locked);
     if (editable.length === 0) return;
+    this._disarmClear();
     const idx = editable.findIndex((r) => r.addr === this.selectedAddr);
     const next = editable[(idx + 1) % editable.length];
     this.selectedAddr = next.addr;
@@ -670,18 +688,13 @@ export class AssemblyIdePanel {
       }
       if (!this._clearArmed) {
         this._clearArmed = true;
-        this.statusMsg = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';
+        this.statusMsg = CLEAR_ARM_MSG;
         this.statusTone = 'warn';
         this.cb.onSound?.('switch');
         clearTimeout(this._clearArmTimer);
         this._clearArmTimer = setTimeout(() => {
           if (this._clearArmed) {
-            this._clearArmed = false;
-            const btn = this.container?.querySelector('#btn-asm-clear');
-            if (btn) {
-              btn.classList.remove('armed');
-              btn.textContent = '✕';
-            }
+            this._disarmClear();
           }
         }, 3200);
         this.render();

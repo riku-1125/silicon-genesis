@@ -227,13 +227,15 @@ class GlossaryPopoverController {
     });
 
     window.addEventListener('keydown', (e) => {
-      if (!this.isOpen()) return;
+      if (!this.isOpen() || e.__sgGlossaryHandled) return;
       if (e.key === 'Escape') {
+        e.__sgGlossaryHandled = true;
         e.stopImmediatePropagation();
         e.preventDefault();
         sound.playSwitch(false);
         this.close();
       } else if ((e.key === 'ArrowLeft' || e.key === 'Backspace') && this.history.length > 0) {
+        e.__sgGlossaryHandled = true;
         e.stopImmediatePropagation();
         e.preventDefault();
         this.goBack();

@@ -465,13 +465,18 @@ class SiliconGenesisApp {
 
     // Keyboard shortcuts & layered Escape/Story navigation for desktop & keyboard players
     window.addEventListener('keydown', (e) => {
-      // 1. Glossary Popover is always topmost (prevents Escape from double-closing underlying modal!)
+      // 1. Glossary Popover is always topmost (prevents Escape from double-closing underlying modal
+      //    and prevents ArrowLeft/Backspace from firing twice across window listeners!)
       if (glossaryPopover.isOpen()) {
         if (e.key === 'Escape') {
+          e.__sgGlossaryHandled = true;
+          e.stopImmediatePropagation();
           e.preventDefault();
           sound.playSwitch(false);
           glossaryPopover.close();
-        } else if (e.key === 'ArrowLeft' && glossaryPopover.history.length > 0) {
+        } else if ((e.key === 'ArrowLeft' || e.key === 'Backspace') && glossaryPopover.history.length > 0) {
+          e.__sgGlossaryHandled = true;
+          e.stopImmediatePropagation();
           e.preventDefault();
           glossaryPopover.goBack();
         }

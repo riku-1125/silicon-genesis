@@ -184,18 +184,20 @@ export class SceneCanvas {
       ctx.fillRect(0, y, w, 1);
     }
 
-    // 6. Location tag (top-left, synced to the current mission location!)
-    ctx.font = 'bold 10px monospace';
-    const tagText = `● ${locLabel}`;
-    const maxTagW = Math.max(68, w - Math.min(184, w * 0.48) - 22);
-    const tagW = Math.min(maxTagW, ctx.measureText(tagText).width + 14);
-    ctx.fillStyle = 'rgba(13, 18, 24, 0.8)';
-    ctx.fillRect(8, 5, tagW, 18);
-    ctx.strokeStyle = this.cleared ? 'rgba(82, 227, 182, 0.65)' : 'rgba(235, 162, 68, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(8.5, 5.5, tagW - 1, 17);
-    ctx.fillStyle = this.cleared ? '#52e3b6' : '#f0b159';
-    ctx.fillText(tagText, 14, 17, tagW - 10);
+    // 6. Location tag (top-left, omitted on narrow landscape strips w < 280 where dialogue-box shows location right beside it!)
+    if (w >= 280) {
+      ctx.font = 'bold 10px monospace';
+      const tagText = `● ${locLabel}`;
+      const maxTagW = Math.max(68, w - Math.min(184, w * 0.48) - 22);
+      const tagW = Math.min(maxTagW, ctx.measureText(tagText).width + 14);
+      ctx.fillStyle = 'rgba(13, 18, 24, 0.8)';
+      ctx.fillRect(8, 5, tagW, 18);
+      ctx.strokeStyle = this.cleared ? 'rgba(82, 227, 182, 0.65)' : 'rgba(235, 162, 68, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(8.5, 5.5, tagW - 1, 17);
+      ctx.fillStyle = this.cleared ? '#52e3b6' : '#f0b159';
+      ctx.fillText(tagText, 14, 17, tagW - 10);
+    }
 
     // 7. Ambient Repaired Facility Log Ticker (shows previously repaired equipment still working!)
     const ambientLog = this._getAmbientFacilityLog();
@@ -268,10 +270,16 @@ export class SceneCanvas {
     const widget = this.stage?.widget || 'air_scrubber';
     const isAssembly = this.stage?.kind === 'assembly_program';
     const compact = h < 74;
-    const boxW = Math.min(182, Math.max(132, w * 0.46));
+    const narrowStrip = w < 280;
+    // Keep telemetry HUD completely clear of the bottom-left toggle button (▲ 回路を広く ~82px) on narrow landscape strips!
+    const leftSafe = narrowStrip ? 88 : 8;
+    const rightPad = narrowStrip ? 6 : 8;
+    const boxW = narrowStrip
+      ? Math.max(96, Math.min(162, w - leftSafe - rightPad))
+      : Math.min(182, Math.max(132, w * 0.46));
     const by = compact ? 4 : 7;
     const boxH = compact ? Math.max(30, h - 8) : Math.min(62, h - 18);
-    const bx = w - boxW - 8;
+    const bx = Math.max(leftSafe, w - boxW - rightPad);
     const hdrY = by + Math.round(boxH * 0.31);
     const bodyY = by + Math.round(boxH * 0.76);
 
@@ -577,16 +585,16 @@ export class SceneCanvas {
 
       ctx.font = `bold ${compact ? 15 : 18}px monospace`;
       ctx.fillStyle = '#ffd166';
-      ctx.fillText(`${String(val).padStart(2, '0')}`, bx + 10, bodyY + 2);
+      ctx.fillText(`${String(val).padStart(2, '0')}`, bx + 9, bodyY + 2);
       ctx.font = `bold ${compact ? 10.5 : 11}px monospace`;
       ctx.fillStyle = '#7bdff2';
-      ctx.fillText(`[${bin}]`, bx + (compact ? 42 : 50), bodyY + 1);
+      ctx.fillText(`[${bin}]`, bx + (compact ? 40 : 48), bodyY + 1, boxW - (compact ? 48 : 58));
 
-      // Beacon pulse wave when cleared
-      if (this.cleared) {
+      // Beacon pulse wave when cleared (only when box has room on right)
+      if (this.cleared && boxW >= 132) {
         const pulse = (this.time * 24) % 16;
         ctx.beginPath();
-        ctx.arc(bx + boxW - 18, bodyY - 3, 3.5 + pulse * 0.45, 0, Math.PI * 2);
+        ctx.arc(bx + boxW - 16, bodyY - 3, 3.5 + pulse * 0.42, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(82, 227, 182, ${Math.max(0, 1 - pulse / 16)})`;
         ctx.stroke();
       }

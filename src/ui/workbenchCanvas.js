@@ -1056,20 +1056,36 @@ export class WorkbenchCanvas {
     ctx.lineTo(bw - RAIL_TRACK_W, this.boardH - 12);
     ctx.stroke();
 
-    // Rail headers (positioned cleanly above first pin or tucked cleanly at bottom when tightly packed)
-    const firstInY = this._getInputRailPos(0).boxY;
-    const firstOutY = this._getOutputRailPos(0).boxY;
+    // Rail headers (positioned cleanly above first pin, or bottom ONLY if clear of last switch!)
+    const nIn = this.stage?.inputs.length || 1;
+    const nOut = this.stage?.outputs.length || 1;
+    const firstIn = this._getInputRailPos(0);
+    const lastIn = this._getInputRailPos(nIn - 1);
+    const firstOut = this._getOutputRailPos(0);
+    const lastOut = this._getOutputRailPos(nOut - 1);
     const hasInGroup = Boolean(this.stage?.pinGroups?.inputs?.length);
     const hasOutGroup = Boolean(this.stage?.pinGroups?.outputs?.length);
-    const inHeaderY = firstInY - (hasInGroup ? 28 : 14);
-    const outHeaderY = firstOutY - (hasOutGroup ? 28 : 14);
+    const inHeaderY = firstIn.boxY - (hasInGroup ? 28 : 14);
+    const outHeaderY = firstOut.boxY - (hasOutGroup ? 28 : 14);
     const inSafeTop = this.boardH >= 440 ? 84 : 62;
+    const inHasBottomRoom = lastIn.boxY + lastIn.boxH + 18 <= this.boardH - 8;
+    const outHasBottomRoom = lastOut.boxY + lastOut.boxH + 18 <= this.boardH - 8;
     ctx.font = 'bold 11px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(235, 182, 102, 0.72)';
-    ctx.fillText('INPUT (タップ切替)', LEFT_X, inHeaderY >= inSafeTop ? inHeaderY : this.boardH - 16, RAIL_W + 6);
-    ctx.fillStyle = 'rgba(82, 227, 182, 0.75)';
-    ctx.fillText('OUTPUT', this._rightX(), outHeaderY >= 30 ? outHeaderY : this.boardH - 16);
+    if (inHeaderY >= inSafeTop) {
+      ctx.fillStyle = 'rgba(235, 182, 102, 0.72)';
+      ctx.fillText('INPUT (タップ切替)', LEFT_X, inHeaderY, RAIL_W + 6);
+    } else if (!hasInGroup && inHasBottomRoom) {
+      ctx.fillStyle = 'rgba(235, 182, 102, 0.72)';
+      ctx.fillText('INPUT (タップ切替)', LEFT_X, this.boardH - 14, RAIL_W + 6);
+    }
+    if (outHeaderY >= 24) {
+      ctx.fillStyle = 'rgba(82, 227, 182, 0.75)';
+      ctx.fillText('OUTPUT', this._rightX(), outHeaderY);
+    } else if (!hasOutGroup && outHasBottomRoom) {
+      ctx.fillStyle = 'rgba(82, 227, 182, 0.75)';
+      ctx.fillText('OUTPUT', this._rightX(), this.boardH - 14);
+    }
 
     // Outer riveted border
     ctx.strokeStyle =
