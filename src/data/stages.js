@@ -2673,15 +2673,226 @@ export const STAGES = [
     codexUnlock: ['von_neumann_complete'],
   },
 
+  {
+    id: 'stage_asm_enc',
+    number: 22,
+    act: 6,
+    chapter: 2,
+    code: '22',
+    title: '命令キーを2ビット機械語へ',
+    revealedTitle: '命令キーエンコーダ（ASM_ENC）',
+    scene: 'shelter_hub',
+    storyBgm: 'story',
+    widget: 'memory_vault',
+    mode: 'combinational',
+    incidentBrief: {
+      where: 'B1 地上大ハッチ・プログラム入力盤',
+      trouble: '緊急時に人間が頭の中で「ADDは01、SUBは10…」と2進数を暗算してスイッチを押すと操作ミスで危険！ 4つの命令ボタン（LDI / ADD / SUB / JZ）を押すだけで2ビット機械語（I1, I0）と入力検知（KEY）が出る入力変換回路が必要だ！',
+      condition: '4本の命令ボタン（LDI / ADD / SUB / JZ）から 2ビット機械語（I0, I1）と「何か押された信号（KEY）」を出力せよ！',
+      shortRule: 'LDI(00) / ADD(01) / SUB(10) / JZ(11) の4ボタンから 2bit機械語(I0, I1) と入力検知(KEY)を作るエンコーダを組め！',
+      stakes: '人間が押す「言葉のキー」と機械語（0と1の電線）を物理回路で直結し、入力のブラックボックスをなくす',
+    },
+    inputs: ['LDI', 'ADD', 'SUB', 'JZ'],
+    outputs: ['I0', 'I1', 'KEY'],
+    pinGroups: {
+      outputs: [{ label: '命令 I', indices: [0, 1] }],
+    },
+    pinHelp: {
+      inputs: [
+        'LDI: 「代入 (00)」キー',
+        'ADD: 「足す (01)」キー',
+        'SUB: 「引く (10)」キー',
+        'JZ: 「0なら飛ぶ (11)」キー',
+      ],
+      outputs: [
+        'I0: 命令の1の位（ADD または JZ が1のとき 1）',
+        'I1: 命令の2の位（SUB または JZ が1のとき 1）',
+        'KEY: いずれかの命令キーが押されたとき 1（無入力なら 0）',
+      ],
+    },
+    allowedPrimitives: ['NAND'],
+    allowedCustomChips: ['NOT', 'AND', 'OR', 'XOR'],
+    plainGoal: '4つの命令キー（LDI / ADD / SUB / JZ）を押すと、対応する2ビット機械語（I0, I1）と入力検知（KEY）が出る「命令キーエンコーダ（4→2符号器）」を設計しよう！',
+    beginnerNote:
+      'Stage 10 の「2→4デコーダ（2本→4本）」のちょうど逆が「4→2エンコーダ（4本→2本）」です！ 出力の I0 が 1 になるボタン、I1 が 1 になるボタン、KEY が 1 になる条件をそれぞれ見比べてみよう。',
+    introDialogue: [
+      {
+        speaker: 'mina',
+        showIncident: true,
+        text: '主任さん、ARK4_SYS は動いたけど……私、試しに手作業で `I1, I0` のスイッチを `01` や `10` に切り替えてみたら、うっかり ADD と SUB を押し間違えそうになっちゃった！ 緊急時に人間が毎回 0と1 を暗算して押すのは危ないよ！',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: 'デコーダの真逆：4→2エンコーダ（動く図解）',
+          title: '⌨ 4つの命令ボタン ➔ 2ビット機械語（I1, I0）＋ 入力検知（KEY）！',
+          anim: 'goal_asm_enc',
+          rule: 'LDI→00、ADD→01、SUB→10、JZ→11！ 無入力（0000）と LDI（1000）を区別するため、どれかが押されたときだけ KEY=1 も出そう！',
+          accent: '#ffd166',
+        },
+        text: 'もっともだ、ミナ！ まだ文字を読むソフトが無い「最初の1台」では、人間が押す【LDI / ADD / SUB / JZ の4ボタン】を物理回路でそのまま2ビットの電線（I1, I0）へ変換してしまえばいいんだ！ これが Stage 10（2→4デコーダ）のちょうど真逆の回路──【4→2エンコーダ（符号器）】だよ！',
+      },
+      {
+        speaker: 'hako',
+        text: '『ここで作った【ASM_ENC】は、この先のアセンブリ入力盤にそのまま組み込むぞ。お前が LDI や SUB のキーを押すたび、実際にこの回路が電気を通して 2ビット機械語（I1, I0）を叩き出すようになるんだ。主任、設計を頼む！』',
+      },
+    ],
+    outroDialogue: [
+      {
+        speaker: 'mina',
+        text: 'わっ、ホントだ！「ADD」ボタンを押すだけで `01`、「SUB」で `10`、「JZ」で `11` が一発で光るし、何も押してないときはちゃんと `KEY=0` になって LDI(`00`) と見分けがつくよ！',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: 'モジュール図鑑へ登録：命令キーエンコーダ',
+          title: '⌨ I0 = ADD OR JZ ／ I1 = SUB OR JZ ／ KEY = 全入力のOR！',
+          anim: 'asm_enc',
+          rule: 'デコーダ（2→4）と対になるエンコーダ（4→2）を【⚡モジュール図鑑】に登録しました！',
+          accent: '#ffd166',
+        },
+        text: 'お見事、主任！ たった数個の OR ゲートで「人間の言葉のボタン」と「機械の0と1」が物理的に1本の線で繋がったんだ。将来もっと大きなCPUができたら、この変換自体をソフトウェア（本物のアセンブラ）へ進化させられるんだよ！',
+      },
+    ],
+    hints: [
+      '【考え方】I0（1の位）が 1 になるのは 01(ADD) と 11(JZ) のときだけ！ I1（2の位）が 1 になるのは 10(SUB) と 11(JZ) のときだけ！',
+      '【構成】OR ゲートを 4個だけで組めます！（I0用に1個、I1用に1個、KEY用に2個）',
+      '【手順】ADD と JZ → OR① → I0。SUB と JZ → OR② → I1。さらに LDI と I0 → OR③、その出力と I1 → OR④ → KEY へ繋げば、どのキーが押されても KEY=1 になります！',
+    ],
+    tests: [
+      { label: '無入力 (0000) → I=00, KEY=0', input: [0, 0, 0, 0], expected: [0, 0, 0] },
+      { label: 'LDI 押下 → 機械語 00 (KEY=1)', input: [1, 0, 0, 0], expected: [0, 0, 1] },
+      { label: 'ADD 押下 → 機械語 01 (KEY=1)', input: [0, 1, 0, 0], expected: [1, 0, 1] },
+      { label: 'SUB 押下 → 機械語 10 (KEY=1)', input: [0, 0, 1, 0], expected: [0, 1, 1] },
+      { label: 'JZ 押下  → 機械語 11 (KEY=1)', input: [0, 0, 0, 1], expected: [1, 1, 1] },
+    ],
+    rewardChip: {
+      id: 'ASM_ENC',
+      name: 'ASM_ENC',
+      shortName: 'ENC',
+      titleJa: '命令キーエンコーダ（4→2）',
+      descJa: 'LDI / ADD / SUB / JZ の4ボタンから2ビット機械語(I0, I1)と入力検知(KEY)を生成する自作チップ。',
+      color: '#b87424',
+      accent: '#ffd166',
+    },
+    codexUnlock: ['encoder_rom'],
+  },
+
+  {
+    id: 'stage_rom_4w',
+    number: 23,
+    act: 6,
+    chapter: 2,
+    code: '23',
+    title: '番地から命令を吐く棚・配線ROM',
+    revealedTitle: '4番地プログラムROM（ROM_4W）',
+    scene: 'machinery',
+    storyBgm: 'story',
+    widget: 'memory_vault',
+    mode: 'combinational',
+    incidentBrief: {
+      where: 'B1 地上大ハッチ・自動命令メモリ基板（ROM）',
+      trouble: 'クロック1拍ごとに人間がボタンを押し直すわけにはいかない！ COND_PC が出す番地（A0, A1 = 0〜3番地）を受け取ったら、焼き込んだ4行の6ビット機械語命令（I0..1, IMM0..3）を自動で出力する「物理ROM」が必要だ！',
+      condition: '番地 A=0→LDI 5(00:0101), A=1→ADD 3(01:0011), A=2→SUB 4(10:0100), A=3→JZ 8(11:1000) を出力する4番地ROMを配線せよ！',
+      shortRule: 'DEC2_4 で選んだ番地(0〜3)から、4行の6ビット命令（I0..1, IMM0..3）を自動出力する配線ROMを組め！',
+      stakes: '「プログラムを保存しておくメモリ（ROM）」の正体を自分の手で組み上げ、CPUへ直結する最後のピースを完成させる',
+    },
+    inputs: ['A0', 'A1'],
+    outputs: ['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3'],
+    pinGroups: {
+      inputs: [{ label: '番地 A', indices: [0, 1] }],
+      outputs: [
+        { label: '命令 I', indices: [0, 1] },
+        { label: '数値 IMM', indices: [2, 3, 4, 5] },
+      ],
+    },
+    pinHelp: {
+      inputs: ['A0: 番地の1の位（PC0）', 'A1: 番地の2の位（PC1）'],
+      outputs: [
+        'I0: 命令1の位（1番地・3番地で 1）',
+        'I1: 命令2の位（2番地・3番地で 1）',
+        'IMM0: 数値1の位（0番地[5]・1番地[3]で 1）',
+        'IMM1: 数値2の位（1番地[3]だけで 1）',
+        'IMM2: 数値4の位（0番地[5]・2番地[4]で 1）',
+        'IMM3: 数値8の位（3番地[8]だけで 1）',
+      ],
+    },
+    allowedPrimitives: ['NAND', 'CONST_0', 'CONST_1'],
+    allowedCustomChips: ['NOT', 'AND', 'OR', 'XOR', 'DEC_2TO4'],
+    plainGoal: '番地入力 A0, A1（0〜3番地）を入れると、あらかじめ配線した4行の6ビット機械語命令（I0..1, IMM0..3）を自動出力する「4番地プログラムROM」を組もう！',
+    beginnerNote:
+      'まずは A0, A1 を DEC2_4 に入れて「0〜3番地のうち選ばれた1行（Y0〜Y3）だけが 1 になる線」を作ろう！ あとは各出力ピン（I0..IMM3）ごとに「1 にしたい番地の線」を直接つなぐか OR で束ねるだけで本物のROMが完成します！',
+    introDialogue: [
+      {
+        speaker: 'mina',
+        text: '主任さん、命令キーエンコーダ（`ASM_ENC`）のおかげでボタンから2ビット機械語は作れるようになったよ！ ……でも、ハッチを開ける本番のとき、クロックのたびに人間がボタンを押し直すの？ 1秒でもズレたら大変だよ！',
+      },
+      {
+        speaker: 'kagari',
+        showIncident: true,
+        visualCard: {
+          tag: 'ROM（読み出し専用メモリ）の物理構造（動く図解）',
+          title: '📜 DEC2_4（番地選択）＋ OR配線マトリクス ＝ 本物のプログラムROM！',
+          anim: 'goal_rom_4w',
+          rule: '0番=LDI 5(00:0101)、1番=ADD 3(01:0011)、2番=SUB 4(10:0100)、3番=JZ 8(11:1000)！ ビットが1になる番地線同士をORで束ねよう！',
+          accent: '#6fcf97',
+        },
+        text: 'そこで最後のハードウェア部品──【ROM（読み出し専用メモリ）】だ！ 仕組みは驚くほど美しいぞ。Stage 10 の `DEC2_4` に番地（A0, A1）を入れると、選んだ1行（Y0〜Y3）だけ電気が通る。あとは「その出力ピンを 1 にしたい番地」の電線を OR で束ねるだけで、番地に応じた6ビット命令が勝手に出てくるんだ！',
+      },
+      {
+        speaker: 'hako',
+        text: '『アポロ11号を月へ運んだ宇宙船のROMも、これと同じ「配線あり=1／なし=0」の物理マトリクスだったんだ。まずは4行の自己診断プログラムを焼き込んだ【ROM_4W】を組んでみせろ、主任！ これが出来れば、次のアセンブリ編ではお前が組んだ DEC2_4 と OR のROM基板へ実際にプログラムを書き込んで ARK4_SYS を走らせるぞ！』',
+      },
+    ],
+    outroDialogue: [
+      {
+        speaker: 'mina',
+        text: 'すごっ……！！ 番地 A を `0 → 1 → 2 → 3` って変えるだけで、`LDI 5` → `ADD 3` → `SUB 4` → `JZ 8` の6ビット機械語が次々に自動で出てきた！！ メモリって魔法の箱じゃなくて、デコーダとORの配線だったんだね！',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: 'モジュール図鑑へ登録：4番地プログラムROM',
+          title: '📜 PC番地 ➔ DEC2_4 ➔ ORマトリクス ➔ 6本の命令線（I0..1, IMM0..3）！',
+          anim: 'rom_4w',
+          rule: 'ハードウェアROMの構造を【⚡モジュール図鑑】に登録しました！ 砂からメモリ・CPU・入力盤まですべて揃ったぞ！',
+          accent: '#6fcf97',
+        },
+        text: 'これにてハードウェア全工程、完全制覇だ、主任！ 砂のトランジスタから、論理ゲート、加算器、記憶ラッチ、CPU（ARK4_SYS）、命令エンコーダ（ASM_ENC）、そしてプログラムROM（ROM_4W）まで──**もう1ミリの飛躍もブラックボックスもない**。さあ、いよいよ自分でプログラムを書いて地上ハッチを開きに行こう！！',
+      },
+    ],
+    hints: [
+      '【考え方】DEC2_4 の出力 Y0=0番地(LDI 5: 00 0101), Y1=1番地(ADD 3: 01 0011), Y2=2番地(SUB 4: 10 0100), Y3=3番地(JZ 8: 11 1000) です。各ビットが「どの番地で1になるか」をピンごとに見よう！',
+      '【構成】使うチップは DEC2_4 × 1個 と OR × 4個（合計5個）だけ！ IMM1 と IMM3 は1か所だけなので OR すら不要で直結できます！',
+      '【手順】A0,A1 → DEC2_4。Y1とY3 → OR① → I0。Y2とY3 → OR② → I1。Y0とY1 → OR③ → IMM0。Y1 → IMM1（直結!）。Y0とY2 → OR④ → IMM2。Y3 → IMM3（直結!）！',
+    ],
+    tests: [
+      { label: '0番地 (A=00) → LDI 5 [00:0101]', input: [0, 0], expected: [0, 0, 1, 0, 1, 0] },
+      { label: '1番地 (A=01) → ADD 3 [01:0011]', input: [1, 0], expected: [1, 0, 1, 1, 0, 0] },
+      { label: '2番地 (A=10) → SUB 4 [10:0100]', input: [0, 1], expected: [0, 1, 0, 0, 1, 0] },
+      { label: '3番地 (A=11) → JZ  8 [11:1000]', input: [1, 1], expected: [1, 1, 0, 0, 0, 1] },
+    ],
+    rewardChip: {
+      id: 'ROM_4W',
+      name: 'ROM_4W',
+      shortName: 'ROM',
+      titleJa: '4番地プログラムROM',
+      descJa: 'DEC2_4とOR配線マトリクスで番地(A0,A1)から6ビット機械語命令を自動出力する自作メモリチップ。',
+      color: '#2c8a7b',
+      accent: '#52e3b6',
+    },
+    codexUnlock: ['encoder_rom'],
+  },
+
   // =========================================================================
   // CHAPTER II — ACT VII: BIRTH OF SOFTWARE, ASSEMBLY & RETURN TO THE BLUE SKY
   // =========================================================================
   {
     id: 'stage_22',
-    number: 22,
+    number: 24,
     act: 7,
     chapter: 2,
-    code: '22',
+    code: '24',
     kind: 'assembly_program',
     title: '最初のプログラム・気圧均衡',
     revealedTitle: 'アセンブリ制御プログラム（気圧均衡）',
@@ -2692,14 +2903,14 @@ export const STAGES = [
     incidentBrief: {
       where: 'B1 地上大ハッチ・第一エアロック制御ROM',
       trouble: '地上大ハッチの第一ロックを外すには、まず初期内圧「5」をセットした上で、加圧「+7」と外気差圧「−4」を行って目標圧「8」にする必要がある！',
-      condition: 'ARK4_SYS のROM（0〜2番地）にアセンブリ命令を書き、0番地で内圧5をセット後、ADD/SUBで最終気圧 ACC=8 (次PC=3番地) を達成せよ！（加圧+7と減圧-4の順序はどちらが先でも可）',
+      condition: '自作の ASM_ENC → ROM → ARK4_SYS を繋ぎ、0番地で内圧5をセット後、ADD/SUBで最終気圧 ACC=8 (次PC=3番地) を達成せよ！（加圧+7と減圧-4の順序はどちらが先でも可）',
       shortRule: '0番地で初期内圧「5」をセットし、加圧(+7)と減圧(−4)を組み合わせて最終気圧 ACC=8 にせよ！',
-      stakes: '自作コンピュータ ARK4_SYS の6本の入力ピンをアセンブリ言語で自動制御し、人類42年ぶりの「ソフトウェア」を走らせる',
+      stakes: '自作エンコーダ・自作ROM・自作CPUを一気通貫で動かし、人類42年ぶりの「ソフトウェア」を走らせる',
     },
     inputs: ['CLK'],
     outputs: ['ACC'],
     pinHelp: {
-      inputs: ['ROM 0〜2番地: 実行するアセンブリ命令（LDI / ADD / SUB / JZ + 数値0〜15）'],
+      inputs: ['ROM 0〜2番地: 自作 ASM_ENC と自作 ROM 基板へ書き込むアセンブリ命令（LDI / ADD / SUB / JZ + 数値0〜15）'],
       outputs: ['ACC: 3行実行後の最終気圧（目標 = 8）'],
     },
     physicsParts: [
@@ -2758,18 +2969,18 @@ export const STAGES = [
     introDialogue: [
       {
         speaker: 'hako',
-        text: '『主任、B1第一エアロックのROMコンソールに、いまお前が Stage 21 までで組み上げた実機回路【ARK4_SYS（COND_PC ＋ INST_DEC ＋ ARK4_CPU ＋ ZERO_4B）】を直結したぞ！』',
+        text: '『主任、B1第一エアロックの制御ラックに、お前が砂から組み上げた3大実機システム──【命令キーエンコーダ ASM_ENC】➔【配線ROM基板（DEC2_4＋OR）】➔【自律計算機 ARK4_SYS】をすべて物理直結したぞ！』',
       },
       {
         speaker: 'kagari',
         visualCard: {
           tag: 'ハードウェアからソフトウェアへ（動く図解）',
-          title: '🔌 Stage 21 の6本の入力スイッチを「文字」で自動操作する＝アセンブリ言語！',
+          title: '🔌 自作 ASM_ENC ➔ 自作 ROM ➔ 自作 ARK4_SYS が1本の電線で繋がった！',
           anim: 'asm_program_flow',
-          rule: '書いた1行（例：ADD 7）は機械語「01 0111」になり、あなたの INST_DEC（I1,I0）と ARK4_CPU（IMM3..0）へ1拍ずつ電気を流し込む！',
+          rule: '押した命令キーは自作 ASM_ENC が2bit機械語へ変換し、自作 DEC2_4＋OR のROM基板へ記憶！ PC番地に合わせて6本の電線が ARK4_SYS へ自動で流れ込む！',
           accent: '#6fcf97',
         },
-        text: 'さっき Stage 21 で、君は手で `I1, I0` のスイッチを `01` に、`IMM` を `0111` (7) にしてクロックを押しただろう？ あの6本の電線スイッチを毎回手で押す代わりに、「01 0111」に【ADD 7】という人間用の名前をつけてROMに書き並べる──それが【アセンブリ言語】なんだ！',
+        text: 'もうブラックボックスは1つも残っていないぞ、主任！ 下の入力盤で命令キー（`LDI` / `ADD` / `SUB` / `JZ`）を押せば君の `ASM_ENC` が2ビット機械語へ変換し、数値（0〜15）と一緒に君の `DEC2_4＋OR` 構造のROM基板へセットされる──これが【アセンブリ言語】の物理的な正体だ！',
       },
       {
         speaker: 'mina',
@@ -2818,10 +3029,10 @@ export const STAGES = [
 
   {
     id: 'stage_23',
-    number: 23,
+    number: 25,
     act: 7,
     chapter: 2,
-    code: '23',
+    code: '25',
     kind: 'assembly_program',
     title: 'ソフトの知恵・足し算器で掛け算せよ',
     revealedTitle: '乗算＆ゼロ一致分岐アルゴリズム',
@@ -2976,10 +3187,10 @@ export const STAGES = [
 
   {
     id: 'stage_24',
-    number: 24,
+    number: 26,
     act: 7,
     chapter: 2,
-    code: '24',
+    code: '26',
     kind: 'assembly_program',
     isFinale: true,
     isChapter2Finale: true,

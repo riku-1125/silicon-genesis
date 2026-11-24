@@ -164,7 +164,7 @@ export function buildChapter1EndingSteps(rawStats = {}) {
       chapterCard: {
         roman: 'CHAPTER I · COMPLETE',
         title: '文明再起動 ── 完結',
-        sub: '解放：第二章「青空への帰還」（STAGE 18〜24）',
+        sub: '解放：第二章「青空への帰還」（STAGE 18〜26）',
       },
       speaker: null,
       text: '地下400メートルの長い夜が終わり、新しい物語の扉が開かれた。\n次なる挑戦は、君の自作CPUに「条件分岐」と「アセンブリ言語」を宿らせ、42年間閉ざされた地上大ハッチを自らの手で開くこと──第二章『青空への帰還』、いま開幕！',

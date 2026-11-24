@@ -4,13 +4,13 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=35';
-import { CODEX_ENTRIES } from '../data/codex.js?v=35';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=36';
+import { CODEX_ENTRIES } from '../data/codex.js?v=36';
 import {
   ARK4_ISA_TABLE,
   getStageSymbolReferences,
   stageUsesIsaTable,
-} from '../data/symbolReference.js?v=35';
+} from '../data/symbolReference.js?v=36';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -19,13 +19,13 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=35';
+} from '../data/glossary.js?v=36';
 import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
-import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=35';
-import { sound } from '../audio/sound.js?v=35';
-import { StoryDiagramGroup } from './storyDiagram.js?v=35';
-import { glossaryPopover } from './glossaryPopover.js?v=35';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=35';
+import { isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=36';
+import { sound } from '../audio/sound.js?v=36';
+import { StoryDiagramGroup } from './storyDiagram.js?v=36';
+import { glossaryPopover } from './glossaryPopover.js?v=36';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=36';
 
 function esc(str) {
   return String(str ?? '')
@@ -491,7 +491,7 @@ export class ModalManager {
             <div class="vcert-stat"><span class="vcert-lbl">自作計算機</span><strong>${sysNand} NAND</strong><small>TR換算 ${sysNand * 2}個</small></div>
             <div class="vcert-stat"><span class="vcert-lbl">復元レコード</span><strong>${clearedCount} / ${STAGES.length}</strong><small>自作チップ ${forgedCount}種</small></div>
           </div>
-          <div class="vcert-chain">砂(MOSFET) → NAND → 加算器 → ラッチ → CPU → アセンブリ → ☀青空</div>
+          <div class="vcert-chain">砂(MOSFET) → NAND → 加算器 → ラッチ → CPU → ENC＋ROM → アセンブリ → ☀青空</div>
         </div>`;
     } else if (stage.isFinale) {
       const cpuNand = journeyStats?.ark4NandCount ?? metrics.nandCount ?? 270;
@@ -500,7 +500,7 @@ export class ModalManager {
         <div class="victory-cert-card">
           <div class="vcert-eyebrow">★ CHAPTER I COMPLETE // HELLO, WORLD.</div>
           <div class="vcert-title">第一章完結 — 自作CPU『ARK-4』稼働開始！</div>
-          <p class="vcert-desc">地上ビーコンから <code>"HELLO, WORLD."</code> が届き、生存シェルター『アーク3』と繋がりました！ <b>☀ 第二章「青空への帰還」（STAGE 18〜24）</b> が解放されました！</p>
+          <p class="vcert-desc">地上ビーコンから <code>"HELLO, WORLD."</code> が届き、生存シェルター『アーク3』と繋がりました！ <b>☀ 第二章「青空への帰還」（STAGE 18〜26）</b> が解放されました！</p>
           <div class="vcert-grid">
             <div class="vcert-stat"><span class="vcert-lbl">昇格称号</span><strong>アーク7 主任技師</strong></div>
             <div class="vcert-stat"><span class="vcert-lbl">自作CPU規模</span><strong>${cpuNand} NAND</strong><small>TR換算 ${cpuNand * 2}個</small></div>
@@ -623,7 +623,7 @@ export class ModalManager {
         act.id === 6
           ? `<div class="map-chapter-banner ${ch2Open ? '' : 'locked'}">
               <span>${ch2Open ? '☀' : '🔒'} 第二章：青空への帰還（ノイマン型計算機＆アセンブリ編）</span>
-              <span class="mono" style="font-size:11px;opacity:0.9;">${ch2Open ? 'STAGE 18〜24' : '第一章クリアで解放'}</span>
+              <span class="mono" style="font-size:11px;opacity:0.9;">${ch2Open ? 'STAGE 18〜26' : '第一章クリアで解放'}</span>
             </div>`
           : '';
       const cards = stagesInAct

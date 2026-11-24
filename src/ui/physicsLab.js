@@ -10,7 +10,7 @@
  *     and watch the 5.0V <-> 0.0V voltage meter flip cleanly!
  */
 
-import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js?v=35';
+import { runRomProgram, evaluateRomStage } from '../engine/romRunner.js?v=36';
 
 const W = 640;
 const H = 360;

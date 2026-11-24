@@ -227,6 +227,20 @@ export const SYMBOL_CATALOG = [
     ja: 'CPU内部で4ビットの数値を1個記憶しておき、クロックの瞬間に更新できる記憶装置',
     category: 'module',
   },
+  {
+    key: 'ENC',
+    tokens: ['ENC', 'ASM_ENC'],
+    en: 'Encoder（エンコーダ／符号器）',
+    ja: 'デコーダの逆。押された1本のボタン（LDI / ADD / SUB / JZ）を2ビット機械語（00〜11）へ変換する回路',
+    category: 'module',
+  },
+  {
+    key: 'KEY',
+    tokens: ['KEY'],
+    en: 'Key Pressed（入力検知フラグ）',
+    ja: '4つの命令ボタンのうち、どれか1つでも押されていれば 1、何も押されていなければ 0 になる確認信号',
+    category: 'pin',
+  },
 ];
 
 export const ARK4_ISA_TABLE = [
@@ -310,6 +324,8 @@ export function stageUsesIsaTable(stage) {
     stage.kind === 'assembly_program' ||
     stage.id === 'stage_17' ||
     stage.id === 'stage_20' ||
-    stage.id === 'stage_21'
+    stage.id === 'stage_21' ||
+    stage.id === 'stage_asm_enc' ||
+    stage.id === 'stage_rom_4w'
   );
 }

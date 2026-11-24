@@ -12,7 +12,7 @@
  * from the circuit outputs.
  */
 
-import { cloneCircuit, computeCircuitMetrics } from './circuit.js';
+import { cloneCircuit, createEmptyCircuit, connectWire, computeCircuitMetrics } from './circuit.js';
 import { compileCircuit } from './simulator.js';
 import { provisionStandardChips } from './blueprints.js';
 
@@ -99,13 +99,20 @@ export function buildRomBoardCircuit(ark4SysCircuit) {
 }
 
 /**
- * Compiles the player's `ARK4_SYS` and all dependent custom chips into a live
- * gate-level simulator instance.
+ * Compiles the player's `ARK4_SYS`, `ASM_ENC` (Stage 22), and all dependent
+ * custom chips (`DEC_2TO4`, `OR`, `AND`, `INST_DEC`, `ZERO_4BIT`, etc.) into
+ * live gate-level simulator instances.
  */
 export function compileRomHardware(customChips = {}) {
   // Clone chip map and provision any missing dependencies without touching player chips
   const workingChips = { ...customChips };
-  if (!workingChips.ARK4_SYS) {
+  if (
+    !workingChips.ARK4_SYS ||
+    !workingChips.ASM_ENC ||
+    !workingChips.DEC_2TO4 ||
+    !workingChips.OR ||
+    !workingChips.AND
+  ) {
     provisionStandardChips(workingChips, { includeChapter2Hardware: true, provisioned: true });
   }
 
@@ -117,6 +124,26 @@ export function compileRomHardware(customChips = {}) {
   const boardCircuit = buildRomBoardCircuit(ark4SysDef.circuit);
   const sim = compileCircuit(boardCircuit, workingChips);
   const metrics = computeCircuitMetrics(ark4SysDef.circuit, workingChips);
+
+  let asmEncSim = null;
+  let asmEncNandCount = 0;
+  if (workingChips.ASM_ENC?.circuit) {
+    try {
+      asmEncSim = compileCircuit(workingChips.ASM_ENC.circuit, workingChips);
+      asmEncNandCount = computeCircuitMetrics(workingChips.ASM_ENC.circuit, workingChips).nandCount;
+    } catch {
+      asmEncSim = null;
+    }
+  }
+
+  let rom4wNandCount = 0;
+  if (workingChips.ROM_4W?.circuit) {
+    try {
+      rom4wNandCount = computeCircuitMetrics(workingChips.ROM_4W.circuit, workingChips).nandCount;
+    } catch {
+      rom4wNandCount = 0;
+    }
+  }
 
   let instDecSim = null;
   if (workingChips.INST_DEC?.circuit) {
@@ -138,9 +165,12 @@ export function compileRomHardware(customChips = {}) {
 
   return {
     sim,
+    asmEncSim,
     instDecSim,
     zeroSim,
     metrics,
+    asmEncNandCount,
+    rom4wNandCount,
     workingChips,
   };
 }
@@ -503,8 +533,9 @@ export function assembleProgramText(sourceText, stage) {
 }
 
 /**
- * Probes the player's own compiled INST_DEC circuit to show live control wires
- * (OP, SET, WE, BR) for any instruction being edited or executed.
+ * Probes the player's own compiled ASM_ENC + INST_DEC circuits to show live
+ * key-encoding (LDI/ADD/SUB/JZ -> I1, I0, KEY) and control wires (OP, SET, WE, BR)
+ * for any instruction being edited or executed.
  */
 export function probeInstructionDecode(hw, part) {
   if (!part) {
@@ -513,6 +544,7 @@ export function probeInstructionDecode(hw, part) {
       i1: 0,
       imm: [0, 0, 0, 0],
       ret: 0,
+      keyFlag: 0,
       opcodeBits: '00',
       immBits: '0000',
       opFlag: 0,
@@ -521,7 +553,7 @@ export function probeInstructionDecode(hw, part) {
       brFlag: 0,
     };
   }
-  const pins = encodeInstructionPins(part);
+  const pins = encodeInstructionPins(part, hw);
   let opFlag = part.op === 'SUB' ? 1 : 0;
   let setFlag = part.op === 'LDI' ? 1 : 0;
   let weFlag = part.op === 'JZ' || part.op === 'LOOP' ? 0 : 1;
@@ -544,34 +576,50 @@ export function probeInstructionDecode(hw, part) {
 }
 
 /**
- * Decodes an assembly instruction into the exact `[I0, I1]` and `RET` hardware lines.
- * - `00` (LDI)  -> `I0=0, I1=0, RET=0`
- * - `01` (ADD)  -> `I0=1, I1=0, RET=0`
- * - `10` (SUB)  -> `I0=0, I1=1, RET=0`
- * - `11` (JZ)   -> `I0=1, I1=1, RET=0`
- * - `LOOP`      -> `I0=1, I1=1, RET=1` (Machine code `11:0001` = `JZ 1` + External Return Pull-down `RET=1`)
+ * Encodes an assembly instruction's command key (`LDI` / `ADD` / `SUB` / `JZ`)
+ * into `[I0, I1, KEY]` through the player's compiled `ASM_ENC` circuit (Stage 22)
+ * when `hw` is provided, and converts the 4-bit immediate into `[IMM0..3]`.
+ *
+ * - `LDI`  -> key `[1,0,0,0]` -> `ASM_ENC` -> `I0=0, I1=0, KEY=1, RET=0`
+ * - `ADD`  -> key `[0,1,0,0]` -> `ASM_ENC` -> `I0=1, I1=0, KEY=1, RET=0`
+ * - `SUB`  -> key `[0,0,1,0]` -> `ASM_ENC` -> `I0=0, I1=1, KEY=1, RET=0`
+ * - `JZ`   -> key `[0,0,0,1]` -> `ASM_ENC` -> `I0=1, I1=1, KEY=1, RET=0`
+ * - `LOOP` -> key `[0,0,0,1]` -> `ASM_ENC` -> `I0=1, I1=1, KEY=1, RET=1`
  */
-export function encodeInstructionPins(part) {
+export function encodeInstructionPins(part, hw = null) {
   let i0 = 0;
   let i1 = 0;
-  let ret = 0;
+  let keyFlag = 1;
+  const ret = part.op === 'LOOP' ? 1 : 0;
 
-  if (part.op === 'LDI') {
-    i0 = 0;
-    i1 = 0;
-  } else if (part.op === 'ADD') {
-    i0 = 1;
-    i1 = 0;
-  } else if (part.op === 'SUB') {
-    i0 = 0;
-    i1 = 1;
-  } else if (part.op === 'JZ') {
-    i0 = 1;
-    i1 = 1;
-  } else if (part.op === 'LOOP') {
-    i0 = 1;
-    i1 = 1;
-    ret = 1;
+  if (hw?.asmEncSim) {
+    const keyVec = [
+      part.op === 'LDI' ? 1 : 0,
+      part.op === 'ADD' ? 1 : 0,
+      part.op === 'SUB' ? 1 : 0,
+      part.op === 'JZ' || part.op === 'LOOP' ? 1 : 0,
+    ];
+    hw.asmEncSim.reset();
+    const encOut = hw.asmEncSim.evaluate(keyVec).outputs;
+    i0 = encOut[0] ? 1 : 0;
+    i1 = encOut[1] ? 1 : 0;
+    keyFlag = encOut[2] ? 1 : 0;
+  } else {
+    if (part.op === 'LDI') {
+      i0 = 0;
+      i1 = 0;
+    } else if (part.op === 'ADD') {
+      i0 = 1;
+      i1 = 0;
+    } else if (part.op === 'SUB') {
+      i0 = 0;
+      i1 = 1;
+    } else if (part.op === 'JZ' || part.op === 'LOOP') {
+      i0 = 1;
+      i1 = 1;
+    } else {
+      keyFlag = 0;
+    }
   }
 
   const imm = numToBits(part.val ?? 0, 4);
@@ -583,9 +631,99 @@ export function encodeInstructionPins(part) {
     i1,
     imm,
     ret,
+    keyFlag,
     opcodeBits,
     immBits,
   };
+}
+
+/**
+ * Builds a real gate-level 16-address × 8-bit Program ROM circuit out of the
+ * player's own `DEC_2TO4`, `AND`, and `OR` chips (extending Stage 23 `ROM_4W`'s
+ * exact `DEC2_4 + OR-plane` architecture to 4-bit PC addresses 0..15).
+ *
+ * Inputs:  `['PC0', 'PC1', 'PC2', 'PC3']`
+ * Outputs: `['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'RET', 'VALID']`
+ */
+export function buildProgrammableRomCircuit(rowMap, hw) {
+  let c = createEmptyCircuit(
+    ['PC0', 'PC1', 'PC2', 'PC3'],
+    ['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'RET', 'VALID']
+  );
+
+  let nid = 1;
+  let wid = 1;
+  const addNode = (type) => {
+    const id = `rom_${type}_${nid++}`;
+    c.nodes.push({ id, type, x: 100, y: 100 });
+    return id;
+  };
+  const wire = (from, to) => {
+    c = connectWire(c, from, to, () => `rom_w_${wid++}`);
+  };
+
+  // 2-level address decoder using the player's own DEC_2TO4 chips!
+  const decLo = addNode('DEC_2TO4');
+  const decHi = addNode('DEC_2TO4');
+  wire({ kind: 'input', pin: 0 }, { kind: 'node', nodeId: decLo, pin: 0 });
+  wire({ kind: 'input', pin: 1 }, { kind: 'node', nodeId: decLo, pin: 1 });
+  wire({ kind: 'input', pin: 2 }, { kind: 'node', nodeId: decHi, pin: 0 });
+  wire({ kind: 'input', pin: 3 }, { kind: 'node', nodeId: decHi, pin: 1 });
+
+  // Collect active row-select endpoints for each of the 8 output planes
+  const planes = Array.from({ length: 8 }, () => []);
+
+  for (const [addr, entry] of rowMap.entries()) {
+    if (!entry?.part || addr < 0 || addr > 15) continue;
+    const encoded = encodeInstructionPins(entry.part, hw);
+
+    // Row select line: AND(decLo[addr & 3], decHi[(addr >> 2) & 3])
+    const selAnd = addNode('AND');
+    wire({ kind: 'node', nodeId: decLo, pin: addr & 3 }, { kind: 'node', nodeId: selAnd, pin: 0 });
+    wire({ kind: 'node', nodeId: decHi, pin: (addr >> 2) & 3 }, { kind: 'node', nodeId: selAnd, pin: 1 });
+    const selEp = { kind: 'node', nodeId: selAnd, pin: 0 };
+
+    const wordBits = [
+      encoded.i0,
+      encoded.i1,
+      encoded.imm[0],
+      encoded.imm[1],
+      encoded.imm[2],
+      encoded.imm[3],
+      encoded.ret,
+      encoded.keyFlag, // VALID = 1 only when player's ASM_ENC asserts KEY=1!
+    ];
+    for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
+      if (wordBits[bitIdx]) planes[bitIdx].push(selEp);
+    }
+  }
+
+  // Fold each bit plane with a tree of the player's own OR gates (exact ROM_4W OR-plane!)
+  for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
+    let eps = planes[bitIdx];
+    if (eps.length === 0) {
+      const z = addNode('CONST_0');
+      wire({ kind: 'node', nodeId: z, pin: 0 }, { kind: 'output', pin: bitIdx });
+      continue;
+    }
+    while (eps.length > 1) {
+      const next = [];
+      for (let i = 0; i < eps.length; i += 2) {
+        if (i + 1 < eps.length) {
+          const orNode = addNode('OR');
+          wire(eps[i], { kind: 'node', nodeId: orNode, pin: 0 });
+          wire(eps[i + 1], { kind: 'node', nodeId: orNode, pin: 1 });
+          next.push({ kind: 'node', nodeId: orNode, pin: 0 });
+        } else {
+          next.push(eps[i]);
+        }
+      }
+      eps = next;
+    }
+    wire(eps[0], { kind: 'output', pin: bitIdx });
+  }
+
+  return c;
 }
 
 export function buildRomRowMap(stage, slots = {}) {
@@ -601,12 +739,14 @@ export function buildRomRowMap(stage, slots = {}) {
 }
 
 /**
- * Executes a single clock cycle on the compiled `ARK4_SYS` hardware at the
- * current hardware `PC` address.
+ * Executes a single clock cycle on the compiled `ARK4_SYS` hardware by reading
+ * `[I0, I1, IMM0..3, RET, VALID]` directly from the compiled gate-level ROM
+ * matrix (`DEC_2TO4` + `AND` + `OR` + `ASM_ENC`) at the current hardware `PC`!
  */
-export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0) {
+export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
   const outsBefore = hw.sim.getOutputs();
   const accBefore = bitsToNum(outsBefore, 0, 4);
+  const pcBitsBefore = outsBefore.slice(4, 8);
   const pcBefore = bitsToNum(outsBefore, 4, 4);
 
   let zBefore = accBefore === 0 ? 1 : 0;
@@ -615,24 +755,37 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0) {
     zBefore = hw.zeroSim.evaluate(outsBefore.slice(0, 4)).outputs[0] ? 1 : 0;
   }
 
-  const entry = rowMap.get(pcBefore);
-  if (!entry || !entry.part) {
+  const activeRomSim = romSim || compileCircuit(buildProgrammableRomCircuit(rowMap, hw), hw.workingChips);
+  activeRomSim.reset();
+  const romRes = activeRomSim.evaluate(pcBitsBefore);
+  const romOut = romRes.outputs;
+  const valid = romOut[7] ? 1 : 0;
+
+  if (!valid) {
     return {
       halted: true,
       accBefore,
       pcBefore,
       zBefore,
+      unstable: Boolean(romRes.unstable),
     };
   }
 
-  const part = entry.part;
-  const { i0, i1, imm, ret, opcodeBits, immBits } = encodeInstructionPins(part);
+  const i0 = romOut[0] ? 1 : 0;
+  const i1 = romOut[1] ? 1 : 0;
+  const imm = [romOut[2] ? 1 : 0, romOut[3] ? 1 : 0, romOut[4] ? 1 : 0, romOut[5] ? 1 : 0];
+  const ret = romOut[6] ? 1 : 0;
+  const opcodeBits = `${i1}${i0}`;
+  const immBits = `${imm[3]}${imm[2]}${imm[1]}${imm[0]}`;
+
+  const entry = rowMap.get(pcBefore);
+  const part = entry?.part || makeInstructionPart(['LDI', 'ADD', 'SUB', 'JZ'][(i1 << 1) | i0], bitsToNum(imm, 0, 4));
 
   // Probe the player's own INST_DEC for live monitor display
-  let opFlag = part.op === 'SUB' ? 1 : 0;
-  let setFlag = part.op === 'LDI' ? 1 : 0;
-  let weFlag = part.op === 'JZ' || part.op === 'LOOP' ? 0 : 1;
-  let brFlag = part.op === 'JZ' || part.op === 'LOOP' ? 1 : 0;
+  let opFlag = i1 === 1 && i0 === 0 ? 1 : 0;
+  let setFlag = i1 === 0 && i0 === 0 ? 1 : 0;
+  let weFlag = i1 === 1 && i0 === 1 ? 0 : 1;
+  let brFlag = i1 === 1 && i0 === 1 ? 1 : 0;
   if (hw.instDecSim) {
     hw.instDecSim.reset();
     const decOut = hw.instDecSim.evaluate([i0, i1]).outputs;
@@ -642,7 +795,7 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0) {
     brFlag = decOut[3] ? 1 : 0;
   }
 
-  // Feed instruction + immediate + RET into ARK4_SYS and pulse CLK: 0 -> 1 -> 0
+  // Feed ROM output pins + CLK (0 -> 1 -> 0) directly into compiled ARK4_SYS!
   const vecSetup = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0, ret];
   const vecRise = [i0, i1, imm[0], imm[1], imm[2], imm[3], 1, ret];
   const vecHold = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0, ret];
@@ -651,7 +804,7 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0) {
   const resRise = hw.sim.evaluate(vecRise);
   const resHold = hw.sim.evaluate(vecHold);
 
-  const unstable = Boolean(resSetup.unstable || resRise.unstable || resHold.unstable);
+  const unstable = Boolean(romRes.unstable || resSetup.unstable || resRise.unstable || resHold.unstable);
   const outsAfter = resHold.outputs;
   const accAfter = bitsToNum(outsAfter, 0, 4);
   const pcAfter = bitsToNum(outsAfter, 4, 4);
@@ -693,8 +846,9 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0) {
 }
 
 /**
- * Runs a complete ROM assembly program on the player's compiled `ARK4_SYS`
- * hardware and returns the full cycle-by-cycle hardware trace.
+ * Runs a complete ROM assembly program on the player's compiled `ASM_ENC` +
+ * gate-level `ROM` (`DEC_2TO4` + `AND` + `OR`) + `ARK4_SYS` hardware and
+ * returns the full cycle-by-cycle hardware trace.
  */
 export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles = 14 } = {}) {
   let hw;
@@ -717,6 +871,25 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
   const por = resetRomHardware(hw);
   const rowMap = buildRomRowMap(stage, slots);
 
+  // Build & compile the live gate-level ROM matrix from the player's own DEC_2TO4, AND, OR, ASM_ENC!
+  let romSim;
+  try {
+    const romCircuit = buildProgrammableRomCircuit(rowMap, hw);
+    romSim = compileCircuit(romCircuit, hw.workingChips);
+  } catch (err) {
+    return {
+      trace: [],
+      initAcc: por.acc,
+      initPc: por.pc,
+      finalAcc: por.acc,
+      finalPc: por.pc,
+      unstable: false,
+      hitMaxCycles: false,
+      compileError: `ROM回路コンパイルエラー: ${err.message}`,
+      metrics: hw.metrics,
+    };
+  }
+
   const trace = [];
   let acc = por.acc;
   let pc = por.pc;
@@ -724,10 +897,11 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
   let hitMaxCycles = false;
 
   for (let step = 0; step < maxCycles; step++) {
-    const cycle = stepRomHardwareCycle(hw, rowMap, step);
+    const cycle = stepRomHardwareCycle(hw, rowMap, step, romSim);
     if (cycle.halted) {
       acc = cycle.accBefore;
       pc = cycle.pcBefore;
+      if (cycle.unstable) unstable = true;
       break;
     }
     trace.push(cycle);
@@ -737,9 +911,10 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
       unstable = true;
       break;
     }
-    // Check if next PC is still inside populated ROM
-    const nextEntry = rowMap.get(pc);
-    if (!nextEntry || !nextEntry.part) {
+    // Check via real gate-level ROM whether next hardware PC address has a valid instruction
+    romSim.reset();
+    const nextRomCheck = romSim.evaluate(numToBits(pc, 4));
+    if (!nextRomCheck.outputs[7]) {
       break;
     }
     if (step === maxCycles - 1) {

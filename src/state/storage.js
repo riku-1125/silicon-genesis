@@ -110,8 +110,15 @@ export function isStageUnlocked(save, stageId) {
   if (stageId === 'sandbox') return cleared.length > 0;
   const idx = STAGES.findIndex((s) => s.id === stageId);
   if (idx <= 0) return true;
-  // Backwards-compatible: existing saves with prior clears keep stage_00 / stage_01 accessible
+  // Backwards-compatible: existing saves with prior clears keep stage_00 / stage_01 accessible,
+  // and legacy Chapter 2 saves that already reached stage_22+ keep those stages accessible alongside new 22/23!
   if ((stageId === 'stage_00' || stageId === 'stage_01') && cleared.length > 0) return true;
+  if (
+    (stageId === 'stage_22' || stageId === 'stage_23' || stageId === 'stage_24' || stageId === 'stage_rom_4w') &&
+    (cleared.includes('stage_22') || cleared.includes('stage_23') || cleared.includes('stage_24'))
+  ) {
+    return true;
+  }
   const prevStage = STAGES[idx - 1];
   return cleared.includes(prevStage.id) || cleared.includes(stageId);
 }

@@ -2,11 +2,11 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=35';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=36';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
-} from './data/endings.js?v=35';
+} from './data/endings.js?v=36';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -25,16 +25,16 @@ import {
   persistSaveData,
   resetSaveData,
   isChapter2Unlocked,
-} from './state/storage.js?v=35';
-import { sound } from './audio/sound.js?v=35';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=35';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=35';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=35';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=35';
-import { DialogueController } from './ui/dialogue.js?v=35';
-import { ModalManager } from './ui/modals.js?v=35';
-import { PrologueOverlay } from './ui/prologue.js?v=35';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=35';
+} from './state/storage.js?v=36';
+import { sound } from './audio/sound.js?v=36';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=36';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=36';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=36';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=36';
+import { DialogueController } from './ui/dialogue.js?v=36';
+import { ModalManager } from './ui/modals.js?v=36';
+import { PrologueOverlay } from './ui/prologue.js?v=36';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=36';
 
 class SiliconGenesisApp {
   constructor() {
@@ -145,12 +145,12 @@ class SiliconGenesisApp {
         else if (kind === 'error') sound.playTestStep(0, false);
         else sound.playSwitch(true);
       },
-      onInspectArk4: () => {
+      onInspectChip: (chipId) => {
         const inspectChips = { ...this.save.customChips };
-        if (!inspectChips.ARK4_SYS) {
+        if (!inspectChips[chipId]) {
           provisionStandardChips(inspectChips, { includeChapter2Hardware: true, provisioned: true });
         }
-        this.modals.openChipInspector('ARK4_SYS', inspectChips);
+        this.modals.openChipInspector(chipId, inspectChips);
       },
       onOpenSpec: () => {
         const isCleared = this.stage ? this.save.clearedStages.includes(this.stage.id) : false;
@@ -1479,7 +1479,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=35', { updateViaCache: 'none' })
+        .register('./sw.js?v=36', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

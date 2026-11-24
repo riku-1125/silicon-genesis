@@ -66,8 +66,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 27-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 21 (ARK4_SYS) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 27);
+test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 29);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -659,6 +659,58 @@ test('Full 27-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     assert.equal(res.metrics.nandCount, 479);
     registerChip(customChips, st, c);
   }
+
+  // Stage 22: ASM_ENC (4->2 Command Key Encoder: 4 OR = 12 NAND)
+  {
+    const st = getStageById('stage_asm_enc');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'oi0', type: 'OR' },
+        { id: 'oi1', type: 'OR' },
+        { id: 'ok1', type: 'OR' },
+        { id: 'ok2', type: 'OR' },
+      ],
+      [
+        [inp(1), np('oi0', 0)], [inp(3), np('oi0', 1)], [np('oi0', 0), out(0)],
+        [inp(2), np('oi1', 0)], [inp(3), np('oi1', 1)], [np('oi1', 0), out(1)],
+        [inp(0), np('ok1', 0)], [inp(1), np('ok1', 1)],
+        [np('ok1', 0), np('ok2', 0)], [np('oi1', 0), np('ok2', 1)], [np('ok2', 0), out(2)],
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 22 (ASM_ENC) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 12);
+    registerChip(customChips, st, c);
+  }
+
+  // Stage 23: ROM_4W (4-Address Hardwired Program ROM: DEC_2TO4 + 4 OR = 22 NAND)
+  {
+    const st = getStageById('stage_rom_4w');
+    const c = buildCircuit(
+      st,
+      [
+        { id: 'dec', type: 'DEC_2TO4' },
+        { id: 'oi0', type: 'OR' },
+        { id: 'oi1', type: 'OR' },
+        { id: 'om0', type: 'OR' },
+        { id: 'om2', type: 'OR' },
+      ],
+      [
+        [inp(0), np('dec', 0)], [inp(1), np('dec', 1)],
+        [np('dec', 1), np('oi0', 0)], [np('dec', 3), np('oi0', 1)], [np('oi0', 0), out(0)],
+        [np('dec', 2), np('oi1', 0)], [np('dec', 3), np('oi1', 1)], [np('oi1', 0), out(1)],
+        [np('dec', 0), np('om0', 0)], [np('dec', 1), np('om0', 1)], [np('om0', 0), out(2)],
+        [np('dec', 1), out(3)],
+        [np('dec', 0), np('om2', 0)], [np('dec', 2), np('om2', 1)], [np('om2', 0), out(4)],
+        [np('dec', 3), out(5)],
+      ]
+    );
+    const res = evaluateStage(st, c, customChips);
+    assert.equal(res.passed, true, `Stage 23 (ROM_4W) failed: ${JSON.stringify(res)}`);
+    assert.equal(res.metrics.nandCount, 22);
+    registerChip(customChips, st, c);
+  }
 });
 
 test('Detects unstable ring oscillator (NAND output looped directly to both inputs)', () => {
@@ -765,7 +817,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 26);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 28);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
@@ -1376,4 +1428,65 @@ test('v34 Chapter I & II Cinematic Endings: rich beats, dynamic hardware stats, 
       assert.equal(cToks.map((t) => t.text).join(''), c.replyText);
     }
   }
+});
+
+test('v36 Zero Physical Leaps: ASM_ENC & gate-level DEC2_4 ROM execute end-to-end, propagate faults, and preserve legacy Chapter 2 saves', () => {
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
+  assert.ok(customChips.ASM_ENC?.circuit, 'ASM_ENC blueprint must be provisioned');
+  assert.ok(customChips.ROM_4W?.circuit, 'ROM_4W blueprint must be provisioned');
+
+  const st24 = getStageById('stage_24');
+  const validSlots24 = {
+    line_0: 'ASM_LDI_3',
+    line_1: 'ASM_SUB_1',
+    line_2: 'ASM_JZ_4',
+    line_4: 'ASM_LDI_15',
+  };
+
+  // 1. Clean end-to-end execution through ASM_ENC -> gate-level ROM -> ARK4_SYS passes!
+  const cleanRes = evaluateRomStage(st24, validSlots24, customChips);
+  assert.equal(cleanRes.passed, true, `Full ASM_ENC->ROM->ARK4_SYS run failed: ${JSON.stringify(cleanRes)}`);
+
+  // 2. Break player's ASM_ENC (disconnect I1 output pin 1) -> SUB & JZ encode wrongly -> Stage 26 fails!
+  const brokenEncChips = { ...customChips };
+  const brokenEncCircuit = cloneCircuit(customChips.ASM_ENC.circuit);
+  brokenEncCircuit.wires = brokenEncCircuit.wires.filter((w) => !(w.to.kind === 'output' && w.to.pin === 1));
+  brokenEncChips.ASM_ENC = { ...customChips.ASM_ENC, circuit: brokenEncCircuit };
+
+  const resBrokenEnc = evaluateRomStage(st24, validSlots24, brokenEncChips);
+  assert.equal(resBrokenEnc.passed, false, 'Broken ASM_ENC.I1 must propagate into assembly execution and fail Stage 26');
+
+  // 3. Break player's ASM_ENC.KEY (disconnect pin 2) -> ROM VALID stays 0 -> CPU halts at 0 cycles!
+  const brokenKeyChips = { ...customChips };
+  const brokenKeyCircuit = cloneCircuit(customChips.ASM_ENC.circuit);
+  brokenKeyCircuit.wires = brokenKeyCircuit.wires.filter((w) => !(w.to.kind === 'output' && w.to.pin === 2));
+  brokenKeyChips.ASM_ENC = { ...customChips.ASM_ENC, circuit: brokenKeyCircuit };
+
+  const resBrokenKey = evaluateRomStage(st24, validSlots24, brokenKeyChips);
+  assert.equal(resBrokenKey.passed, false, 'Broken ASM_ENC.KEY must stop ROM output validation');
+  assert.equal(resBrokenKey.trace.length, 0, 'With KEY=0 on every row, gate-level ROM VALID=0 halts immediately');
+
+  // 4. Break player's DEC_2TO4 (disconnect Y1 output) -> gate-level ROM cannot read address 1 -> Stage 26 fails!
+  const brokenDecChips = { ...customChips };
+  const brokenDecCircuit = cloneCircuit(customChips.DEC_2TO4.circuit);
+  brokenDecCircuit.wires = brokenDecCircuit.wires.filter((w) => !(w.to.kind === 'output' && w.to.pin === 1));
+  brokenDecChips.DEC_2TO4 = { ...customChips.DEC_2TO4, circuit: brokenDecCircuit };
+
+  const resBrokenDec = evaluateRomStage(st24, validSlots24, brokenDecChips);
+  assert.equal(resBrokenDec.passed, false, 'Broken DEC_2TO4 must break gate-level ROM address decoding');
+
+  // 5. Progression & legacy save compatibility:
+  //    - Fresh save clearing stage_21 unlocks stage_asm_enc (STAGE 22), while stage_rom_4w stays locked until stage_asm_enc cleared
+  const post21Save = { clearedStages: ['stage_21'] };
+  assert.equal(isStageUnlocked(post21Save, 'stage_asm_enc'), true);
+  assert.equal(isStageUnlocked(post21Save, 'stage_rom_4w'), false);
+  assert.equal(isStageUnlocked(post21Save, 'stage_22'), false);
+
+  //    - Legacy save that already cleared stage_22 before v36 keeps stage_22/23/24 AND new stage_asm_enc/stage_rom_4w accessible!
+  const legacyCh2Save = { clearedStages: ['stage_17', 'stage_21', 'stage_22'] };
+  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_asm_enc'), true);
+  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_rom_4w'), true);
+  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_22'), true);
+  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_23'), true);
 });

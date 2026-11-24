@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=35';
+import { sound } from '../audio/sound.js?v=36';
 
 const W = 340;
 const H = 126;
@@ -179,6 +179,29 @@ const GOAL_SPECS = {
       { ins: [['命令 11:JZ', 1], ['IMM = 10', 1], ['CLK ↑', 1]], outs: [['ACC = 0 (保持)', 0], ['PC → 10! (飛躍)', 1]], msg: '③ JZ 10 ▶ ACC=0 を見抜いて PC が 10番地へ自動ジャンプ！' },
     ],
   },
+  goal_asm_enc: {
+    boxTitle: '？ 命令エンコーダ',
+    boxSub: '4ボタン → 2bit+KEY',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['無入力 (0000)', 0]], outs: [['I = 00', 0], ['KEY = 0', 0]], msg: '① 何も押していないとき ▶ I=00、入力検知 KEY=0（待機）' },
+      { ins: [['LDI 押下', 1]], outs: [['I = 00', 0], ['KEY = 1', 1]], msg: '② LDI キー押下 ▶ 機械語 00 と KEY=1 を出力（無入力と区別!）' },
+      { ins: [['ADD 押下', 1]], outs: [['I = 01 (I0=1)', 1], ['KEY = 1', 1]], msg: '③ ADD キー押下 ▶ 機械語 01（I1=0, I0=1）＋ KEY=1 を出力！' },
+      { ins: [['SUB 押下', 1]], outs: [['I = 10 (I1=1)', 1], ['KEY = 1', 1]], msg: '④ SUB キー押下 ▶ 機械語 10（I1=1, I0=0）＋ KEY=1 を出力！' },
+      { ins: [['JZ 押下', 1]], outs: [['I = 11 (両方1)', 1], ['KEY = 1', 1]], msg: '⑤ JZ キー押下 ▶ 機械語 11（I1=1, I0=1）＋ KEY=1 を出力！' },
+    ],
+  },
+  goal_rom_4w: {
+    boxTitle: '？ 4番地配線ROM',
+    boxSub: '番地A → 6bit命令',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['番地 A = 00 (0番)', 0]], outs: [['I = 00 (LDI)', 0], ['IMM = 0101 (5)', 1]], msg: '① 0番地 ▶ LDI 5（機械語 00:0101）が自動で出力される！' },
+      { ins: [['番地 A = 01 (1番)', 1]], outs: [['I = 01 (ADD)', 1], ['IMM = 0011 (3)', 1]], msg: '② 1番地 ▶ ADD 3（機械語 01:0011）が自動で出力される！' },
+      { ins: [['番地 A = 10 (2番)', 1]], outs: [['I = 10 (SUB)', 1], ['IMM = 0100 (4)', 1]], msg: '③ 2番地 ▶ SUB 4（機械語 10:0100）が自動で出力される！' },
+      { ins: [['番地 A = 11 (3番)', 1]], outs: [['I = 11 (JZ)', 1], ['IMM = 1000 (8)', 1]], msg: '④ 3番地 ▶ JZ 8（機械語 11:1000）が自動で出力される！' },
+    ],
+  },
 };
 
 export class StoryDiagramPlayer {
@@ -346,6 +369,12 @@ export class StoryDiagramPlayer {
         break;
       case 'ark4_von_neumann':
         this._drawArk4VonNeumann(ctx);
+        break;
+      case 'asm_enc':
+        this._drawAsmEnc(ctx);
+        break;
+      case 'rom_4w':
+        this._drawRom4W(ctx);
         break;
       case 'asm_program_flow':
         this._drawAsmProgramFlow(ctx);
@@ -1483,7 +1512,63 @@ export class StoryDiagramPlayer {
     this._caption(ctx, p.msg, this.stepIdx, 3, '#6fcf97');
   }
 
-  // 22..24: ASSEMBLY PROGRAM FLOW ON ARK4_SYS
+  // 22: ASM_ENC (4-to-2 Command Key Encoder)
+  _drawAsmEnc(ctx) {
+    const phases = [
+      { k: 0, name: 'LDI', i1: 0, i0: 0, msg: '① LDI 押下 ▶ I1=0, I0=0 (00) ＋ KEY=1 を物理生成！' },
+      { k: 1, name: 'ADD', i1: 0, i0: 1, msg: '② ADD 押下 ▶ I0=ADD OR JZ が光り 01 ＋ KEY=1 を生成！' },
+      { k: 2, name: 'SUB', i1: 1, i0: 0, msg: '③ SUB 押下 ▶ I1=SUB OR JZ が光り 10 ＋ KEY=1 を生成！' },
+      { k: 3, name: 'JZ',  i1: 1, i0: 1, msg: '④ JZ 押下  ▶ I1・I0 の両ORが光り 11 ＋ KEY=1 を生成！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+    const keys = ['LDI', 'ADD', 'SUB', 'JZ'];
+    keys.forEach((lbl, idx) => {
+      const on = p.k === idx;
+      this._pill(ctx, 10, 10 + idx * 21, 56, 17, lbl, on, '#ffd166');
+      this._wire(ctx, [[66, 18 + idx * 21], [118, 18 + idx * 21]], on, '#ffd166');
+    });
+
+    this._chip(ctx, 118, 12, 96, 76, 'ASM_ENC', 'OR×4 (4→2符号化)', '#ffd166', true);
+
+    this._wire(ctx, [[214, 26], [250, 26]], p.i1 === 1, '#56ccf2');
+    this._wire(ctx, [[214, 50], [250, 50]], p.i0 === 1, '#56ccf2');
+    this._wire(ctx, [[214, 74], [250, 74]], true, '#52e3b6');
+
+    this._pill(ctx, 250, 16, 80, 20, `I1 = ${p.i1}`, p.i1 === 1, '#56ccf2');
+    this._pill(ctx, 250, 40, 80, 20, `I0 = ${p.i0}`, p.i0 === 1, '#56ccf2');
+    this._pill(ctx, 250, 64, 80, 20, 'KEY = 1', true, '#52e3b6');
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, '#ffd166');
+  }
+
+  // 23: ROM_4W (4-Address Hardwired Program ROM: DEC2_4 + OR matrix)
+  _drawRom4W(ctx) {
+    const phases = [
+      { addr: 0, a: '00', cmd: 'LDI 5', bits: '00:0101', msg: '① PC=0番地 ▶ DEC2_4 の Y0 が点灯 → OR網から LDI 5 (00:0101)！' },
+      { addr: 1, a: '01', cmd: 'ADD 3', bits: '01:0011', msg: '② PC=1番地 ▶ DEC2_4 の Y1 が点灯 → OR網から ADD 3 (01:0011)！' },
+      { addr: 2, a: '10', cmd: 'SUB 4', bits: '10:0100', msg: '③ PC=2番地 ▶ DEC2_4 の Y2 が点灯 → OR網から SUB 4 (10:0100)！' },
+      { addr: 3, a: '11', cmd: 'JZ  8', bits: '11:1000', msg: '④ PC=3番地 ▶ DEC2_4 の Y3 が点灯 → OR網から JZ 8 (11:1000)！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    this._pill(ctx, 8, 34, 62, 28, `番地 ${p.addr}\n(${p.a})`, true, '#ffd166');
+    this._wire(ctx, [[70, 48], [94, 48]], true, '#ffd166');
+    this._chip(ctx, 94, 18, 66, 60, 'DEC2_4', `Y${p.addr}=1`, '#56ccf2', true);
+
+    for (let i = 0; i < 4; i++) {
+      const active = p.addr === i;
+      const y = 26 + i * 14;
+      this._wire(ctx, [[160, y], [188, y]], active, '#52e3b6');
+    }
+
+    this._chip(ctx, 188, 18, 66, 60, 'OR配線網', '6bit読出', '#52e3b6', true);
+    this._wire(ctx, [[254, 48], [272, 48]], true, '#6fcf97');
+    this._pill(ctx, 272, 28, 62, 40, `${p.cmd}\n${p.bits}`, true, '#6fcf97');
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, '#52e3b6');
+  }
+
+  // 24..26: ASSEMBLY PROGRAM FLOW ON ARK4_SYS
   _drawAsmProgramFlow(ctx) {
     const phases = [
       { row: 0, line: '0番: LDI 2', bits: '00:0010', acc: 2, z: 0, msg: '① 0番地 [LDI 2] ▶ 機械語 00:0010 → ACC に 2 をセット！' },

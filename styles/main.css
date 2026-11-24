@@ -4066,11 +4066,34 @@ button:disabled {
 }
 
 /* ============================================================================
-   ARK-4 REAL ASSEMBLY IDE & PHYSICAL 6-PIN HARDWARE BRIDGE (v33 — STAGES 22–24)
+   ARK-4 REAL ASSEMBLY IDE & PHYSICAL 6-PIN HARDWARE BRIDGE (v33/v36 — STAGES 24–26)
    ============================================================================ */
+#app.mode-assembly .workbench-section {
+  display: flex;
+  flex-direction: column;
+}
+#app.mode-assembly .wb-tools-tr {
+  position: static;
+  order: -1;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px;
+  background: #0a1017;
+  z-index: 4;
+}
+#app.mode-assembly .wb-tools-tr .next-stage-quick-btn {
+  margin-top: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
 .assembly-ide {
   position: relative;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -4111,7 +4134,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .asm-hw-title-wrap {
@@ -4119,7 +4142,7 @@ button:disabled {
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .asm-hw-title {
@@ -4142,9 +4165,10 @@ button:disabled {
 }
 
 .asm-inspect-btn {
-  padding: 2px 7px;
+  padding: 2px 5px;
   border-radius: 5px;
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   font-weight: 800;
   color: #d6f4ff;
   background: rgba(34, 62, 86, 0.85);
@@ -4971,6 +4995,21 @@ button:disabled {
   background: #1c3a50;
   border: 1px solid #56ccf2;
   white-space: nowrap;
+}
+
+/* Compact header buttons on narrow phones (<= 440px) so ENC/ROM/CPU + 1拍実行 fit comfortably */
+@media (max-width: 440px) {
+  .asm-hw-title {
+    font-size: 11px;
+  }
+  .asm-inspect-btn {
+    padding: 2px 4px;
+    font-size: 9px;
+  }
+  .asm-step-btn {
+    padding: 0 7px;
+    font-size: 10.5px;
+  }
 }
 
 /* Narrow phone polish (< 375px): keep comment crisp without crowding bits */

@@ -23,7 +23,7 @@ import {
   evaluateRomStage,
   formatProgramText,
   assembleProgramText,
-} from '../engine/romRunner.js?v=35';
+} from '../engine/romRunner.js?v=36';
 
 const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JZ'];
 
@@ -483,13 +483,14 @@ export class AssemblyIdePanel {
 
     this.container.innerHTML = `
       <div class="asm-ide-grid">
-        <!-- LEFT / TOP: PHYSICAL ARK4_SYS HARDWARE WIRE BRIDGE -->
+        <!-- LEFT / TOP: PHYSICAL ASM_ENC -> ROM -> ARK4_SYS HARDWARE WIRE BRIDGE -->
         <section class="asm-hw-panel ${this.awaitingFinalClock ? 'awaiting-open' : ''}">
           <div class="asm-hw-head">
             <div class="asm-hw-title-wrap">
-              <span class="asm-hw-title">⚡ 実機 ARK4_SYS</span>
-              ${nandCount > 0 ? `<span class="asm-nand-tag">${nandCount}N</span>` : ''}
-              <button type="button" class="asm-inspect-btn" id="btn-asm-inspect">🔍 回路</button>
+              <span class="asm-hw-title">⚡ 実機</span>
+              <button type="button" class="asm-inspect-btn" data-inspect-chip="ASM_ENC" title="自作 命令キーエンコーダ (ASM_ENC) の内部回路を見る">🔍ENC</button>
+              <button type="button" class="asm-inspect-btn" data-inspect-chip="ROM_4W" title="自作 配線ROM (ROM_4W) の内部回路を見る">🔍ROM</button>
+              <button type="button" class="asm-inspect-btn" id="btn-asm-inspect" data-inspect-chip="ARK4_SYS" title="自作 ノイマン型計算機 (ARK4_SYS) の内部回路を見る">🔍CPU${nandCount > 0 ? `(${nandCount}N)` : ''}</button>
             </div>
             <div class="asm-hw-controls">
               <button type="button" class="asm-mini-ctrl" id="btn-asm-reset" title="電源リセット (PC=0, ACC=0)">↺</button>
@@ -499,12 +500,12 @@ export class AssemblyIdePanel {
             </div>
           </div>
 
-          <!-- PHYSICAL BRIDGE: TEXT -> 6 ELECTRIC SWITCH PINS -->
+          <!-- PHYSICAL BRIDGE: KEY -> ASM_ENC -> ROM -> 6 ELECTRIC SWITCH PINS -->
           <div class="asm-bus-bridge">
             <div class="asm-bus-source">
               <span class="asm-bus-mode">${escapeHtml(modeLabel)}</span>
               <span class="asm-bus-inst" style="background:${opBadgeColor}">${activeAddr}番: ${escapeHtml(opNameDisp)}</span>
-              <span class="asm-bus-arrow">▶ 6本電線へ</span>
+              <span class="asm-bus-arrow">▶ ENC→ROM→6本電線</span>
             </div>
             <div class="asm-bus-pins-row">
               <div class="asm-pin-group">
@@ -595,9 +596,13 @@ export class AssemblyIdePanel {
       this.cb.onSound?.('switch');
       this.clearAll();
     });
-    this.container.querySelector('#btn-asm-inspect')?.addEventListener('click', () => {
-      this.cb.onSound?.('switch');
-      this.cb.onInspectArk4?.();
+    this.container.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const chipId = btn.dataset.inspectChip || 'ARK4_SYS';
+        this.cb.onSound?.('switch');
+        if (this.cb.onInspectChip) this.cb.onInspectChip(chipId);
+        else this.cb.onInspectArk4?.();
+      });
     });
 
     this.container.querySelectorAll('[data-editor-mode]').forEach((btn) => {

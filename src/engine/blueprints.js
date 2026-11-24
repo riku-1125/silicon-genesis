@@ -370,6 +370,38 @@ export const STANDARD_BLUEPRINTS = {
       [np('cpc', 0), out(4)], [np('cpc', 1), out(5)], [np('cpc', 2), out(6)], [np('cpc', 3), out(7)],
     ],
   },
+  stage_asm_enc: {
+    nodes: [
+      { id: 'oi0', type: 'OR' },
+      { id: 'oi1', type: 'OR' },
+      { id: 'ok1', type: 'OR' },
+      { id: 'ok2', type: 'OR' },
+    ],
+    wires: [
+      [inp(1), np('oi0', 0)], [inp(3), np('oi0', 1)], [np('oi0', 0), out(0)],
+      [inp(2), np('oi1', 0)], [inp(3), np('oi1', 1)], [np('oi1', 0), out(1)],
+      [inp(0), np('ok1', 0)], [inp(1), np('ok1', 1)],
+      [np('ok1', 0), np('ok2', 0)], [np('oi1', 0), np('ok2', 1)], [np('ok2', 0), out(2)],
+    ],
+  },
+  stage_rom_4w: {
+    nodes: [
+      { id: 'dec', type: 'DEC_2TO4' },
+      { id: 'oi0', type: 'OR' },
+      { id: 'oi1', type: 'OR' },
+      { id: 'om0', type: 'OR' },
+      { id: 'om2', type: 'OR' },
+    ],
+    wires: [
+      [inp(0), np('dec', 0)], [inp(1), np('dec', 1)],
+      [np('dec', 1), np('oi0', 0)], [np('dec', 3), np('oi0', 1)], [np('oi0', 0), out(0)],
+      [np('dec', 2), np('oi1', 0)], [np('dec', 3), np('oi1', 1)], [np('oi1', 0), out(1)],
+      [np('dec', 0), np('om0', 0)], [np('dec', 1), np('om0', 1)], [np('om0', 0), out(2)],
+      [np('dec', 1), out(3)],
+      [np('dec', 0), np('om2', 0)], [np('dec', 2), np('om2', 1)], [np('om2', 0), out(4)],
+      [np('dec', 3), out(5)],
+    ],
+  },
 };
 
 export function buildBlueprintCircuit(stageIdOrStage) {
