@@ -324,12 +324,14 @@ export const STANDARD_BLUEPRINTS = {
   stage_19: {
     nodes: [
       { id: 'z4', type: 'ZERO_4BIT' },
+      { id: 'nz', type: 'NOT' },
       { id: 'and', type: 'AND' },
       { id: 'pc', type: 'PC_4BIT' },
     ],
     wires: [
       [inp(0), np('z4', 0)], [inp(1), np('z4', 1)], [inp(2), np('z4', 2)], [inp(3), np('z4', 3)],
-      [np('z4', 0), np('and', 0)], [inp(8), np('and', 1)],
+      [np('z4', 0), np('nz', 0)],
+      [np('nz', 0), np('and', 0)], [inp(8), np('and', 1)],
       [inp(4), np('pc', 0)], [inp(5), np('pc', 1)], [inp(6), np('pc', 2)], [inp(7), np('pc', 3)],
       [np('and', 0), np('pc', 4)],
       [inp(9), np('pc', 5)],
@@ -371,6 +373,8 @@ export const STANDARD_BLUEPRINTS = {
     ],
   },
   stage_asm_enc: {
+    inputs: ['LDI', 'ADD', 'SUB', 'JNZ'],
+    outputs: ['I0', 'I1', 'KEY'],
     nodes: [
       { id: 'oi0', type: 'OR' },
       { id: 'oi1', type: 'OR' },
@@ -409,7 +413,9 @@ export function buildBlueprintCircuit(stageIdOrStage) {
   const bp = STANDARD_BLUEPRINTS[stage?.id];
   if (!stage || !bp) return null;
 
-  let c = createEmptyCircuit(stage.inputs, stage.outputs);
+  const inputs = bp.inputs ? [...bp.inputs] : [...stage.inputs];
+  const outputs = bp.outputs ? [...bp.outputs] : [...stage.outputs];
+  let c = createEmptyCircuit(inputs, outputs);
   c.nodes = bp.nodes.map((n, idx) => ({
     id: n.id,
     type: n.type,
@@ -432,10 +438,12 @@ export function buildStandardChipDef(stageIdOrStage, customChips, { provisioned 
   const metrics = computeCircuitMetrics(circuit, customChips);
   return {
     ...reward,
-    inputs: reward.inputs ? [...reward.inputs] : [...stage.inputs],
-    outputs: reward.outputs ? [...reward.outputs] : [...stage.outputs],
+    inputs: reward.inputs ? [...reward.inputs] : [...circuit.inputs],
+    outputs: reward.outputs ? [...reward.outputs] : [...circuit.outputs],
     circuit,
     nandCount: metrics.nandCount,
+    swCount: metrics.swCount,
+    pullCount: metrics.pullCount,
     depth: metrics.depth,
     stageId: stage.id,
     provisioned,
@@ -445,12 +453,21 @@ export function buildStandardChipDef(stageIdOrStage, customChips, { provisioned 
 
 /**
  * Provisions any missing standard chips into `customChips` without overwriting
- * any chips the player has already forged.
+ * any chips the player has already forged. Always ensures Stage 00-C (`NAND`)
+ * is provisioned first so all compiled hardware runs on true MOSFET+Resistor silicon.
  */
 export function provisionStandardChips(
   customChips,
   { includeChapter2Hardware = false, provisioned = true } = {}
 ) {
+  if (!customChips.NAND) {
+    const st0 = getStageById('stage_00');
+    if (st0) {
+      const def = buildStandardChipDef(st0, customChips, { provisioned });
+      if (def) customChips.NAND = def;
+    }
+  }
+
   const targetStages = STAGES.filter((s) =>
     includeChapter2Hardware ? s.mode !== 'physics' : s.chapter !== 2 && s.mode !== 'physics'
   );

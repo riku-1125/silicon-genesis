@@ -1,18 +1,19 @@
 /**
- * SILICON GENESIS — Hardware-Backed ROM Assembly Runner & Spec Evaluator
+ * SILICON GENESIS — Pure Physical-Silicon ROM Assembly Runner & Spec Evaluator
  *
- * Compiles the player's actual forged `ARK4_SYS` circuit (and all of its
- * dependent custom chips in `save.customChips` down to primitive NAND gates!)
- * and executes Stage 22–24 ROM assembly programs directly through the gate-level
- * circuit simulator.
+ * Compiles the player's actual unmodified 7-pin `ARK4_SYS` circuit (and every
+ * lower-level custom chip down to Stage 00-C's `SW` MOSFETs and `PULL` resistors!),
+ * along with their `ASM_ENC` (Stage 22) and `DEC_2TO4`/`AND`/`OR` gate-level Mask
+ * ROM matrix (Stage 23), and executes Stages 24–26 assembly programs directly
+ * through physical gate-level simulation.
  *
- * Zero arithmetic or PC updates are performed in JavaScript: on every cycle,
- * `[I0, I1, IMM0, IMM1, IMM2, IMM3, CLK, RET]` are fed into the compiled
- * circuit, clocked `0 -> 1 -> 0`, and `[ACC0..3, PC0..3]` are read directly
- * from the circuit outputs.
+ * Zero hidden external hardware, zero arithmetic or PC updates in JavaScript:
+ * on every clock cycle, `[I0, I1, IMM0, IMM1, IMM2, IMM3, CLK]` are fed straight
+ * into the unmodified 7-pin `ARK4_SYS` netlist, clocked `0 -> 1 -> 0`, and
+ * `[ACC0..3, PC0..3]` are read directly from the simulated outputs.
  */
 
-import { cloneCircuit, createEmptyCircuit, connectWire, computeCircuitMetrics } from './circuit.js';
+import { createEmptyCircuit, connectWire, computeCircuitMetrics } from './circuit.js';
 import { compileCircuit } from './simulator.js';
 import { provisionStandardChips } from './blueprints.js';
 
@@ -33,80 +34,15 @@ export function numToBits(num, len = 4) {
 }
 
 /**
- * Wraps the player's `ARK4_SYS` circuit with the B1 Hatch Console's external
- * return pull-down line `RET` (input pin 7).
- *
- * How the fixed external return circuit (`3番地: LOOP 1`) works in hardware:
- * - At `3番地`, the ROM board outputs machine code `11:0001` (`JZ 1`: `I0=1, I1=1, IMM=0001`)
- *   and asserts the board-level return pull-down line `RET = 1`.
- * - When `RET = 0` (all normal instructions `LDI`, `ADD`, `SUB`, `JZ`), `NOT(RET) = 1`,
- *   so the 4-bit AND mask passes `ACC0..3` straight into `COND_PC.V0..3` unchanged.
- * - When `RET = 1` (`LOOP 1`), `NOT(RET) = 0`, so the 4-bit AND mask pulls `COND_PC.V0..3`
- *   to `0000` (ground) while `INST_DEC` decodes `11` (`WE=0, BR=1`).
- *   Consequently:
- *     1) `ARK4_CPU` receives `WE=0` and holds `ACC` in its `REG_4B` without modifying it.
- *     2) `COND_PC` receives `V=0000` and `BR=1`, so the player's `ZERO_4B` outputs `Z=1`,
- *        `AND(Z, BR)` outputs `JMP=1`, and `PC_4B` latches `J=0001` (`1番地`) on `CLK↑`!
- */
-export function buildRomBoardCircuit(ark4SysCircuit) {
-  const c = cloneCircuit(ark4SysCircuit);
-  const retPinIdx = c.inputs.length; // index 7 ('RET')
-  c.inputs.push('RET');
-
-  // Locate wires feeding V0..3 of COND_PC (or A0..3 of ZERO_4BIT if COND_PC was inlined)
-  const condPcNodes = new Set(c.nodes.filter((n) => n.type === 'COND_PC').map((n) => n.id));
-  const zeroNodes = new Set(c.nodes.filter((n) => n.type === 'ZERO_4BIT').map((n) => n.id));
-  const targetNodeIds = condPcNodes.size > 0 ? condPcNodes : zeroNodes;
-
-  if (targetNodeIds.size > 0) {
-    const notNodeId = '__rom_ret_not';
-    c.nodes.push({ id: notNodeId, type: 'NOT', x: 40, y: 40 });
-    c.wires.push({
-      id: '__rom_w_ret_not',
-      from: { kind: 'input', pin: retPinIdx },
-      to: { kind: 'node', nodeId: notNodeId, pin: 0 },
-    });
-
-    let maskIdx = 0;
-    for (const w of c.wires) {
-      if (
-        w.to.kind === 'node' &&
-        targetNodeIds.has(w.to.nodeId) &&
-        w.to.pin >= 0 &&
-        w.to.pin <= 3
-      ) {
-        const andNodeId = `__rom_vmask_${maskIdx++}`;
-        c.nodes.push({ id: andNodeId, type: 'AND', x: 80, y: 40 + maskIdx * 20 });
-        const origFrom = { ...w.from };
-        // Redirect existing wire to come from the AND mask output
-        w.from = { kind: 'node', nodeId: andNodeId, pin: 0 };
-        // Wire original source -> AND.A (pin 0), and NOT(RET) -> AND.B (pin 1)
-        c.wires.push({
-          id: `__rom_w_va_${maskIdx}`,
-          from: origFrom,
-          to: { kind: 'node', nodeId: andNodeId, pin: 0 },
-        });
-        c.wires.push({
-          id: `__rom_w_vb_${maskIdx}`,
-          from: { kind: 'node', nodeId: notNodeId, pin: 0 },
-          to: { kind: 'node', nodeId: andNodeId, pin: 1 },
-        });
-      }
-    }
-  }
-
-  return c;
-}
-
-/**
- * Compiles the player's `ARK4_SYS`, `ASM_ENC` (Stage 22), and all dependent
- * custom chips (`DEC_2TO4`, `OR`, `AND`, `INST_DEC`, `ZERO_4BIT`, etc.) into
- * live gate-level simulator instances.
+ * Compiles the player's unmodified 7-pin `ARK4_SYS`, `ASM_ENC` (Stage 22),
+ * `INST_DEC`, `ZERO_4BIT`, and all dependent custom chips down to Stage 00-C
+ * physical MOSFET (`SW`) + pull-up resistor (`PULL`) primitives.
  */
 export function compileRomHardware(customChips = {}) {
-  // Clone chip map and provision any missing dependencies without touching player chips
+  // Clone chip map and provision any missing dependencies without overwriting player chips
   const workingChips = { ...customChips };
   if (
+    !workingChips.NAND ||
     !workingChips.ARK4_SYS ||
     !workingChips.ASM_ENC ||
     !workingChips.DEC_2TO4 ||
@@ -121,8 +57,7 @@ export function compileRomHardware(customChips = {}) {
     throw new Error('ARK4_SYS 回路が見つかりません（STAGE 21 を先にクリアしてください）');
   }
 
-  const boardCircuit = buildRomBoardCircuit(ark4SysDef.circuit);
-  const sim = compileCircuit(boardCircuit, workingChips);
+  const sim = compileCircuit(ark4SysDef.circuit, workingChips);
   const metrics = computeCircuitMetrics(ark4SysDef.circuit, workingChips);
 
   let asmEncSim = null;
@@ -163,6 +98,13 @@ export function compileRomHardware(customChips = {}) {
     }
   }
 
+  const siliconStats = {
+    nandCount: metrics.nandCount,
+    swCount: sim.swCount,
+    pullCount: sim.pullCount,
+    isPhysicalSilicon: sim.isPhysicalSilicon,
+  };
+
   return {
     sim,
     asmEncSim,
@@ -172,27 +114,36 @@ export function compileRomHardware(customChips = {}) {
     asmEncNandCount,
     rom4wNandCount,
     workingChips,
+    siliconStats,
   };
 }
 
 /**
- * Performs a 2-cycle Hardware Power-On Reset (POR) through the compiled
- * `ARK4_SYS` circuit so `ACC = 0 (0000)` and `PC = 0 (0000)` before Cycle 0:
- *   1. `LDI 0` (`I=00, IMM=0000, RET=0`) clocked `0 -> 1 -> 0` to load `ACC = 0`
- *   2. `JZ 0`  (`I=11, IMM=0000, RET=0`) clocked `0 -> 1 -> 0` to jump `PC = 0`
+ * Pure 3-cycle Hardware Power-On Reset (POR) through the unmodified 7-pin
+ * `ARK4_SYS` circuit using 4-bit adder wrap-around (`15 + 1 = 0`):
+ *   1. `LDI 1`  (`[0,0, 1,0,0,0, clk]`) -> `ACC = 1` (`Z = 0`)
+ *   2. `JNZ 15` (`[1,1, 1,1,1,1, clk]`) -> `PC = 15` (`Z = 0` triggers branch!)
+ *   3. `LDI 0`  (`[0,0, 0,0,0,0, clk]`) -> `ACC = 0` AND `PC_4BIT` wraps `15 + 1 = 0`!
+ * Leaves the hardware cleanly initialized at `ACC = 0 (0000), PC = 0 (0000)`.
  */
 export function resetRomHardware(hw) {
   hw.sim.reset();
+  let unstable = false;
 
-  // POR Pulse 1: LDI 0 (I0=0, I1=0, IMM=0000, RET=0)
-  hw.sim.evaluate([0, 0, 0, 0, 0, 0, 0, 0]);
-  hw.sim.evaluate([0, 0, 0, 0, 0, 0, 1, 0]);
-  hw.sim.evaluate([0, 0, 0, 0, 0, 0, 0, 0]);
+  const pulse = (i0, i1, imm0, imm1, imm2, imm3) => {
+    const r0 = hw.sim.evaluate([i0, i1, imm0, imm1, imm2, imm3, 0]);
+    const r1 = hw.sim.evaluate([i0, i1, imm0, imm1, imm2, imm3, 1]);
+    const r2 = hw.sim.evaluate([i0, i1, imm0, imm1, imm2, imm3, 0]);
+    if (r0.unstable || r1.unstable || r2.unstable) unstable = true;
+    return r2;
+  };
 
-  // POR Pulse 2: JZ 0 (I0=1, I1=1, IMM=0000, RET=0)
-  hw.sim.evaluate([1, 1, 0, 0, 0, 0, 0, 0]);
-  hw.sim.evaluate([1, 1, 0, 0, 0, 0, 1, 0]);
-  const res = hw.sim.evaluate([1, 1, 0, 0, 0, 0, 0, 0]);
+  // POR Cycle 1: LDI 1 -> ACC=1 (Z=0)
+  pulse(0, 0, 1, 0, 0, 0);
+  // POR Cycle 2: JNZ 15 -> PC=15 (branch fires since ACC=1 != 0)
+  pulse(1, 1, 1, 1, 1, 1);
+  // POR Cycle 3: LDI 0 -> ACC=0 and 4-bit PC wraps 15 + 1 = 0
+  const res = pulse(0, 0, 0, 0, 0, 0);
 
   const outs = res.outputs;
   const acc = bitsToNum(outs, 0, 4);
@@ -208,7 +159,7 @@ export function resetRomHardware(hw) {
     acc,
     pc,
     z,
-    unstable: Boolean(res.unstable),
+    unstable,
   };
 }
 
@@ -246,27 +197,16 @@ export const ARK4_OPCODES = {
     accent: '#ff8a7a',
     wireHint: 'OP=1, WE=1（今のACCから数値を引いて保存）',
   },
-  JZ: {
-    op: 'JZ',
+  JNZ: {
+    op: 'JNZ',
     bits: '11',
     i1: 1,
     i0: 1,
-    shortJa: '0なら飛ぶ',
-    english: 'Jump if Zero',
+    shortJa: '≠0で飛ぶ',
+    english: 'Jump if Not Zero',
     color: '#6e459c',
     accent: '#c89bff',
-    wireHint: 'WE=0, BR=1（ACC=0なら指定番地へジャンプ）',
-  },
-  LOOP: {
-    op: 'LOOP',
-    bits: '11',
-    i1: 1,
-    i0: 1,
-    shortJa: '強制帰還',
-    english: 'Hardware Return Loop',
-    color: '#28527a',
-    accent: '#56ccf2',
-    wireHint: 'RET=1でZERO_4B入力を0接地し指定番地へ戻る',
+    wireHint: 'WE=0, BR=1（ACC≠0なら指定番地へジャンプ）',
   },
 };
 
@@ -293,14 +233,10 @@ export function makeInstructionPart(opRaw, valRaw) {
     meta = `引く (−${val})`;
     comment = `ACC ← ACC − ${val}`;
     rule = `今の ACC から ${val} を引いて保存`;
-  } else if (op === 'JZ') {
-    meta = `0なら${val}番へ`;
-    comment = `Z=1なら ${val}番地へ`;
-    rule = `ACC==0 (Z=1) なら ${val}番地へジャンプ`;
-  } else if (op === 'LOOP') {
-    meta = `${val}番地へ強制帰還 (RET=1)`;
-    comment = `RET=1 → ${val}番地へ`;
-    rule = `外部帰還RET=1でCOND_PCのV入力を0000に接地し${val}番地へ強制帰還`;
+  } else if (op === 'JNZ') {
+    meta = `≠0なら${val}番へ`;
+    comment = `Z=0なら ${val}番地へ`;
+    rule = `ACC≠0 (Z=0) なら ${val}番地へジャンプ`;
   }
 
   return {
@@ -328,9 +264,9 @@ function parseNumericLiteral(token) {
 
 /**
  * Parses a single line of ARK-4 assembly text, e.g.:
- *   "LDI 5", "1: SUB 1 ; decrement", "JZ 0b0100", "LDI 0xF"
+ *   "LDI 5", "1: SUB 1 ; decrement", "JNZ 0b0001", "LDI 0xF"
  */
-export function parseAssemblyLine(rawLine, { allowLoop = false } = {}) {
+export function parseAssemblyLine(rawLine) {
   const withoutComment = String(rawLine ?? '')
     .replace(/;.*$/, '')
     .replace(/\/\/.*$/, '')
@@ -350,11 +286,11 @@ export function parseAssemblyLine(rawLine, { allowLoop = false } = {}) {
 
   const tokens = body.split(/[\s,]+/).filter(Boolean);
   const op = tokens[0].toUpperCase();
-  const allowed = allowLoop ? ['LDI', 'ADD', 'SUB', 'JZ', 'LOOP'] : ['LDI', 'ADD', 'SUB', 'JZ'];
+  const allowed = ['LDI', 'ADD', 'SUB', 'JNZ'];
   if (!allowed.includes(op)) {
     return {
       ok: false,
-      error: `不明な命令「${tokens[0]}」（使える命令: LDI / ADD / SUB / JZ）`,
+      error: `不明な命令「${tokens[0]}」（使える命令: LDI / ADD / SUB / JNZ）`,
     };
   }
   if (tokens.length < 2) {
@@ -388,7 +324,7 @@ export function parseAssemblyLine(rawLine, { allowLoop = false } = {}) {
 }
 
 /**
- * Resolves any slot value format (legacy 'ASM_LDI_5', '{ op, val }', or text 'LDI 5')
+ * Resolves any slot value format ('ASM_LDI_5', '{ op, val }', or text 'LDI 5')
  * into a canonical instruction part object.
  */
 export function resolveSlotInstruction(slotVal, stage = null) {
@@ -402,23 +338,23 @@ export function resolveSlotInstruction(slotVal, stage = null) {
     const trimmed = slotVal.trim();
     if (!trimmed) return null;
 
-    // 1. Legacy pre-defined stage card ID (e.g. 'ASM_LDI_5')
+    // 1. Pre-defined stage card ID (e.g. 'ASM_LDI_5')
     if (stage?.physicsParts) {
       const legacy = stage.physicsParts.find((p) => p.id === trimmed);
-      if (legacy) {
+      if (legacy && ARK4_OPCODES[String(legacy.op || '').toUpperCase()]) {
         const canonical = makeInstructionPart(legacy.op, legacy.val);
-        return canonical ? { ...canonical, ...legacy, comment: canonical.comment } : legacy;
+        return canonical ? { ...canonical, ...legacy, comment: canonical.comment } : null;
       }
     }
 
     // 2. Canonical ID 'ASM_OP_VAL'
-    const idMatch = trimmed.match(/^ASM_(LDI|ADD|SUB|JZ|LOOP)_(\d+)$/i);
+    const idMatch = trimmed.match(/^ASM_(LDI|ADD|SUB|JNZ)_(\d+)$/i);
     if (idMatch) {
       return makeInstructionPart(idMatch[1], Number(idMatch[2]));
     }
 
     // 3. Raw assembly syntax 'LDI 5'
-    const parsed = parseAssemblyLine(trimmed, { allowLoop: true });
+    const parsed = parseAssemblyLine(trimmed);
     if (parsed.ok && parsed.part) {
       return parsed.part;
     }
@@ -461,7 +397,7 @@ export function assembleProgramText(sourceText, stage) {
     if (!r.locked) nextSlots[r.slotId] = null;
   }
 
-  // Map lines to ROM addresses (supports explicit "2: JZ 4" or positional line index)
+  // Map lines to ROM addresses (supports explicit "2: JNZ 1" or positional line index)
   const usedAddrs = new Set();
   rawLines.forEach((rawLine, lineIdx) => {
     const stripped = rawLine.replace(/;.*$/, '').replace(/\/\/.*$/, '').trim();
@@ -486,11 +422,11 @@ export function assembleProgramText(sourceText, stage) {
 
     if (row.locked) {
       // Allow the locked instruction line to remain untouched in text mode
-      const parsedLocked = parseAssemblyLine(rawLine, { allowLoop: true });
+      const parsedLocked = parseAssemblyLine(rawLine);
       if (
-        parsedLocked.ok &&
-        parsedLocked.part &&
-        (parsedLocked.part.op !== row.fixedPart.op || parsedLocked.part.val !== row.fixedPart.val)
+        !parsedLocked.ok ||
+        (parsedLocked.part &&
+          (parsedLocked.part.op !== row.fixedPart.op || parsedLocked.part.val !== row.fixedPart.val))
       ) {
         errors.push({
           line: lineIdx + 1,
@@ -511,7 +447,7 @@ export function assembleProgramText(sourceText, stage) {
     }
     usedAddrs.add(row.addr);
 
-    const parsed = parseAssemblyLine(rawLine, { allowLoop: false });
+    const parsed = parseAssemblyLine(rawLine);
     if (!parsed.ok) {
       errors.push({
         line: lineIdx + 1,
@@ -534,7 +470,7 @@ export function assembleProgramText(sourceText, stage) {
 
 /**
  * Probes the player's own compiled ASM_ENC + INST_DEC circuits to show live
- * key-encoding (LDI/ADD/SUB/JZ -> I1, I0, KEY) and control wires (OP, SET, WE, BR)
+ * key-encoding (LDI/ADD/SUB/JNZ -> I1, I0, KEY) and control wires (OP, SET, WE, BR)
  * for any instruction being edited or executed.
  */
 export function probeInstructionDecode(hw, part) {
@@ -543,7 +479,6 @@ export function probeInstructionDecode(hw, part) {
       i0: 0,
       i1: 0,
       imm: [0, 0, 0, 0],
-      ret: 0,
       keyFlag: 0,
       opcodeBits: '00',
       immBits: '0000',
@@ -556,8 +491,8 @@ export function probeInstructionDecode(hw, part) {
   const pins = encodeInstructionPins(part, hw);
   let opFlag = part.op === 'SUB' ? 1 : 0;
   let setFlag = part.op === 'LDI' ? 1 : 0;
-  let weFlag = part.op === 'JZ' || part.op === 'LOOP' ? 0 : 1;
-  let brFlag = part.op === 'JZ' || part.op === 'LOOP' ? 1 : 0;
+  let weFlag = part.op === 'JNZ' ? 0 : 1;
+  let brFlag = part.op === 'JNZ' ? 1 : 0;
   if (hw?.instDecSim) {
     hw.instDecSim.reset();
     const decOut = hw.instDecSim.evaluate([pins.i0, pins.i1]).outputs;
@@ -576,28 +511,26 @@ export function probeInstructionDecode(hw, part) {
 }
 
 /**
- * Encodes an assembly instruction's command key (`LDI` / `ADD` / `SUB` / `JZ`)
+ * Encodes an assembly instruction's command key (`LDI` / `ADD` / `SUB` / `JNZ`)
  * into `[I0, I1, KEY]` through the player's compiled `ASM_ENC` circuit (Stage 22)
  * when `hw` is provided, and converts the 4-bit immediate into `[IMM0..3]`.
  *
- * - `LDI`  -> key `[1,0,0,0]` -> `ASM_ENC` -> `I0=0, I1=0, KEY=1, RET=0`
- * - `ADD`  -> key `[0,1,0,0]` -> `ASM_ENC` -> `I0=1, I1=0, KEY=1, RET=0`
- * - `SUB`  -> key `[0,0,1,0]` -> `ASM_ENC` -> `I0=0, I1=1, KEY=1, RET=0`
- * - `JZ`   -> key `[0,0,0,1]` -> `ASM_ENC` -> `I0=1, I1=1, KEY=1, RET=0`
- * - `LOOP` -> key `[0,0,0,1]` -> `ASM_ENC` -> `I0=1, I1=1, KEY=1, RET=1`
+ * - `LDI` -> key `[1,0,0,0]` -> `ASM_ENC` -> `I0=0, I1=0, KEY=1`
+ * - `ADD` -> key `[0,1,0,0]` -> `ASM_ENC` -> `I0=1, I1=0, KEY=1`
+ * - `SUB` -> key `[0,0,1,0]` -> `ASM_ENC` -> `I0=0, I1=1, KEY=1`
+ * - `JNZ` -> key `[0,0,0,1]` -> `ASM_ENC` -> `I0=1, I1=1, KEY=1`
  */
 export function encodeInstructionPins(part, hw = null) {
   let i0 = 0;
   let i1 = 0;
   let keyFlag = 1;
-  const ret = part.op === 'LOOP' ? 1 : 0;
 
   if (hw?.asmEncSim) {
     const keyVec = [
       part.op === 'LDI' ? 1 : 0,
       part.op === 'ADD' ? 1 : 0,
       part.op === 'SUB' ? 1 : 0,
-      part.op === 'JZ' || part.op === 'LOOP' ? 1 : 0,
+      part.op === 'JNZ' ? 1 : 0,
     ];
     hw.asmEncSim.reset();
     const encOut = hw.asmEncSim.evaluate(keyVec).outputs;
@@ -614,7 +547,7 @@ export function encodeInstructionPins(part, hw = null) {
     } else if (part.op === 'SUB') {
       i0 = 0;
       i1 = 1;
-    } else if (part.op === 'JZ' || part.op === 'LOOP') {
+    } else if (part.op === 'JNZ') {
       i0 = 1;
       i1 = 1;
     } else {
@@ -630,7 +563,6 @@ export function encodeInstructionPins(part, hw = null) {
     i0,
     i1,
     imm,
-    ret,
     keyFlag,
     opcodeBits,
     immBits,
@@ -638,17 +570,17 @@ export function encodeInstructionPins(part, hw = null) {
 }
 
 /**
- * Builds a real gate-level 16-address × 8-bit Program ROM circuit out of the
+ * Builds a real gate-level 16-address × 7-bit Program ROM circuit out of the
  * player's own `DEC_2TO4`, `AND`, and `OR` chips (extending Stage 23 `ROM_4W`'s
  * exact `DEC2_4 + OR-plane` architecture to 4-bit PC addresses 0..15).
  *
  * Inputs:  `['PC0', 'PC1', 'PC2', 'PC3']`
- * Outputs: `['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'RET', 'VALID']`
+ * Outputs: `['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'VALID']`
  */
 export function buildProgrammableRomCircuit(rowMap, hw) {
   let c = createEmptyCircuit(
     ['PC0', 'PC1', 'PC2', 'PC3'],
-    ['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'RET', 'VALID']
+    ['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'VALID']
   );
 
   let nid = 1;
@@ -670,10 +602,11 @@ export function buildProgrammableRomCircuit(rowMap, hw) {
   wire({ kind: 'input', pin: 2 }, { kind: 'node', nodeId: decHi, pin: 0 });
   wire({ kind: 'input', pin: 3 }, { kind: 'node', nodeId: decHi, pin: 1 });
 
-  // Collect active row-select endpoints for each of the 8 output planes
-  const planes = Array.from({ length: 8 }, () => []);
+  // Collect active row-select endpoints for each of the 7 output planes
+  const planes = Array.from({ length: 7 }, () => []);
 
-  for (const [addr, entry] of rowMap.entries()) {
+  const entries = rowMap instanceof Map ? Array.from(rowMap.entries()) : [];
+  for (const [addr, entry] of entries) {
     if (!entry?.part || addr < 0 || addr > 15) continue;
     const encoded = encodeInstructionPins(entry.part, hw);
 
@@ -690,16 +623,15 @@ export function buildProgrammableRomCircuit(rowMap, hw) {
       encoded.imm[1],
       encoded.imm[2],
       encoded.imm[3],
-      encoded.ret,
       encoded.keyFlag, // VALID = 1 only when player's ASM_ENC asserts KEY=1!
     ];
-    for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
+    for (let bitIdx = 0; bitIdx < 7; bitIdx++) {
       if (wordBits[bitIdx]) planes[bitIdx].push(selEp);
     }
   }
 
   // Fold each bit plane with a tree of the player's own OR gates (exact ROM_4W OR-plane!)
-  for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
+  for (let bitIdx = 0; bitIdx < 7; bitIdx++) {
     let eps = planes[bitIdx];
     if (eps.length === 0) {
       const z = addNode('CONST_0');
@@ -726,6 +658,72 @@ export function buildProgrammableRomCircuit(rowMap, hw) {
   return c;
 }
 
+/**
+ * Computes the physical Mask ROM fuse-burn matrix for visualization and Verilog
+ * export by running every word through `encodeInstructionPins(part, hw)` so the
+ * burned fuse pattern reflects the player's real `ASM_ENC` circuit.
+ */
+export function getRomFuseMatrix(rowMap, hw = null) {
+  const entries = [];
+  if (rowMap instanceof Map) {
+    for (const [addr, entry] of rowMap.entries()) {
+      entries.push({ addr, part: entry?.part || null });
+    }
+  } else if (Array.isArray(rowMap)) {
+    for (const item of rowMap) {
+      if (item && Number.isInteger(item.addr)) {
+        entries.push({ addr: item.addr, part: item.part || null });
+      }
+    }
+  }
+  entries.sort((a, b) => a.addr - b.addr);
+
+  let totalBurnedFuses = 0;
+  let wordCount = 0;
+  const rows = entries.map(({ addr, part }) => {
+    const ab = numToBits(addr, 4);
+    const addrBits = `${ab[3]}${ab[2]}${ab[1]}${ab[0]}`;
+    if (!part) {
+      return {
+        addr,
+        addrBits,
+        part: null,
+        i1: 0,
+        i0: 0,
+        imm: [0, 0, 0, 0],
+        valid: 0,
+      };
+    }
+    const enc = encodeInstructionPins(part, hw);
+    const valid = enc.keyFlag ? 1 : 0;
+    if (valid) {
+      wordCount += 1;
+      totalBurnedFuses +=
+        (enc.i1 ? 1 : 0) +
+        (enc.i0 ? 1 : 0) +
+        (enc.imm[0] ? 1 : 0) +
+        (enc.imm[1] ? 1 : 0) +
+        (enc.imm[2] ? 1 : 0) +
+        (enc.imm[3] ? 1 : 0);
+    }
+    return {
+      addr,
+      addrBits,
+      part,
+      i1: enc.i1,
+      i0: enc.i0,
+      imm: [...enc.imm],
+      valid,
+    };
+  });
+
+  return {
+    rows,
+    totalBurnedFuses,
+    wordCount,
+  };
+}
+
 export function buildRomRowMap(stage, slots = {}) {
   const rows = stage?.asmProgramSpec?.rows || [];
   const rowMap = new Map();
@@ -739,9 +737,9 @@ export function buildRomRowMap(stage, slots = {}) {
 }
 
 /**
- * Executes a single clock cycle on the compiled `ARK4_SYS` hardware by reading
- * `[I0, I1, IMM0..3, RET, VALID]` directly from the compiled gate-level ROM
- * matrix (`DEC_2TO4` + `AND` + `OR` + `ASM_ENC`) at the current hardware `PC`!
+ * Executes a single clock cycle on the unmodified 7-pin `ARK4_SYS` hardware by
+ * reading `[I0, I1, IMM0..3, VALID]` directly from the compiled gate-level ROM
+ * matrix (`DEC_2TO4` + `AND` + `OR` + `ASM_ENC`) at the current hardware `PC`.
  */
 export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
   const outsBefore = hw.sim.getOutputs();
@@ -759,7 +757,7 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
   activeRomSim.reset();
   const romRes = activeRomSim.evaluate(pcBitsBefore);
   const romOut = romRes.outputs;
-  const valid = romOut[7] ? 1 : 0;
+  const valid = romOut[6] ? 1 : 0;
 
   if (!valid) {
     return {
@@ -774,12 +772,11 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
   const i0 = romOut[0] ? 1 : 0;
   const i1 = romOut[1] ? 1 : 0;
   const imm = [romOut[2] ? 1 : 0, romOut[3] ? 1 : 0, romOut[4] ? 1 : 0, romOut[5] ? 1 : 0];
-  const ret = romOut[6] ? 1 : 0;
   const opcodeBits = `${i1}${i0}`;
   const immBits = `${imm[3]}${imm[2]}${imm[1]}${imm[0]}`;
 
   const entry = rowMap.get(pcBefore);
-  const part = entry?.part || makeInstructionPart(['LDI', 'ADD', 'SUB', 'JZ'][(i1 << 1) | i0], bitsToNum(imm, 0, 4));
+  const part = entry?.part || makeInstructionPart(['LDI', 'ADD', 'SUB', 'JNZ'][(i1 << 1) | i0], bitsToNum(imm, 0, 4));
 
   // Probe the player's own INST_DEC for live monitor display
   let opFlag = i1 === 1 && i0 === 0 ? 1 : 0;
@@ -795,10 +792,10 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
     brFlag = decOut[3] ? 1 : 0;
   }
 
-  // Feed ROM output pins + CLK (0 -> 1 -> 0) directly into compiled ARK4_SYS!
-  const vecSetup = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0, ret];
-  const vecRise = [i0, i1, imm[0], imm[1], imm[2], imm[3], 1, ret];
-  const vecHold = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0, ret];
+  // Feed 7 ROM output pins + CLK (0 -> 1 -> 0) directly into unmodified 7-pin ARK4_SYS!
+  const vecSetup = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0];
+  const vecRise = [i0, i1, imm[0], imm[1], imm[2], imm[3], 1];
+  const vecHold = [i0, i1, imm[0], imm[1], imm[2], imm[3], 0];
 
   const resSetup = hw.sim.evaluate(vecSetup);
   const resRise = hw.sim.evaluate(vecRise);
@@ -816,9 +813,8 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
   }
 
   const seqNextPc = (pcBefore + 1) & 15;
-  const jmpFired = brFlag === 1 && (pcAfter !== seqNextPc || part.val === seqNextPc);
+  const jmpFired = brFlag === 1 && (pcAfter !== seqNextPc || (zBefore === 0 && pcAfter === part.val));
 
-  const retNote = ret ? ' [外部帰還RET=1]' : '';
   return {
     halted: false,
     stepIdx,
@@ -834,21 +830,20 @@ export function stepRomHardwareCycle(hw, rowMap, stepIdx = 0, romSim = null) {
     opName: part.name,
     opcodeBits,
     immBits,
-    retBit: ret,
     setFlag,
     opFlag,
     weFlag,
     brFlag,
     jmpFired,
     unstable,
-    label: `${pcBefore}番地 [${part.name}${retNote}]：ACC ${accBefore}→${accAfter} (Z=${zAfter}) ／ 次PC=${pcAfter}番地`,
+    label: `${pcBefore}番地 [${part.name}]：ACC ${accBefore}→${accAfter} (Z=${zAfter}) ／ 次PC=${pcAfter}番地`,
   };
 }
 
 /**
  * Runs a complete ROM assembly program on the player's compiled `ASM_ENC` +
- * gate-level `ROM` (`DEC_2TO4` + `AND` + `OR`) + `ARK4_SYS` hardware and
- * returns the full cycle-by-cycle hardware trace.
+ * gate-level `ROM` (`DEC_2TO4` + `AND` + `OR`) + unmodified 7-pin `ARK4_SYS`
+ * physical silicon hardware and returns the full cycle-by-cycle hardware trace.
  */
 export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles = 14 } = {}) {
   let hw;
@@ -864,7 +859,8 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
       unstable: false,
       hitMaxCycles: false,
       compileError: err.message,
-      metrics: { nandCount: 0, nodeCount: 0, wireCount: 0, depth: 0 },
+      siliconStats: { nandCount: 0, swCount: 0, pullCount: 0, isPhysicalSilicon: false },
+      metrics: { nandCount: 0, swCount: 0, pullCount: 0, nodeCount: 0, wireCount: 0, depth: 0 },
     };
   }
 
@@ -883,9 +879,10 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
       initPc: por.pc,
       finalAcc: por.acc,
       finalPc: por.pc,
-      unstable: false,
+      unstable: por.unstable,
       hitMaxCycles: false,
       compileError: `ROM回路コンパイルエラー: ${err.message}`,
+      siliconStats: hw.siliconStats,
       metrics: hw.metrics,
     };
   }
@@ -911,10 +908,10 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
       unstable = true;
       break;
     }
-    // Check via real gate-level ROM whether next hardware PC address has a valid instruction
+    // Check via real gate-level ROM whether next hardware PC address has a valid instruction (output pin 6 = VALID)
     romSim.reset();
     const nextRomCheck = romSim.evaluate(numToBits(pc, 4));
-    if (!nextRomCheck.outputs[7]) {
+    if (!nextRomCheck.outputs[6]) {
       break;
     }
     if (step === maxCycles - 1) {
@@ -931,8 +928,12 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
     unstable,
     hitMaxCycles,
     compileError: null,
+    siliconStats: hw.siliconStats,
     metrics: {
       nandCount: hw.metrics.nandCount,
+      swCount: hw.siliconStats.swCount,
+      pullCount: hw.siliconStats.pullCount,
+      isPhysicalSilicon: hw.siliconStats.isPhysicalSilicon,
       nodeCount: (stage?.asmProgramSpec?.rows || []).length,
       wireCount: hw.metrics.wireCount,
       depth: hw.metrics.depth,
@@ -941,12 +942,11 @@ export function runRomProgram(stage, slots = {}, customChips = {}, { maxCycles =
 }
 
 /**
- * Specification-based grading for Stages 22, 23, and 24.
+ * Specification-based grading for Stages 24 (`stage_22`), 25 (`stage_23`), and 26 (`stage_24`).
  *
- * Grades whether the player's program & hardware achieved the mission
- * specification (initial condition, safety invariants during execution,
- * and completion goal), rather than requiring identical card order to a single
- * model answer.
+ * Grades whether the player's program & physical silicon hardware achieved the
+ * mission specification (initial condition, anti-shortcut invariants during
+ * execution, and completion goal).
  */
 export function evaluateRomStage(stage, slots = {}, customChips = {}) {
   const spec = stage?.asmProgramSpec;
@@ -961,7 +961,7 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
       trace: [],
       passedCount: 0,
       totalCount: editableRows.length,
-      metrics: { nandCount: 0, nodeCount: rows.length, wireCount: 0, depth: 0 },
+      metrics: { nandCount: 0, swCount: 0, pullCount: 0, nodeCount: rows.length, wireCount: 0, depth: 0 },
     };
   }
 
@@ -990,28 +990,24 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
     error = '💥 自作チップの内部で信号の発振（無限ループ）が発生しました！ 下位モジュールの配線を確認してください。';
   } else if (trace.length === 0) {
     passed = false;
-    error = '0番地から命令を実行できませんでした。自作CPU（COND_PC）の初期番地出力を確認してください。';
-  } else if (stage.id === 'stage_24' && (trace[0].pc !== 0 || trace[0].acc !== 3)) {
-    const step0 = trace[0];
-    passed = false;
-    failureStepIdx = 0;
-    error =
-      step0?.acc === 15
-        ? '0番地の安全規定違反：カウントダウンを行わずにいきなり全開信号(15)を出すことはできません！ 0番地で初期値「3」をセットしてください。'
-        : `0番地の条件違反：最初にカウントダウン初期値「3」（ACC=3）をセットする必要があります（実測: ACC=${step0?.acc ?? '?'}）。`;
-  } else if (hitMaxCycles) {
-    passed = false;
-    failureStepIdx = trace.length - 1;
-    error = '⏱ 実行ステップ上限（14サイクル）に達しました！ ループから脱出できていないか、ジャンプ先が誤っています。';
+    error = '0番地から命令を実行できませんでした。自作CPU（COND_PC）や ASM_ENC の配線を確認してください。';
   } else if (stage.id === 'stage_22') {
-    // Stage 22 Specification:
+    // Stage 24 (`stage_22`) Specification:
     // 1. 0番地で初期基準内圧 ACC=5 をセットすること
-    // 2. 1〜2番地では LDI 上書きではなく ADD / SUB を使って加減算すること
+    // 2. 3命令以上実行し、1番地以降で LDI 上書きせず ADD と SUB の両方を使って計算すること
     //    （例: LDI 5 → ADD 7 → SUB 4 でも LDI 5 → SUB 4 → ADD 7 でも合格！）
-    // 3. 3命令完了時に最終気圧 ACC=8 かつ 次PC=3番地 に到達すること
+    // 3. 完了時に最終気圧 ACC=8 かつ 次PC=3番地 に到達すること
     const step0 = trace[0];
-    const overwriteStep = trace.slice(1, 3).find((t) => t.op === 'LDI');
-    if (!step0 || step0.pc !== 0 || step0.acc !== 5) {
+    const laterSteps = trace.slice(1);
+    const overwriteStep = laterSteps.find((t) => t.op === 'LDI');
+    const hasAdd = laterSteps.some((t) => t.op === 'ADD');
+    const hasSub = laterSteps.some((t) => t.op === 'SUB');
+
+    if (hitMaxCycles) {
+      passed = false;
+      failureStepIdx = trace.length - 1;
+      error = '⏱ 実行ステップ上限（14サイクル）に達しました！ 無限ループになっていないか確認してください。';
+    } else if (!step0 || step0.pc !== 0 || step0.acc !== 5) {
       passed = false;
       failureStepIdx = 0;
       error = `0番地の条件違反：最初に基準内圧「5」をセット（ACC=5）する必要があります（実測: 0番地実行後の ACC=${step0?.acc ?? '?'}）。`;
@@ -1023,6 +1019,10 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
       passed = false;
       failureStepIdx = overwriteStep.stepIdx;
       error = `${overwriteStep.pc}番地の条件違反：LDI で数値を直接上書きするのではなく、0番地の内圧 5 から ADD / SUB を使って 8 を計算してください！`;
+    } else if (!hasAdd || !hasSub) {
+      passed = false;
+      failureStepIdx = Math.min(2, trace.length - 1);
+      error = '1〜2番地の条件違反：コンプレッサー加圧（ADD）と外気差圧調整（SUB）の両方を使って最終気圧 8 を計算してください！';
     } else if (finalAcc !== 8 || finalPc !== 3) {
       passed = false;
       failureStepIdx = trace.length - 1;
@@ -1031,17 +1031,18 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
       passed = true;
     }
   } else if (stage.id === 'stage_23') {
-    // Stage 23 Specification:
+    // Stage 25 (`stage_23`) Specification:
     // 1. 0〜2番地の足し算（LDI + ADD + ADD）で油圧ジャッキ推力「3×4＝12」（2番地完了時 ACC=12）を合成すること
     //    （LDI 3 -> ADD 3 -> ADD 6 でも LDI 3 -> ADD 6 -> ADD 3 でも合格！ いきなり LDI 12 は不可）
     // 2. 3番地で目標推力 12 を SUB で引いて差圧 ACC=0 (Z=1) にすること（LDI 0 での誤魔化しは不可）
-    // 3. 4番地の JZ 6 で 6番地（開錠承認）へジャンプ完了（finalAcc=0, finalPc=6）すること
+    // 3. 4番地の固定命令 JNZ 0 を Z=1（不発・通過！）で抜けて 5番地（承認）へ到達すること（finalAcc=0, finalPc=5）
     const step0 = trace[0];
     const step1 = trace[1];
     const step2 = trace[2];
     const step3 = trace[3];
     const step4 = trace[4];
     const nonAddStep = [step1, step2].find((t) => t && t.op !== 'ADD');
+
     if (!step0 || step0.acc === 0) {
       passed = false;
       failureStepIdx = 0;
@@ -1064,26 +1065,41 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
       error =
         step3 && step3.op !== 'SUB'
           ? `3番地の条件違反：LDI 0 などで直接消すのではなく、目標推力 12 を SUB 12 で引いて差圧が 0 になることを確認しよう！`
-          : `3番地の条件違反：目標推力12を引いて差を 0（ACC=0, Z=1）にする必要がありますが、3番地実行後の ACC=${step3?.acc ?? '?'} でした。`;
-    } else if (!step4 || finalAcc !== 0 || finalPc !== 6) {
+          : `3番地の条件違反：目標推力12を引いて差を 0（ACC=0, Z=1）にする必要がありますが、3番地実行後の ACC=${step3?.acc ?? '?'} でした（不一致のため4番地の JNZ 0 が0番地へ差し戻しました）。`;
+    } else if (hitMaxCycles) {
       passed = false;
       failureStepIdx = trace.length - 1;
-      error = `4番地分岐の条件違反：Z=1 で 6番地へジャンプする必要がありますが、最終状態は ACC=${finalAcc}, 次PC=${finalPc}番地 でした。`;
+      error = '⏱ 実行ステップ上限（14サイクル）に達しました！ 4番地の JNZ 0 を通過できるよう ACC=0 (Z=1) を確認してください。';
+    } else if (!step4 || step4.pc !== 4 || step4.op !== 'JNZ' || step4.zBefore !== 1 || step4.jmpFired || finalAcc !== 0 || finalPc !== 5) {
+      passed = false;
+      failureStepIdx = trace.length - 1;
+      error = `4番地チェックの条件違反：ACC=0 (Z=1) で JNZ 0 を飛ばずに通過し 5番地（承認）へ進む必要がありますが、最終状態は ACC=${finalAcc}, 次PC=${finalPc}番地 でした。`;
     } else {
       passed = true;
     }
   } else if (stage.id === 'stage_24') {
-    // Stage 24 Specification:
-    // 1. 0番地でタイマー初期値 ACC=3 をセットすること
-    // 2. ループ（1番地〜3番地）で ACC が 3 → 2 → 1 → 0 と1ずつカウントダウンされること
-    //    （いきなり0番地で LDI 15 を出してカウントダウンを飛ばした場合は不合格！）
-    // 3. ACC=0 (Z=1) になった瞬間に 2番地の JZ 4 で 4番地へループ脱出すること
-    // 4. 4番地で地上大ハッチ全開信号 ACC=15 (1111)、次PC=5番地 を出力すること
+    // Stage 26 (`stage_24` — GRAND FINALE!) Specification:
+    // Pure 4-line hardware JNZ countdown loop (ZERO locked rows, ZERO external board wrappers!):
+    //   0: LDI 3   (initial timer = 3)
+    //   1: SUB 1   (decrement: 3 -> 2 -> 1 -> 0)
+    //   2: JNZ 1   (jump back while ACC != 0; exit to 3 when ACC == 0)
+    //   3: LDI 15  (open main hatch: ACC = 15, next PC = 4)
     const step0 = trace[0];
-    const countdownAfter1 = trace.filter((t) => t.pc === 1).map((t) => t.acc);
-    const loopReturns = trace.filter((t) => t.pc === 3 && t.pcNext === 1);
-    const breakoutStep = trace.find((t) => t.pc === 2 && t.acc === 0 && t.pcNext === 4);
+    const backwardJnzJumps = trace.filter((t) => t.op === 'JNZ' && t.pcNext < t.pc);
+    const jnzExitStep = trace.find((t) => t.op === 'JNZ' && t.accBefore === 0 && t.pcNext === t.pc + 1);
     const openStep = trace[trace.length - 1];
+
+    // Verify chronological SUB countdown 3 -> 2 -> 1 -> 0 before outputting 15
+    let countdownStage = 0;
+    const subHistory = [];
+    for (const t of trace) {
+      if (t.op === 'SUB') {
+        subHistory.push(`${t.accBefore}→${t.acc}`);
+        if (countdownStage === 0 && t.accBefore === 3 && t.acc === 2) countdownStage = 1;
+        else if (countdownStage === 1 && t.accBefore === 2 && t.acc === 1) countdownStage = 2;
+        else if (countdownStage === 2 && t.accBefore === 1 && t.acc === 0) countdownStage = 3;
+      }
+    }
 
     if (!step0 || step0.pc !== 0 || step0.acc !== 3) {
       passed = false;
@@ -1092,35 +1108,40 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
         step0?.acc === 15
           ? '0番地の安全規定違反：カウントダウンを行わずにいきなり全開信号(15)を出すことはできません！ 0番地で初期値「3」をセットしてください。'
           : `0番地の条件違反：最初にカウントダウン初期値「3」（ACC=3）をセットする必要があります（実測: ACC=${step0?.acc ?? '?'}）。`;
-    } else if (
-      countdownAfter1.length !== 3 ||
-      countdownAfter1[0] !== 2 ||
-      countdownAfter1[1] !== 1 ||
-      countdownAfter1[2] !== 0
-    ) {
+    } else if (hitMaxCycles) {
+      passed = false;
+      failureStepIdx = trace.length - 1;
+      error = '⏱ 実行ステップ上限（14サイクル）に達しました！ JNZ のジャンプ先（1番地）や減算命令（SUB 1）を確認してください。';
+    } else if (countdownStage < 3) {
       passed = false;
       failureStepIdx = trace.findIndex((t) => t.pc === 1);
       if (failureStepIdx < 0) failureStepIdx = Math.min(1, trace.length - 1);
-      error = `1番地〜3番地ループの条件違反：タイマーを 3 → 2 → 1 → 0 と1ずつ減らす必要があります（1番地実行後のACC履歴: [${countdownAfter1.join(' → ') || 'なし'}]）。`;
-    } else if (loopReturns.length !== 2 || !breakoutStep) {
+      error = `カウントダウン条件違反：SUB 命令と JNZ ループでタイマーを 3 → 2 → 1 → 0 と1ずつ減らす必要があります（SUB 実行履歴: [${subHistory.join(', ') || 'なし'}]）。`;
+    } else if (backwardJnzJumps.length < 2 || !jnzExitStep) {
       passed = false;
-      failureStepIdx = trace.findIndex((t) => t.pc === 2);
-      if (failureStepIdx < 0) failureStepIdx = trace.length - 1;
-      error = '2番地の条件分岐違反：ACCが0になるまで3番地(LOOP 1)経由で繰り返し、ACC=0 (Z=1) の瞬間に4番地へジャンプ（JZ 4）する必要があります。';
-    } else if (!openStep || openStep.pc !== 4 || finalAcc !== 15 || finalPc !== 5) {
+      failureStepIdx = trace.findIndex((t) => t.op === 'JNZ');
+      if (failureStepIdx < 0) failureStepIdx = Math.min(2, trace.length - 1);
+      error = '2番地の条件分岐違反：JNZ 1 で ACC≠0 のあいだ1番地へ2回以上ループバックし、ACC=0 (Z=1) の瞬間に3番地へ脱出する必要があります。';
+    } else if (!openStep || openStep.pc !== 3 || finalAcc !== 15 || finalPc !== 4) {
       passed = false;
       failureStepIdx = trace.length - 1;
-      error = `4番地開門の条件違反：ループ脱出後に4番地で全開信号 ACC=15 (1111) を出力する必要があります（実測: ACC=${finalAcc}, 次PC=${finalPc}番地）。`;
+      error = `3番地開門の条件違反：ループ脱出後に3番地で全開信号 ACC=15 (1111) を出力し次PC=4番地へ到達する必要があります（実測: ACC=${finalAcc}, 次PC=${finalPc}番地）。`;
     } else {
       passed = true;
     }
   } else {
-    passed =
-      finalAcc === spec?.targetAcc &&
-      (spec?.targetPc === undefined || finalPc === spec.targetPc);
-    if (!passed) {
+    if (hitMaxCycles) {
+      passed = false;
       failureStepIdx = trace.length - 1;
-      error = `最終結果 ACC=${finalAcc} (次PC=${finalPc}) が目標仕様 (ACC=${spec?.targetAcc}) と一致しませんでした。`;
+      error = '⏱ 実行ステップ上限（14サイクル）に達しました！ ループから脱出できていないか、ジャンプ先が誤っています。';
+    } else {
+      passed =
+        finalAcc === spec?.targetAcc &&
+        (spec?.targetPc === undefined || finalPc === spec.targetPc);
+      if (!passed) {
+        failureStepIdx = trace.length - 1;
+        error = `最終結果 ACC=${finalAcc} (次PC=${finalPc}) が目標仕様 (ACC=${spec?.targetAcc}) と一致しませんでした。`;
+      }
     }
   }
 
@@ -1154,6 +1175,7 @@ export function evaluateRomStage(stage, slots = {}, customChips = {}) {
     trace,
     passedCount: results.filter((r) => r.passed).length,
     totalCount: results.length,
+    siliconStats: run.siliconStats,
     metrics: run.metrics,
   };
 }

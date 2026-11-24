@@ -1,19 +1,21 @@
 /**
- * SILICON GENESIS — Recursive-Flattening NAND Netlist Compiler & Simulator
+ * SILICON GENESIS — Recursive-Flattening MOSFET & NAND Netlist Compiler & Simulator
  *
- * Compiles any user circuit (referencing NAND, CONST_0, CONST_1, and nested
- * player-created custom chips to arbitrary depth) into a flat array of primitive
- * NAND gates with persistent state, supporting:
- *   - Pure combinational logic (NOT, AND, OR, XOR, Adders, MUX, Decoders, ALU)
- *   - Feedback & bistable memory (SR_LATCH, D_LATCH)
- *   - Synchronous edge-triggered Master-Slave flip-flops (D_FF, REG_4BIT, PC_4BIT, ARK4_CORE)
- *   - Real-time pin & wire signal extraction for live visualization
- *   - Accurate odd-inverter oscillation detection
+ * Compiles any user circuit (referencing NAND, SW, PULL, CONST_0, CONST_1, and nested
+ * player-created custom chips to arbitrary depth) into a flat array of physical
+ * primitives with persistent state:
+ *   - When `customChips.NAND?.circuit` exists (forged in Stage 00-C), every NAND gate
+ *     recursively flattens all the way down to the player's actual `SW` (MOSFET) +
+ *     `PULL` (pull-up resistor) primitives!
+ *   - Falls back to primitive `GATE_NAND` only when `customChips.NAND?.circuit` is absent.
+ *   - Supports combinational logic, bistable latches (SR_LATCH, D_LATCH), synchronous
+ *     edge-triggered Master-Slave flip-flops (D_FF, REG_4BIT, PC_4BIT, ARK4_CORE, ARK4_SYS),
+ *     real-time pin/wire signal extraction, and odd-inverter oscillation detection.
  */
 
 import { getChipDef } from './circuit.js';
 
-const MAX_NESTING_DEPTH = 20;
+const MAX_NESTING_DEPTH = 24;
 const SLOT_CONST_0 = 0;
 const SLOT_CONST_1 = 1;
 const GATE_NAND = 0;
@@ -67,7 +69,9 @@ export function compileCircuit(circuit, customChips = {}) {
   const topNodePinHandles = new Map(); // nodeId -> { inHandles: number[], outHandles: number[] }
   const topWireSourceHandles = new Map(); // wireId -> handleId
 
-  function instantiateCircuit(subCircuit, extInHandles, extOutHandles, depth, isTopLevel) {
+  const nandSubCircuit = customChips?.NAND?.circuit || null;
+
+  function instantiateCircuit(subCircuit, extInHandles, extOutHandles, depth, isTopLevel, insideNand = false) {
     if (depth > MAX_NESTING_DEPTH) {
       throw new Error('Chip nesting depth exceeded maximum limit.');
     }
@@ -86,14 +90,27 @@ export function compileCircuit(circuit, customChips = {}) {
       }
 
       if (node.type === 'NAND') {
-        const inA = allocHandle(-1);
-        const inB = allocHandle(-1);
-        const outSlot = gateSlotBase + gates.length;
-        const outH = allocHandle(outSlot);
-        gates.push({ type: GATE_NAND, inAHandle: inA, inBHandle: inB, outSlot });
-        const entry = { inHandles: [inA, inB], outHandles: [outH] };
-        nodePinMap.set(node.id, entry);
-        if (isTopLevel) topNodePinHandles.set(node.id, entry);
+        if (nandSubCircuit && !insideNand && subCircuit !== nandSubCircuit) {
+          // True MOSFET + Pull-up Resistor Physical Flattening!
+          // Expand every NAND gate all the way down into the player's actual Stage 00-C SW+PULL circuit.
+          const inA = allocHandle(-1);
+          const inB = allocHandle(-1);
+          const outH = allocHandle(-1);
+          const entry = { inHandles: [inA, inB], outHandles: [outH] };
+          nodePinMap.set(node.id, entry);
+          if (isTopLevel) topNodePinHandles.set(node.id, entry);
+          instantiateCircuit(nandSubCircuit, [inA, inB], [outH], depth + 1, false, true);
+        } else {
+          // Fallback to primitive GATE_NAND when Stage 00-C NAND circuit is absent
+          const inA = allocHandle(-1);
+          const inB = allocHandle(-1);
+          const outSlot = gateSlotBase + gates.length;
+          const outH = allocHandle(outSlot);
+          gates.push({ type: GATE_NAND, inAHandle: inA, inBHandle: inB, outSlot });
+          const entry = { inHandles: [inA, inB], outHandles: [outH] };
+          nodePinMap.set(node.id, entry);
+          if (isTopLevel) topNodePinHandles.set(node.id, entry);
+        }
       } else if (node.type === 'SW') {
         const inFlow = allocHandle(-1);
         const inGate = allocHandle(-1);
@@ -129,7 +146,7 @@ export function compileCircuit(circuit, customChips = {}) {
         if (isTopLevel) topNodePinHandles.set(node.id, entry);
 
         // Recursively expand the player's actual custom chip circuit!
-        instantiateCircuit(def.circuit, inHandles, outHandles, depth + 1, false);
+        instantiateCircuit(def.circuit, inHandles, outHandles, depth + 1, false, insideNand);
       }
     }
 
@@ -160,7 +177,7 @@ export function compileCircuit(circuit, customChips = {}) {
     }
   }
 
-  instantiateCircuit(circuit, topInputHandles, topOutputHandles, 0, true);
+  instantiateCircuit(circuit, topInputHandles, topOutputHandles, 0, true, false);
 
   // 3. Resolve every handle to its ultimate driving signal slot (memoized, cycle-safe)
   const resolvedCache = new Int32Array(handleDriverSlot.length);
@@ -194,8 +211,15 @@ export function compileCircuit(circuit, customChips = {}) {
   const gateTypes = new Uint8Array(numGates);
   const inA = new Int32Array(numGates);
   const inB = new Int32Array(numGates);
+  let swCount = 0;
+  let pullCount = 0;
+  let nandGateCount = 0;
   for (let g = 0; g < numGates; g++) {
-    gateTypes[g] = gates[g].type;
+    const gt = gates[g].type;
+    gateTypes[g] = gt;
+    if (gt === GATE_SW) swCount++;
+    else if (gt === GATE_PULL) pullCount++;
+    else if (gt === GATE_NAND) nandGateCount++;
     inA[g] = resolveSlot(gates[g].inAHandle);
     inB[g] = resolveSlot(gates[g].inBHandle);
   }
@@ -222,6 +246,9 @@ export function compileCircuit(circuit, customChips = {}) {
     numExtIn,
     numExtOut,
     numGates,
+    swCount,
+    pullCount,
+    nandGateCount,
     gateSlotBase,
     totalSlots,
     gateTypes,
@@ -238,6 +265,10 @@ export class NetlistSimulator {
     this.numExtIn = compiled.numExtIn;
     this.numExtOut = compiled.numExtOut;
     this.numGates = compiled.numGates;
+    this.swCount = compiled.swCount ?? 0;
+    this.pullCount = compiled.pullCount ?? 0;
+    this.nandGateCount = compiled.nandGateCount ?? 0;
+    this.isPhysicalSilicon = this.swCount > 0 && this.nandGateCount === 0;
     this.gateSlotBase = compiled.gateSlotBase;
     this.totalSlots = compiled.totalSlots;
     this.gateTypes = compiled.gateTypes;
@@ -266,7 +297,7 @@ export class NetlistSimulator {
    * Apply external input bits (array of 0/1) and propagate until settled.
    * Preserves internal gate state across calls (essential for latches/flip-flops!).
    */
-  evaluate(inputBits, maxJacobiTicks = 180) {
+  evaluate(inputBits, maxJacobiTicks = 420) {
     const { slots, nextVals, gateTypes, inA, inB, numGates, gateSlotBase, numExtIn } = this;
     slots[SLOT_CONST_0] = 0;
     slots[SLOT_CONST_1] = 1;

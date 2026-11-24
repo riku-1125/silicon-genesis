@@ -16,6 +16,8 @@ export const PRIMITIVE_CHIPS = {
     accent: '#ffb347',
     isPrimitive: true,
     nandCount: 1,
+    swCount: 2,
+    pullCount: 1,
     depth: 0,
   },
   CONST_0: {
@@ -31,6 +33,8 @@ export const PRIMITIVE_CHIPS = {
     accent: '#88a0b8',
     isPrimitive: true,
     nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
     depth: 0,
   },
   CONST_1: {
@@ -46,6 +50,8 @@ export const PRIMITIVE_CHIPS = {
     accent: '#ffd166',
     isPrimitive: true,
     nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
     depth: 0,
   },
   SW: {
@@ -62,6 +68,8 @@ export const PRIMITIVE_CHIPS = {
     isPrimitive: true,
     isPhysical: true,
     nandCount: 0,
+    swCount: 1,
+    pullCount: 0,
     depth: 0,
   },
   PULL: {
@@ -78,6 +86,8 @@ export const PRIMITIVE_CHIPS = {
     isPrimitive: true,
     isPhysical: true,
     nandCount: 0,
+    swCount: 0,
+    pullCount: 1,
     depth: 0,
   },
 };
@@ -109,43 +119,80 @@ export function cloneCircuit(circuit) {
 }
 
 /**
- * Recursively computes total primitive NAND gates and abstraction depth
- * for a circuit given the player's custom chip library.
+ * Computes physical SW/PULL primitive counts for a single NAND gate from the
+ * player's Stage 00-C circuit when available, or falls back to canonical 2 SW + 1 PULL.
  */
-export function computeCircuitMetrics(circuit, customChips = {}, visited = new Set()) {
+function getNandPhysicalUnit(customChips = {}) {
+  const nandCircuit = customChips?.NAND?.circuit;
+  if (!nandCircuit || !Array.isArray(nandCircuit.nodes)) {
+    return { swCount: 2, pullCount: 1 };
+  }
+  let swCount = 0;
+  let pullCount = 0;
+  for (const n of nandCircuit.nodes) {
+    if (n.type === 'SW') swCount += 1;
+    else if (n.type === 'PULL') pullCount += 1;
+  }
+  return { swCount, pullCount };
+}
+
+/**
+ * Recursively computes total primitive NAND gates, physical MOSFET (SW) / pull-up
+ * resistor (PULL) counts, and abstraction depth for a circuit given `customChips`.
+ */
+export function computeCircuitMetrics(circuit, customChips = {}, visited = new Set(), _memo = null) {
+  const memo = _memo || new Map();
+  const nandUnit = getNandPhysicalUnit(customChips);
   let nandCount = 0;
+  let swCount = 0;
+  let pullCount = 0;
   let maxChildDepth = -1;
 
   for (const node of circuit.nodes) {
     if (node.type === 'NAND') {
       nandCount += 1;
+      swCount += nandUnit.swCount;
+      pullCount += nandUnit.pullCount;
       maxChildDepth = Math.max(maxChildDepth, 0);
-    } else if (
-      node.type === 'CONST_0' ||
-      node.type === 'CONST_1' ||
-      node.type === 'SW' ||
-      node.type === 'PULL'
-    ) {
+    } else if (node.type === 'SW') {
+      swCount += 1;
+      maxChildDepth = Math.max(maxChildDepth, 0);
+    } else if (node.type === 'PULL') {
+      pullCount += 1;
+      maxChildDepth = Math.max(maxChildDepth, 0);
+    } else if (node.type === 'CONST_0' || node.type === 'CONST_1') {
       maxChildDepth = Math.max(maxChildDepth, 0);
     } else {
       const def = customChips[node.type];
       if (!def) continue;
       if (visited.has(node.type)) continue;
-      if (typeof def.nandCount === 'number' && typeof def.depth === 'number') {
-        nandCount += def.nandCount;
-        maxChildDepth = Math.max(maxChildDepth, def.depth);
-      } else if (def.circuit) {
-        const nextVisited = new Set(visited);
-        nextVisited.add(node.type);
-        const m = computeCircuitMetrics(def.circuit, customChips, nextVisited);
+      if (def.circuit) {
+        let m = memo.get(node.type);
+        if (!m) {
+          const nextVisited = new Set(visited);
+          nextVisited.add(node.type);
+          m = computeCircuitMetrics(def.circuit, customChips, nextVisited, memo);
+          memo.set(node.type, m);
+        }
         nandCount += m.nandCount;
+        swCount += m.swCount;
+        pullCount += m.pullCount;
         maxChildDepth = Math.max(maxChildDepth, m.depth);
+      } else if (typeof def.nandCount === 'number') {
+        nandCount += def.nandCount;
+        swCount += typeof def.swCount === 'number' ? def.swCount : def.nandCount * nandUnit.swCount;
+        pullCount += typeof def.pullCount === 'number' ? def.pullCount : def.nandCount * nandUnit.pullCount;
+        if (typeof def.depth === 'number') {
+          maxChildDepth = Math.max(maxChildDepth, def.depth);
+        }
       }
     }
   }
 
   return {
     nandCount,
+    swCount,
+    pullCount,
     nodeCount: circuit.nodes.length,
     wireCount: circuit.wires.length,
     depth: maxChildDepth + 1,

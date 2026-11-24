@@ -1,27 +1,27 @@
 /**
- * SILICON GENESIS — Persistent Save Data (localStorage)
+ * SILICON GENESIS — Persistent Save Data (localStorage, v2 Physical Silicon)
  * Saves cleared stages, player-forged custom chips (with actual circuits!),
  * per-stage workbench drafts, unlocked CS codex entries, and preferences.
  */
 
 import { STAGES } from '../data/stages.js';
 
-const STORAGE_KEY = 'silicon_genesis_save_v1';
+export const STORAGE_KEY = 'silicon_genesis_save_v2';
 
 export function createDefaultSave() {
   return {
-    version: 1,
+    version: 2,
     currentStageId: 'stage_00a',
     clearedStages: [],        // array of stage IDs
-    customChips: {},          // chipId -> { id, name, shortName, titleJa, descJa, color, accent, inputs, outputs, circuit, nandCount, depth, stageId, createdAt }
+    customChips: {},          // chipId -> { id, name, shortName, titleJa, descJa, color, accent, inputs, outputs, circuit, nandCount, swCount, pullCount, depth, stageId, createdAt }
     drafts: {},               // stageId -> circuit
     physicsDrafts: {},        // stageId -> { slotId: partId }
     bestNandCounts: {},       // stageId -> number
     unlockedCodex: [],
     discoveredTerms: [],      // glossary term IDs actually encountered in dialogue so far
     seenPrologue: false,
-    chapter2Unlocked: false,  // true when player launched Chapter 2 directly from Home screen
-    seenIntroStages: [],      // legacy
+    chapter2Unlocked: false,
+    seenIntroStages: [],
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
     soundEnabled: true,
     soundVolume: 0.8,
@@ -38,9 +38,13 @@ export function loadSaveData() {
     if (!raw) return createDefaultSave();
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return createDefaultSave();
+    if (parsed.version !== undefined && parsed.version < 2) {
+      return createDefaultSave();
+    }
     const merged = {
       ...createDefaultSave(),
       ...parsed,
+      version: 2,
       customChips: parsed.customChips && typeof parsed.customChips === 'object' ? parsed.customChips : {},
       drafts: parsed.drafts && typeof parsed.drafts === 'object' ? parsed.drafts : {},
       physicsDrafts: parsed.physicsDrafts && typeof parsed.physicsDrafts === 'object' ? parsed.physicsDrafts : {},
@@ -51,7 +55,7 @@ export function loadSaveData() {
       seenIntroStages: Array.isArray(parsed.seenIntroStages) ? parsed.seenIntroStages : [],
       seenTheaterStages: Array.isArray(parsed.seenTheaterStages) ? parsed.seenTheaterStages : [],
     };
-    // Ensure currentStageId always points to an unlocked stage (handles pre-ACT-0 saves and locked Chapter 2 saves)
+    // Ensure currentStageId always points to an unlocked stage
     if (!isStageUnlocked(merged, merged.currentStageId)) {
       const nextPlayable =
         STAGES.find((s) => isStageUnlocked(merged, s.id) && !merged.clearedStages.includes(s.id)) ||
@@ -66,7 +70,7 @@ export function loadSaveData() {
 
 export function persistSaveData(save) {
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(save));
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ ...save, version: 2 }));
     return true;
   } catch {
     return false;
@@ -110,15 +114,6 @@ export function isStageUnlocked(save, stageId) {
   if (stageId === 'sandbox') return cleared.length > 0;
   const idx = STAGES.findIndex((s) => s.id === stageId);
   if (idx <= 0) return true;
-  // Backwards-compatible: existing saves with prior clears keep stage_00 / stage_01 accessible,
-  // and legacy Chapter 2 saves that already reached stage_22+ keep those stages accessible alongside new 22/23!
-  if ((stageId === 'stage_00' || stageId === 'stage_01') && cleared.length > 0) return true;
-  if (
-    (stageId === 'stage_22' || stageId === 'stage_23' || stageId === 'stage_24' || stageId === 'stage_rom_4w') &&
-    (cleared.includes('stage_22') || cleared.includes('stage_23') || cleared.includes('stage_24'))
-  ) {
-    return true;
-  }
   const prevStage = STAGES[idx - 1];
   return cleared.includes(prevStage.id) || cleared.includes(stageId);
 }

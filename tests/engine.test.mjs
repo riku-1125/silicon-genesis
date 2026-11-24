@@ -19,21 +19,34 @@ import {
   isModuleEncyclopediaUnlocked,
   collectTermIdsFromTexts,
 } from '../src/data/glossary.js';
-import { loadSaveData, isStageUnlocked, isChapter1Cleared, isChapter2Unlocked } from '../src/state/storage.js';
+import {
+  STORAGE_KEY,
+  loadSaveData,
+  persistSaveData,
+  isStageUnlocked,
+  isChapter1Cleared,
+  isChapter2Unlocked,
+} from '../src/state/storage.js';
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from '../src/engine/evaluator.js';
 import { provisionStandardChips } from '../src/engine/blueprints.js';
 import {
+  ARK4_OPCODES,
   runRomProgram,
   evaluateRomStage,
   parseAssemblyLine,
   assembleProgramText,
   formatProgramText,
   compileRomHardware,
+  resetRomHardware,
+  buildRomRowMap,
+  buildProgrammableRomCircuit,
+  getRomFuseMatrix,
   probeInstructionDecode,
   makeInstructionPart,
 } from '../src/engine/romRunner.js';
+import { exportSiliconBlueprint } from '../src/engine/siliconExport.js';
 
 /**
  * Helper to concisely construct test circuits matching player editing actions.
@@ -575,19 +588,21 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     registerChip(customChips, st, c);
   }
 
-  // Stage 19: COND_PC (ZERO_4BIT + AND + PC_4BIT = 228 NAND)
+  // Stage 19: COND_PC (ZERO_4BIT + NOT + AND + PC_4BIT = 229 NAND = 458 MOSFET + 229 PULL)
   {
     const st = getStageById('stage_19');
     const c = buildCircuit(
       st,
       [
         { id: 'z4', type: 'ZERO_4BIT' },
+        { id: 'nz', type: 'NOT' },
         { id: 'and', type: 'AND' },
         { id: 'pc', type: 'PC_4BIT' },
       ],
       [
         [inp(0), np('z4', 0)], [inp(1), np('z4', 1)], [inp(2), np('z4', 2)], [inp(3), np('z4', 3)],
-        [np('z4', 0), np('and', 0)], [inp(8), np('and', 1)],
+        [np('z4', 0), np('nz', 0)],
+        [np('nz', 0), np('and', 0)], [inp(8), np('and', 1)],
         [inp(4), np('pc', 0)], [inp(5), np('pc', 1)], [inp(6), np('pc', 2)], [inp(7), np('pc', 3)],
         [np('and', 0), np('pc', 4)],
         [inp(9), np('pc', 5)],
@@ -596,7 +611,9 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     );
     const res = evaluateStage(st, c, customChips);
     assert.equal(res.passed, true, `Stage 19 (COND_PC) failed: ${JSON.stringify(res)}`);
-    assert.equal(res.metrics.nandCount, 228);
+    assert.equal(res.metrics.nandCount, 229);
+    assert.equal(res.metrics.swCount, 458);
+    assert.equal(res.metrics.pullCount, 229);
     registerChip(customChips, st, c);
   }
 
@@ -614,7 +631,7 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
         [np('dec', 2), out(0)], // Y2 -> OP (SUB)
         [np('dec', 0), out(1)], // Y0 -> SET (LDI)
         [np('dec', 3), np('not', 0)], [np('not', 0), out(2)], // !Y3 -> WE
-        [np('dec', 3), out(3)], // Y3 -> BR (JZ)
+        [np('dec', 3), out(3)], // Y3 -> BR (JNZ)
       ]
     );
     const res = evaluateStage(st, c, customChips);
@@ -623,7 +640,7 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     registerChip(customChips, st, c);
   }
 
-  // Stage 21: ARK4_SYS (INST_DEC + ARK4_CORE + COND_PC = 479 NAND)
+  // Stage 21: ARK4_SYS (INST_DEC + ARK4_CORE + COND_PC = 480 NAND = 960 MOSFET + 480 PULL)
   {
     const st = getStageById('stage_21');
     const c = buildCircuit(
@@ -656,13 +673,16 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     );
     const res = evaluateStage(st, c, customChips);
     assert.equal(res.passed, true, `Stage 21 (ARK4_SYS) failed: ${JSON.stringify(res)}`);
-    assert.equal(res.metrics.nandCount, 479);
+    assert.equal(res.metrics.nandCount, 480);
+    assert.equal(res.metrics.swCount, 960);
+    assert.equal(res.metrics.pullCount, 480);
     registerChip(customChips, st, c);
   }
 
-  // Stage 22: ASM_ENC (4->2 Command Key Encoder: 4 OR = 12 NAND)
+  // Stage 22: ASM_ENC (4->2 Command Key Encoder: LDI/ADD/SUB/JNZ -> 4 OR = 12 NAND)
   {
     const st = getStageById('stage_asm_enc');
+    assert.deepEqual(st.inputs, ['LDI', 'ADD', 'SUB', 'JNZ']);
     const c = buildCircuit(
       st,
       [
@@ -681,6 +701,8 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     const res = evaluateStage(st, c, customChips);
     assert.equal(res.passed, true, `Stage 22 (ASM_ENC) failed: ${JSON.stringify(res)}`);
     assert.equal(res.metrics.nandCount, 12);
+    assert.equal(res.metrics.swCount, 24);
+    assert.equal(res.metrics.pullCount, 12);
     registerChip(customChips, st, c);
   }
 
@@ -709,11 +731,13 @@ test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 2
     const res = evaluateStage(st, c, customChips);
     assert.equal(res.passed, true, `Stage 23 (ROM_4W) failed: ${JSON.stringify(res)}`);
     assert.equal(res.metrics.nandCount, 22);
+    assert.equal(res.metrics.swCount, 44);
+    assert.equal(res.metrics.pullCount, 22);
     registerChip(customChips, st, c);
   }
 });
 
-test('Detects unstable ring oscillator (NAND output looped directly to both inputs)', () => {
+test('Detects unstable ring oscillator (both primitive NAND and physical MOSFET+PULL NAND)', () => {
   const st = getStageById('stage_01');
   const c = buildCircuit(st, [{ id: 'osc', type: 'NAND' }], [
     [np('osc', 0), np('osc', 0)],
@@ -721,12 +745,22 @@ test('Detects unstable ring oscillator (NAND output looped directly to both inpu
     [np('osc', 0), out(0)],
   ]);
   const sim = compileCircuit(c, {});
+  assert.equal(sim.isPhysicalSilicon, false);
   const res = sim.evaluate([0]);
   assert.equal(res.unstable, true);
 
   const evalRes = evaluateStage(st, c, {});
   assert.equal(evalRes.passed, false);
   assert.equal(evalRes.unstable, true);
+
+  // Also verify oscillation detection on physical MOSFET+Resistor flattened NAND!
+  const physChips = {};
+  provisionStandardChips(physChips, { includeChapter2Hardware: false, provisioned: false });
+  const physSim = compileCircuit(c, physChips);
+  assert.equal(physSim.isPhysicalSilicon, true);
+  assert.equal(physSim.swCount, 2);
+  assert.equal(physSim.pullCount, 1);
+  assert.equal(physSim.evaluate([0]).unstable, true);
 });
 
 test('Rejects unauthorized chips including physical SW/PULL in Stage 01 (strict bottom-up rule)', () => {
@@ -752,15 +786,16 @@ test('Rejects unauthorized chips including physical SW/PULL in Stage 01 (strict 
   assert.match(resPhys.error, /使用できない部品/);
 });
 
-test('Auto-migrates legacy pre-Stage-00 save to Stage 00 with empty seenTheaterStages', () => {
+test('v37 Clean v2 Silicon Save: ignores legacy v1 saves and cleanly persists/loads silicon_genesis_save_v2', () => {
+  assert.equal(STORAGE_KEY, 'silicon_genesis_save_v2');
   const prevStorage = globalThis.localStorage;
   const store = new Map([
     [
       'silicon_genesis_save_v1',
       JSON.stringify({
         version: 1,
-        currentStageId: 'stage_01',
-        clearedStages: [],
+        currentStageId: 'stage_24',
+        clearedStages: ['stage_00a', 'stage_01', 'stage_17', 'stage_21'],
         seenPrologue: true,
         seenIntroStages: ['stage_01'],
       }),
@@ -772,9 +807,21 @@ test('Auto-migrates legacy pre-Stage-00 save to Stage 00 with empty seenTheaterS
     removeItem: (k) => store.delete(k),
   };
   try {
-    const save = loadSaveData();
-    assert.equal(save.currentStageId, 'stage_00a');
-    assert.deepEqual(save.seenTheaterStages, []);
+    // Legacy v1 save is cleanly ignored (fresh v2 start for JNZ + physical silicon)
+    const fresh = loadSaveData();
+    assert.equal(fresh.version, 2);
+    assert.equal(fresh.currentStageId, 'stage_00a');
+    assert.deepEqual(fresh.clearedStages, []);
+    assert.deepEqual(fresh.seenTheaterStages, []);
+
+    // Persisting and reloading v2 save works cleanly
+    fresh.clearedStages = ['stage_00a', 'stage_00b', 'stage_00'];
+    fresh.currentStageId = 'stage_01';
+    persistSaveData(fresh);
+    const reloaded = loadSaveData();
+    assert.equal(reloaded.version, 2);
+    assert.equal(reloaded.currentStageId, 'stage_01');
+    assert.deepEqual(reloaded.clearedStages, ['stage_00a', 'stage_00b', 'stage_00']);
   } finally {
     globalThis.localStorage = prevStorage;
   }
@@ -896,18 +943,18 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   }
 });
 
-test('Priority 1 & 3: Stages 22-24 execute on compiled ARK4_SYS hardware, accept valid alternative programs, and propagate lower-level chip edits', () => {
+test('Priority 1 & 3: Stages 24-26 execute on unmodified 7-pin ARK4_SYS hardware with pure JNZ, accept valid alternatives, and propagate lower-level chip edits', () => {
   const customChips = {};
   provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
 
-  // 1. Stage 22: Both standard order (LDI 5 -> ADD 7 -> SUB 4) and alternative order (LDI 5 -> SUB 4 -> ADD 7) pass on real ARK4_SYS!
+  // 1. Stage 24 (`stage_22`): Both standard order (LDI 5 -> ADD 7 -> SUB 4) and alternative order (LDI 5 -> SUB 4 -> ADD 7) pass on real ARK4_SYS!
   const st22 = getStageById('stage_22');
   const res22Std = evaluateRomStage(
     st22,
     { line_0: 'ASM_LDI_5', line_1: 'ASM_ADD_7', line_2: 'ASM_SUB_4' },
     customChips
   );
-  assert.equal(res22Std.passed, true, `Stage 22 standard order failed: ${JSON.stringify(res22Std)}`);
+  assert.equal(res22Std.passed, true, `Stage 24 standard order failed: ${JSON.stringify(res22Std)}`);
   assert.deepEqual(res22Std.trace.map((t) => [t.accBefore, t.acc, t.pc, t.pcNext]), [
     [0, 5, 0, 1],
     [5, 12, 1, 2],
@@ -919,14 +966,14 @@ test('Priority 1 & 3: Stages 22-24 execute on compiled ARK4_SYS hardware, accept
     { line_0: 'ASM_LDI_5', line_1: 'ASM_SUB_4', line_2: 'ASM_ADD_7' },
     customChips
   );
-  assert.equal(res22Alt.passed, true, `Stage 22 valid alternative order (5-4+7=8) should pass: ${JSON.stringify(res22Alt)}`);
+  assert.equal(res22Alt.passed, true, `Stage 24 valid alternative order (5-4+7=8) should pass: ${JSON.stringify(res22Alt)}`);
   assert.deepEqual(res22Alt.trace.map((t) => [t.accBefore, t.acc, t.pc, t.pcNext]), [
     [0, 5, 0, 1],
     [5, 1, 1, 2],
     [1, 8, 2, 3],
   ]);
 
-  // Invalid order on Stage 22 (starting with ADD 7 instead of setting base pressure 5 at 0番地) is rejected with specific address reason
+  // Invalid order on Stage 24 (starting with ADD 7 instead of setting base pressure 5 at 0番地) is rejected with specific address reason
   const res22Bad = evaluateRomStage(
     st22,
     { line_0: 'ASM_ADD_7', line_1: 'ASM_LDI_5', line_2: 'ASM_SUB_4' },
@@ -935,61 +982,82 @@ test('Priority 1 & 3: Stages 22-24 execute on compiled ARK4_SYS hardware, accept
   assert.equal(res22Bad.passed, false);
   assert.match(res22Bad.error, /0番地/);
 
-  // 2. Stage 23: Both (LDI 3 -> ADD 3 -> ADD 6 -> SUB 12) and (LDI 3 -> ADD 6 -> ADD 3 -> SUB 12) pass!
+  // 2. Stage 25 (`stage_23`): 5 rows (0..3 editable + locked 4: JNZ 0). Both (LDI 3 -> ADD 3 -> ADD 6 -> SUB 12) and (LDI 3 -> ADD 6 -> ADD 3 -> SUB 12) pass through JNZ 0 with Z=1 -> PC=5!
   const st23 = getStageById('stage_23');
   const res23Std = evaluateRomStage(
     st23,
     { line_0: 'ASM_LDI_3', line_1: 'ASM_ADD_3', line_2: 'ASM_ADD_6', line_3: 'ASM_SUB_12' },
     customChips
   );
-  assert.equal(res23Std.passed, true, `Stage 23 standard failed: ${JSON.stringify(res23Std)}`);
-  assert.equal(res23Std.trace[res23Std.trace.length - 1].pcNext, 6);
+  assert.equal(res23Std.passed, true, `Stage 25 standard failed: ${JSON.stringify(res23Std)}`);
+  assert.equal(res23Std.trace.length, 5);
+  assert.equal(res23Std.trace[4].op, 'JNZ');
+  assert.equal(res23Std.trace[4].zBefore, 1);
+  assert.equal(res23Std.trace[4].jmpFired, false);
+  assert.equal(res23Std.trace[4].pcNext, 5);
 
   const res23Alt = evaluateRomStage(
     st23,
     { line_0: 'ASM_LDI_3', line_1: 'ASM_ADD_6', line_2: 'ASM_ADD_3', line_3: 'ASM_SUB_12' },
     customChips
   );
-  assert.equal(res23Alt.passed, true, `Stage 23 alternative (3+6+3=12) should pass: ${JSON.stringify(res23Alt)}`);
+  assert.equal(res23Alt.passed, true, `Stage 25 alternative (3+6+3=12) should pass: ${JSON.stringify(res23Alt)}`);
 
-  // 3. Stage 24: Countdown loop (3 -> 2 -> 1 -> 0 -> JZ 4 -> LDI 15) passes through compiled ARK4_SYS + external RET=1 pull-down
+  // Mismatched calculation on Stage 25 causes locked 4: JNZ 0 to fire and loop back to 0番地 -> fails cleanly!
+  const res23Mismatch = evaluateRomStage(
+    st23,
+    { line_0: 'ASM_LDI_3', line_1: 'ASM_ADD_3', line_2: 'ASM_ADD_5', line_3: 'ASM_SUB_12' },
+    customChips
+  );
+  assert.equal(res23Mismatch.passed, false);
+  assert.match(res23Mismatch.error, /2番地/);
+
+  // 3. Stage 26 (`stage_24`): Pure 4-line hardware JNZ countdown loop (ZERO locked rows, ZERO external RET/LOOP!)
   const st24 = getStageById('stage_24');
+  assert.equal(st24.asmProgramSpec.rows.length, 4);
+  assert.equal(st24.asmProgramSpec.rows.some((r) => r.locked), false);
   const validSlots24 = {
     line_0: 'ASM_LDI_3',
     line_1: 'ASM_SUB_1',
-    line_2: 'ASM_JZ_4',
-    line_4: 'ASM_LDI_15',
+    line_2: 'ASM_JNZ_1',
+    line_3: 'ASM_LDI_15',
   };
   const res24 = evaluateRomStage(st24, validSlots24, customChips);
-  assert.equal(res24.passed, true, `Stage 24 failed: ${JSON.stringify(res24)}`);
-  assert.equal(res24.trace.length, 10);
+  assert.equal(res24.passed, true, `Stage 26 pure JNZ failed: ${JSON.stringify(res24)}`);
+  assert.equal(res24.trace.length, 8);
   assert.deepEqual(
     res24.trace.map((t) => [t.pc, t.opName, t.accBefore, t.acc, t.pcNext]),
     [
       [0, 'LDI 3', 0, 3, 1],
       [1, 'SUB 1', 3, 2, 2],
-      [2, 'JZ 4', 2, 2, 3],
-      [3, 'LOOP 1', 2, 2, 1],
+      [2, 'JNZ 1', 2, 2, 1],
       [1, 'SUB 1', 2, 1, 2],
-      [2, 'JZ 4', 1, 1, 3],
-      [3, 'LOOP 1', 1, 1, 1],
+      [2, 'JNZ 1', 1, 1, 1],
       [1, 'SUB 1', 1, 0, 2],
-      [2, 'JZ 4', 0, 0, 4],
-      [4, 'LDI 15', 0, 15, 5],
+      [2, 'JNZ 1', 0, 0, 3],
+      [3, 'LDI 15', 0, 15, 4],
     ]
   );
 
-  // Stage 24 rejects a shortcut that puts LDI 15 at 0番地 without executing the countdown loop
+  // Stage 26 rejects shortcuts that skip countdown (LDI 15 at 0番地 or SUB 3 skipping 2 & 1)
   const res24Shortcut = evaluateRomStage(
     st24,
-    { line_0: 'ASM_LDI_15', line_1: 'ASM_SUB_1', line_2: 'ASM_JZ_4', line_4: 'ASM_LDI_3' },
+    { line_0: 'ASM_LDI_15', line_1: 'ASM_SUB_1', line_2: 'ASM_JNZ_1', line_3: 'ASM_LDI_3' },
     customChips
   );
   assert.equal(res24Shortcut.passed, false);
   assert.match(res24Shortcut.error, /カウントダウン/);
 
+  const res24SkipSub = evaluateRomStage(
+    st24,
+    { line_0: 'ASM_LDI_3', line_1: 'ASM_SUB_3', line_2: 'ASM_JNZ_1', line_3: 'ASM_LDI_15' },
+    customChips
+  );
+  assert.equal(res24SkipSub.passed, false);
+  assert.match(res24SkipSub.error, /カウントダウン/);
+
   // 4. Lower-level custom chip mutation propagation proof:
-  //    a) Disconnect S0 output wire inside lower-level chip ADD_4BIT -> propagates up through ALU_4BIT -> ARK4_CORE -> ARK4_SYS and changes Stage 22 & 24 outputs!
+  //    a) Disconnect S0 output wire inside lower-level chip ADD_4BIT -> propagates up through ALU_4BIT -> ARK4_CORE -> ARK4_SYS and changes Stage 24 & 26 outputs!
   const mutatedAddChips = { ...customChips };
   const brokenAddCircuit = cloneCircuit(customChips.ADD_4BIT.circuit);
   brokenAddCircuit.wires = brokenAddCircuit.wires.filter(
@@ -1002,18 +1070,18 @@ test('Priority 1 & 3: Stages 22-24 execute on compiled ARK4_SYS hardware, accept
     { line_0: 'ASM_LDI_5', line_1: 'ASM_ADD_7', line_2: 'ASM_SUB_4' },
     mutatedAddChips
   );
-  assert.equal(res22BrokenAdd.passed, false, 'Broken lower-level ADD_4BIT must cause Stage 22 to fail');
+  assert.equal(res22BrokenAdd.passed, false, 'Broken lower-level ADD_4BIT must cause Stage 24 to fail');
   const res24BrokenAdd = evaluateRomStage(st24, validSlots24, mutatedAddChips);
-  assert.equal(res24BrokenAdd.passed, false, 'Broken lower-level ADD_4BIT must propagate to Stage 24 countdown');
+  assert.equal(res24BrokenAdd.passed, false, 'Broken lower-level ADD_4BIT must propagate to Stage 26 countdown');
 
-  //    b) Break ZERO_4BIT (remove final NOT inversion wire so Z is always 0) -> propagates through COND_PC -> ARK4_SYS and prevents JZ 4 from breaking out of the loop!
+  //    b) Break ZERO_4BIT (remove wires so Z is always 0 -> NOT(Z)=1 -> JNZ always jumps!) -> propagates through COND_PC -> ARK4_SYS and prevents JNZ 1 from exiting loop!
   const mutatedZeroChips = { ...customChips };
   const brokenZeroCircuit = cloneCircuit(customChips.ZERO_4BIT.circuit);
   brokenZeroCircuit.wires = [];
   mutatedZeroChips.ZERO_4BIT = { ...customChips.ZERO_4BIT, circuit: brokenZeroCircuit };
 
   const res24BrokenZero = evaluateRomStage(st24, validSlots24, mutatedZeroChips);
-  assert.equal(res24BrokenZero.passed, false, 'Broken lower-level ZERO_4BIT must prevent Stage 24 JZ breakout');
+  assert.equal(res24BrokenZero.passed, false, 'Broken lower-level ZERO_4BIT must prevent Stage 26 JNZ breakout');
 });
 
 test('Priority 2: Stage 07 exhaustive 512-combination check catches counterexamples & reproduceDiagnosticState restores sequential failure states', () => {
@@ -1057,12 +1125,22 @@ test('Priority 2: Stage 07 exhaustive 512-combination check catches counterexamp
   assert.deepEqual(diag07.simulator.getOutputs(), eval07.results[ceIdx].actual);
   assert.notDeepEqual(diag07.simulator.getOutputs(), eval07.results[ceIdx].expected);
 
-  // 2. Sequential circuit diagnostic reproduction: build a buggy PC_4BIT where JMP is ignored (MUX_4BIT SEL not connected),
-  //    so steps ①..④ (0 -> 1 -> 2 -> 3) pass by wrap-around +1, and step ⑤ (J=10, JMP=1 -> expected 10, actual 4) fails!
+  // 2. Sequential circuit diagnostic reproduction: build a buggy PC_4BIT where JMP is masked by NOT(J3),
+  //    so step ① (J=0, JMP=1 -> 0) and steps ②..④ (1 -> 2 -> 3) pass, while step ⑤ (J=10, JMP=1 -> expected 10, actual 4) fails!
   const st16 = getStageById('stage_16');
   const buggyPc = cloneCircuit(customChips.PC_4BIT.circuit);
+  buggyPc.nodes.push(
+    { id: 'bug_nj3', type: 'NOT', x: 100, y: 200 },
+    { id: 'bug_mask', type: 'AND', x: 160, y: 200 }
+  );
   buggyPc.wires = buggyPc.wires.filter(
     (w) => !(w.from.kind === 'input' && w.from.pin === 4)
+  );
+  buggyPc.wires.push(
+    { id: 'bw1', from: inp(3), to: np('bug_nj3', 0) },
+    { id: 'bw2', from: inp(4), to: np('bug_mask', 0) },
+    { id: 'bw3', from: np('bug_nj3', 0), to: np('bug_mask', 1) },
+    { id: 'bw4', from: np('bug_mask', 0), to: np('mx', 8) }
   );
   const eval16 = evaluateStage(st16, buggyPc, customChips);
   assert.equal(eval16.passed, false);
@@ -1122,12 +1200,10 @@ test('Chapter 2 unlock requires clearing Chapter 1 (Stage 17) while preserving l
   assert.equal(isStageUnlocked(ch1ClearedSave, 'stage_18'), true);
   assert.equal(isStageUnlocked(ch1ClearedSave, 'stage_19'), false);
 
-  // 4. Legacy save compatibility:
-  //    a) Normal legacy saves keep all customChips, drafts, and progress intact.
-  //    b) Saves previously parked on locked stage_18 without clearing stage_17 cleanly migrate to their next unlocked stage.
+  // 4. v2 Save loading & locked stage redirection:
   const prevStorage = globalThis.localStorage;
-  const legacyPayload = {
-    version: 1,
+  const v2Payload = {
+    version: 2,
     currentStageId: 'stage_05',
     clearedStages: ['stage_00a', 'stage_00b', 'stage_00', 'stage_01', 'stage_02', 'stage_03', 'stage_04'],
     customChips: {
@@ -1139,7 +1215,7 @@ test('Chapter 2 unlock requires clearing Chapter 1 (Stage 17) while preserving l
     unlockedCodex: ['nand_universality', 'not_gate'],
     seenPrologue: true,
   };
-  const store = new Map([['silicon_genesis_save_v1', JSON.stringify(legacyPayload)]]);
+  const store = new Map([[STORAGE_KEY, JSON.stringify(v2Payload)]]);
   globalThis.localStorage = {
     getItem: (k) => store.get(k) ?? null,
     setItem: (k, v) => store.set(k, v),
@@ -1148,7 +1224,7 @@ test('Chapter 2 unlock requires clearing Chapter 1 (Stage 17) while preserving l
   try {
     const loaded = loadSaveData();
     assert.equal(loaded.currentStageId, 'stage_05');
-    assert.deepEqual(loaded.clearedStages, legacyPayload.clearedStages);
+    assert.deepEqual(loaded.clearedStages, v2Payload.clearedStages);
     assert.equal(loaded.customChips.NOT.provisioned, undefined);
     assert.equal(loaded.drafts.stage_05.nodes.length, 1);
     assert.equal(isStageUnlocked(loaded, 'stage_05'), true);
@@ -1156,7 +1232,7 @@ test('Chapter 2 unlock requires clearing Chapter 1 (Stage 17) while preserving l
     assert.equal(isChapter2Unlocked(loaded), false);
 
     // Save parked on locked stage_18 without clearing stage_17 falls back cleanly to stage_05
-    store.set('silicon_genesis_save_v1', JSON.stringify({ ...legacyPayload, currentStageId: 'stage_18', chapter2Unlocked: true }));
+    store.set(STORAGE_KEY, JSON.stringify({ ...v2Payload, currentStageId: 'stage_18', chapter2Unlocked: true }));
     const migrated = loadSaveData();
     assert.equal(migrated.currentStageId, 'stage_05');
     assert.equal(isChapter2Unlocked(migrated), false);
@@ -1293,7 +1369,7 @@ test('v29 Mobile Audio Lifecycle: uses ambient audioSession, zero <audio> hijack
   }
 });
 
-test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Shortcut Spec Guards', () => {
+test('v37 Free-Form ARK-4 Assembler (JNZ ISA), Text Parser, Live INST_DEC Probe & Anti-Shortcut Spec Guards', () => {
   const customChips = {};
   provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
 
@@ -1305,7 +1381,7 @@ test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Sho
   assert.equal(pDec.part.opcodeBits, '00');
   assert.equal(pDec.part.immBits, '0101');
 
-  const pBin = parseAssemblyLine('4: LDI 0b1111 // open hatch');
+  const pBin = parseAssemblyLine('3: LDI 0b1111 // open hatch');
   assert.equal(pBin.ok, true);
   assert.equal(pBin.val, 15);
   assert.equal(pBin.part.immBits, '1111');
@@ -1317,6 +1393,17 @@ test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Sho
   assert.equal(pHex.part.opcodeBits, '10');
   assert.equal(pHex.part.immBits, '1100');
 
+  const pJnz = parseAssemblyLine('2: JNZ 1');
+  assert.equal(pJnz.ok, true);
+  assert.equal(pJnz.op, 'JNZ');
+  assert.equal(pJnz.val, 1);
+  assert.equal(pJnz.part.opcodeBits, '11');
+  assert.equal(pJnz.part.immBits, '0001');
+
+  // Legacy JZ & fake LOOP are strictly rejected (only LDI / ADD / SUB / JNZ exist)
+  assert.equal(parseAssemblyLine('JZ 4').ok, false);
+  assert.equal(parseAssemblyLine('LOOP 1').ok, false);
+
   // Invalid syntax & out-of-range operands fail cleanly with Japanese errors
   const badOp = parseAssemblyLine('MOV 3');
   assert.equal(badOp.ok, false);
@@ -1326,29 +1413,29 @@ test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Sho
   assert.equal(badRange.ok, false);
   assert.match(badRange.error, /0〜15/);
 
-  // 2. Live INST_DEC probe reflects compiled hardware control wires for every opcode
+  // 2. Live INST_DEC probe reflects compiled hardware control wires for every opcode (no ret field!)
   const hw = compileRomHardware(customChips);
   const dLdi = probeInstructionDecode(hw, makeInstructionPart('LDI', 3));
   assert.deepEqual([dLdi.i1, dLdi.i0, dLdi.opFlag, dLdi.setFlag, dLdi.weFlag, dLdi.brFlag], [0, 0, 0, 1, 1, 0]);
+  assert.equal('ret' in dLdi, false);
   const dSub = probeInstructionDecode(hw, makeInstructionPart('SUB', 1));
   assert.deepEqual([dSub.i1, dSub.i0, dSub.opFlag, dSub.setFlag, dSub.weFlag, dSub.brFlag], [1, 0, 1, 0, 1, 0]);
-  const dJz = probeInstructionDecode(hw, makeInstructionPart('JZ', 4));
-  assert.deepEqual([dJz.i1, dJz.i0, dJz.opFlag, dJz.setFlag, dJz.weFlag, dJz.brFlag], [1, 1, 0, 0, 0, 1]);
+  const dJnz = probeInstructionDecode(hw, makeInstructionPart('JNZ', 1));
+  assert.deepEqual([dJnz.i1, dJnz.i0, dJnz.opFlag, dJnz.setFlag, dJnz.weFlag, dJnz.brFlag], [1, 1, 0, 0, 0, 1]);
 
-  // 3. Stage 24 raw assembly source text assembles cleanly, protects locked line 3, and clears on real ARK4_SYS!
+  // 3. Stage 26 (`stage_24`) 4-line raw assembly text assembles cleanly (ZERO locked lines) and clears on unmodified 7-pin ARK4_SYS!
   const st24 = getStageById('stage_24');
   const raw24 = [
     '0: LDI 3      ; 初期値',
     '1: SUB 1      ; 1減らす',
-    '2: JZ 4       ; 0なら4番地へ',
-    '3: LOOP 1     ; 固定回路',
-    '4: LDI 0b1111 ; 大ハッチ全開!',
+    '2: JNZ 1      ; 0でなければ1番地へ戻る',
+    '3: LDI 0b1111 ; 大ハッチ全開!',
   ].join('\n');
   const asm24 = assembleProgramText(raw24, st24);
-  assert.equal(asm24.ok, true, `Expected Stage 24 assembly to parse cleanly: ${JSON.stringify(asm24)}`);
+  assert.equal(asm24.ok, true, `Expected Stage 26 assembly to parse cleanly: ${JSON.stringify(asm24)}`);
   const eval24 = evaluateRomStage(st24, asm24.slots, customChips);
-  assert.equal(eval24.passed, true, `Assembled Stage 24 text failed hardware eval: ${JSON.stringify(eval24)}`);
-  assert.equal(eval24.trace.length, 10);
+  assert.equal(eval24.passed, true, `Assembled Stage 26 text failed hardware eval: ${JSON.stringify(eval24)}`);
+  assert.equal(eval24.trace.length, 8);
 
   // Format -> re-assemble round-trip preserves valid program
   const formatted24 = formatProgramText(st24, asm24.slots);
@@ -1356,20 +1443,22 @@ test('v33 Free-Form ARK-4 Assembler, Text Parser, Live INST_DEC Probe & Anti-Sho
   assert.equal(roundTrip24.ok, true);
   assert.deepEqual(roundTrip24.slots, asm24.slots);
 
-  // Attempting to overwrite locked line 3 in text mode yields a clear error
-  const badLocked = assembleProgramText('0: LDI 3\n1: SUB 1\n2: JZ 4\n3: ADD 1\n4: LDI 15', st24);
-  assert.equal(badLocked.ok, false);
-  assert.match(badLocked.errors[0].message, /固定命令/);
+  // Attempting to overwrite Stage 25 locked line 4 (`4: JNZ 0`) in text mode yields a clear error
+  const st23 = getStageById('stage_23');
+  const badLocked25 = assembleProgramText('0: LDI 3\n1: ADD 3\n2: ADD 6\n3: SUB 12\n4: ADD 1', st23);
+  assert.equal(badLocked25.ok, false);
+  assert.match(badLocked25.errors[0].message, /固定命令/);
 
-  // 4. Anti-shortcut spec checks on Stage 22 & Stage 23
+  // 4. Anti-shortcut spec checks on Stage 24 (`stage_22`) & Stage 25 (`stage_23`)
   const st22 = getStageById('stage_22');
   const cheat22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'LDI 8', line_2: 'ADD 0' }, customChips);
   assert.equal(cheat22.passed, false);
   assert.match(cheat22.error, /直接上書き/);
-  const creative22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'ADD 2', line_2: 'ADD 1' }, customChips);
+  const noSub22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'ADD 2', line_2: 'ADD 1' }, customChips);
+  assert.equal(noSub22.passed, false);
+  const creative22 = evaluateRomStage(st22, { line_0: 'LDI 5', line_1: 'ADD 4', line_2: 'SUB 1' }, customChips);
   assert.equal(creative22.passed, true);
 
-  const st23 = getStageById('stage_23');
   const cheat23Ldi12 = evaluateRomStage(
     st23,
     { line_0: 'LDI 12', line_1: 'ADD 0', line_2: 'ADD 0', line_3: 'SUB 12' },
@@ -1430,9 +1519,10 @@ test('v34 Chapter I & II Cinematic Endings: rich beats, dynamic hardware stats, 
   }
 });
 
-test('v36 Zero Physical Leaps: ASM_ENC & gate-level DEC2_4 ROM execute end-to-end, propagate faults, and preserve legacy Chapter 2 saves', () => {
+test('v36 Zero Physical Leaps: ASM_ENC & gate-level DEC2_4 ROM execute end-to-end, propagate faults, and enforce strict progression', () => {
   const customChips = {};
   provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
+  assert.ok(customChips.NAND?.circuit, 'Stage 00-C physical NAND blueprint must be provisioned');
   assert.ok(customChips.ASM_ENC?.circuit, 'ASM_ENC blueprint must be provisioned');
   assert.ok(customChips.ROM_4W?.circuit, 'ROM_4W blueprint must be provisioned');
 
@@ -1440,15 +1530,15 @@ test('v36 Zero Physical Leaps: ASM_ENC & gate-level DEC2_4 ROM execute end-to-en
   const validSlots24 = {
     line_0: 'ASM_LDI_3',
     line_1: 'ASM_SUB_1',
-    line_2: 'ASM_JZ_4',
-    line_4: 'ASM_LDI_15',
+    line_2: 'ASM_JNZ_1',
+    line_3: 'ASM_LDI_15',
   };
 
-  // 1. Clean end-to-end execution through ASM_ENC -> gate-level ROM -> ARK4_SYS passes!
+  // 1. Clean end-to-end execution through ASM_ENC -> gate-level ROM -> unmodified 7-pin ARK4_SYS passes!
   const cleanRes = evaluateRomStage(st24, validSlots24, customChips);
   assert.equal(cleanRes.passed, true, `Full ASM_ENC->ROM->ARK4_SYS run failed: ${JSON.stringify(cleanRes)}`);
 
-  // 2. Break player's ASM_ENC (disconnect I1 output pin 1) -> SUB & JZ encode wrongly -> Stage 26 fails!
+  // 2. Break player's ASM_ENC (disconnect I1 output pin 1) -> SUB & JNZ encode wrongly -> Stage 26 fails!
   const brokenEncChips = { ...customChips };
   const brokenEncCircuit = cloneCircuit(customChips.ASM_ENC.circuit);
   brokenEncCircuit.wires = brokenEncCircuit.wires.filter((w) => !(w.to.kind === 'output' && w.to.pin === 1));
@@ -1476,17 +1566,127 @@ test('v36 Zero Physical Leaps: ASM_ENC & gate-level DEC2_4 ROM execute end-to-en
   const resBrokenDec = evaluateRomStage(st24, validSlots24, brokenDecChips);
   assert.equal(resBrokenDec.passed, false, 'Broken DEC_2TO4 must break gate-level ROM address decoding');
 
-  // 5. Progression & legacy save compatibility:
-  //    - Fresh save clearing stage_21 unlocks stage_asm_enc (STAGE 22), while stage_rom_4w stays locked until stage_asm_enc cleared
+  // 5. Linear progression: clearing stage_21 unlocks stage_asm_enc (STAGE 22), while stage_rom_4w stays locked until stage_asm_enc cleared
   const post21Save = { clearedStages: ['stage_21'] };
   assert.equal(isStageUnlocked(post21Save, 'stage_asm_enc'), true);
   assert.equal(isStageUnlocked(post21Save, 'stage_rom_4w'), false);
   assert.equal(isStageUnlocked(post21Save, 'stage_22'), false);
+});
 
-  //    - Legacy save that already cleared stage_22 before v36 keeps stage_22/23/24 AND new stage_asm_enc/stage_rom_4w accessible!
-  const legacyCh2Save = { clearedStages: ['stage_17', 'stage_21', 'stage_22'] };
-  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_asm_enc'), true);
-  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_rom_4w'), true);
-  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_22'), true);
-  assert.equal(isStageUnlocked(legacyCh2Save, 'stage_23'), true);
+test('v37 Full Physical Silicon: MOSFET+PULL flattening & fault propagation, zero RET/LOOP backdoor, ROM Fuse Matrix & Verilog HDL Export', () => {
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter2Hardware: true, provisioned: false });
+
+  // 1. ARK4_SYS compiles directly on 7 pins with TRUE physical silicon (960 MOSFETs + 480 resistors, 0 primitive NANDs!)
+  const hw = compileRomHardware(customChips);
+  assert.equal(hw.sim.numExtIn, 7, 'ARK4_SYS must run strictly on 7 pins (zero hidden RET pin)');
+  assert.equal(hw.sim.numExtOut, 8);
+  assert.equal(hw.sim.isPhysicalSilicon, true);
+  assert.equal(hw.sim.swCount, 960);
+  assert.equal(hw.sim.pullCount, 480);
+  assert.equal(hw.sim.nandGateCount, 0);
+  assert.deepEqual(hw.siliconStats, {
+    nandCount: 480,
+    swCount: 960,
+    pullCount: 480,
+    isPhysicalSilicon: true,
+  });
+
+  // Pure 3-cycle POR through unmodified 7-pin ARK4_SYS settles cleanly at ACC=0, PC=0, Z=1
+  const por = resetRomHardware(hw);
+  assert.deepEqual(por, { acc: 0, pc: 0, z: 1, unstable: false });
+
+  // 2. Breaking Stage 00-C physical NAND circuit propagates ALL the way up and breaks NOT and ARK4_SYS!
+  const brokenNandChips = { ...customChips };
+  const brokenNandCircuit = cloneCircuit(customChips.NAND.circuit);
+  // Disconnect PULL output -> OUT inside Stage 00-C physical NAND
+  brokenNandCircuit.wires = brokenNandCircuit.wires.filter((w) => w.to.kind !== 'output');
+  brokenNandChips.NAND = { ...customChips.NAND, circuit: brokenNandCircuit };
+
+  const notStage = getStageById('stage_01');
+  const brokenNotRes = evaluateStage(notStage, customChips.NOT.circuit, brokenNandChips);
+  assert.equal(brokenNotRes.passed, false, 'Broken Stage 00-C NAND must propagate up and break Stage 01 NOT');
+
+  const st24 = getStageById('stage_24');
+  const slots24 = {
+    line_0: 'ASM_LDI_3',
+    line_1: 'ASM_SUB_1',
+    line_2: 'ASM_JNZ_1',
+    line_3: 'ASM_LDI_15',
+  };
+  const brokenSysRes = evaluateRomStage(st24, slots24, brokenNandChips);
+  assert.equal(brokenSysRes.passed, false, 'Broken Stage 00-C NAND must propagate all the way up and break ARK4_SYS Stage 26');
+
+  // 3. Zero hidden RET/LOOP backdoor: ISA keys, 7-output ROM circuit, pure JNZ loop
+  assert.deepEqual(Object.keys(ARK4_OPCODES), ['LDI', 'ADD', 'SUB', 'JNZ']);
+  const rowMap24 = buildRomRowMap(st24, slots24);
+  const romCirc = buildProgrammableRomCircuit(rowMap24, hw);
+  assert.deepEqual(romCirc.inputs, ['PC0', 'PC1', 'PC2', 'PC3']);
+  assert.deepEqual(romCirc.outputs, ['I0', 'I1', 'IMM0', 'IMM1', 'IMM2', 'IMM3', 'VALID']);
+
+  const run24 = runRomProgram(st24, slots24, customChips);
+  assert.equal(run24.finalAcc, 15);
+  assert.equal(run24.finalPc, 4);
+  assert.equal(run24.siliconStats.isPhysicalSilicon, true);
+  assert.equal(run24.trace.filter((t) => t.op === 'JNZ' && t.pcNext < t.pc).length, 2);
+
+  // 4. getRomFuseMatrix() returns accurate burned fuses reflecting player's live ASM_ENC
+  const fuseMatrix = getRomFuseMatrix(rowMap24, hw);
+  assert.equal(fuseMatrix.wordCount, 4);
+  // LDI 3 (00:0011 = 2) + SUB 1 (10:0001 = 2) + JNZ 1 (11:0001 = 3) + LDI 15 (00:1111 = 4) = 11 burned fuses
+  assert.equal(fuseMatrix.totalBurnedFuses, 11);
+  assert.deepEqual(
+    fuseMatrix.rows.map((r) => [r.addr, r.addrBits, r.i1, r.i0, r.imm, r.valid]),
+    [
+      [0, '0000', 0, 0, [1, 1, 0, 0], 1],
+      [1, '0001', 1, 0, [1, 0, 0, 0], 1],
+      [2, '0010', 1, 1, [1, 0, 0, 0], 1],
+      [3, '0011', 0, 0, [1, 1, 1, 1], 1],
+    ]
+  );
+
+  // 5. exportSiliconBlueprint() generates authentic Verilog-2001 HDL and exact BOM (accepts both fuseMatrix.rows & rowMap)
+  const bpFromRows = exportSiliconBlueprint(customChips, {
+    romRows: fuseMatrix.rows,
+    stageTitle: 'STAGE 26: 青空へのカウントダウン',
+  });
+  const bpFromMap = exportSiliconBlueprint(customChips, {
+    romRows: rowMap24,
+    stageTitle: 'STAGE 26: 青空へのカウントダウン',
+  });
+  assert.equal(bpFromRows.verilog, bpFromMap.verilog);
+
+  const { verilog, summaryJa, stats } = bpFromRows;
+  assert.match(verilog, /module sg_nmos_sw/);
+  assert.match(verilog, /module sg_pullup/);
+  assert.match(verilog, /\bnmos\b/);
+  assert.match(verilog, /\bpullup\b/);
+  assert.match(verilog, /module NAND\b/);
+  assert.match(verilog, /module ARK4_SYS\b/);
+  assert.match(verilog, /module ASM_ENC\b/);
+  assert.match(verilog, /module ROM_4W\b/);
+  assert.match(verilog, /module ARK4_PROGRAM_ROM\b/);
+
+  // Balanced module / endmodule count
+  const modOpens = (verilog.match(/^\s*module\s+[A-Za-z_]/gm) || []).length;
+  const modCloses = (verilog.match(/^\s*endmodule\b/gm) || []).length;
+  assert.equal(modOpens, modCloses);
+  assert.ok(modOpens >= 25, `Expected >=25 Verilog modules (2 primitives + 23 chips + ROM), got ${modOpens}`);
+
+  // Exact BOM stats
+  assert.equal(stats.cpuNandCount, 480);
+  assert.equal(stats.cpuSwCount, 960);
+  assert.equal(stats.cpuPullCount, 480);
+  assert.equal(stats.encNandCount, 12);
+  assert.equal(stats.encSwCount, 24);
+  assert.equal(stats.encPullCount, 12);
+  assert.ok(stats.romNandCount > 0);
+  assert.equal(stats.romSwCount, stats.romNandCount * 2);
+  assert.equal(stats.romPullCount, stats.romNandCount);
+  assert.equal(stats.totalNandCount, stats.cpuNandCount + stats.encNandCount + stats.romNandCount);
+  assert.equal(stats.totalSwCount, stats.cpuSwCount + stats.encSwCount + stats.romSwCount);
+  assert.equal(stats.totalPullCount, stats.cpuPullCount + stats.encPullCount + stats.romPullCount);
+  assert.ok(stats.moduleCount >= 24);
+  assert.ok(summaryJa.includes(String(stats.totalSwCount)));
+  assert.ok(summaryJa.includes(String(stats.totalPullCount)));
 });
