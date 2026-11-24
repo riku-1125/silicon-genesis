@@ -57,6 +57,7 @@ export class PrologueOverlay {
     this.btnNext = rootEl.querySelector('#btn-pro-next');
     this.choicesWrap = rootEl.querySelector('#pro-choices');
     this.storyTapArea = rootEl.querySelector('#pro-tap-area');
+    this.progressFill = rootEl.querySelector('#pro-progress-fill');
 
     this.activeSteps = PROLOGUE_STEPS;
     this.activeEndLabel = 'ミッション開始 ▶';
@@ -237,6 +238,23 @@ export class PrologueOverlay {
     this._renderStep(0);
   }
 
+  isStoryOpen() {
+    return (
+      !this.root.classList.contains('hidden') &&
+      !this.storyScreen.classList.contains('hidden')
+    );
+  }
+
+  advanceByKey() {
+    if (!this.isStoryOpen() || this.awaitingChoice) return;
+    this._advance();
+  }
+
+  goBackByKey() {
+    if (!this.isStoryOpen()) return;
+    this._goBack();
+  }
+
   hide() {
     this._stopTimer();
     this.endingCanvas.setScene(null);
@@ -297,9 +315,12 @@ export class PrologueOverlay {
       else if (step.sfx === 'powerup') sound.playPowerUp();
     }
 
-    // Dateline & step counter
+    // Dateline, step counter & visual progress bar
     this.datelineEl.textContent = step.dateline || '';
     this.stepCounter.textContent = `${idx + 1} / ${steps.length}`;
+    if (this.progressFill) {
+      this.progressFill.style.width = `${Math.round(((idx + 1) / Math.max(1, steps.length)) * 100)}%`;
+    }
 
     // Cinematic chapter / ending interstitial banner
     if (this.chapterCard) {

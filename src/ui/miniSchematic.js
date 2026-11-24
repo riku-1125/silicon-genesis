@@ -240,7 +240,7 @@ export function startMiniSchematicLoop(
     if (badgeEl) {
       badgeEl.textContent = step.isLiveBoardStep
         ? `${step.label}`
-        : `⚡ 自動シミュレーション (${idx + 1}/${steps.length})：${step.label}`;
+        : `⚡ 自動シミュレーション (${idx + 1}/${steps.length})：${step.label}${steps.length > 1 ? '  [タップで次へ]' : ''}`;
     }
 
     // 1. Update Input Terminals
@@ -309,11 +309,37 @@ export function startMiniSchematicLoop(
 
   applyStep(0);
   let timer = null;
+  const badgeEl = badgeSelector ? containerEl.querySelector(badgeSelector) : null;
+  let onBadgeClick = null;
+
+  const startCycle = () => {
+    if (timer) clearInterval(timer);
+    if (steps.length > 1) {
+      timer = setInterval(() => {
+        stepIdx = (stepIdx + 1) % steps.length;
+        applyStep(stepIdx);
+      }, 1800);
+    }
+  };
+
   if (steps.length > 1) {
-    timer = setInterval(() => {
-      stepIdx = (stepIdx + 1) % steps.length;
-      applyStep(stepIdx);
-    }, 1600);
+    startCycle();
+    if (badgeEl) {
+      badgeEl.classList.add('is-interactive');
+      badgeEl.setAttribute('role', 'button');
+      badgeEl.setAttribute('tabindex', '0');
+      badgeEl.setAttribute('title', 'タップで次のテストパターンへ切替');
+      onBadgeClick = (e) => {
+        if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.type === 'keydown') e.preventDefault();
+        e.stopPropagation();
+        stepIdx = (stepIdx + 1) % steps.length;
+        applyStep(stepIdx);
+        startCycle();
+      };
+      badgeEl.addEventListener('click', onBadgeClick);
+      badgeEl.addEventListener('keydown', onBadgeClick);
+    }
   }
 
   return {
@@ -322,6 +348,11 @@ export function startMiniSchematicLoop(
       if (timer) {
         clearInterval(timer);
         timer = null;
+      }
+      if (badgeEl && onBadgeClick) {
+        badgeEl.removeEventListener('click', onBadgeClick);
+        badgeEl.removeEventListener('keydown', onBadgeClick);
+        badgeEl.classList.remove('is-interactive');
       }
     },
   };

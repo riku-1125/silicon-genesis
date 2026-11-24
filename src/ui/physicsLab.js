@@ -804,9 +804,9 @@ export class PhysicsLabCanvas {
       }
       if (sim.complete && this.controlBit === 0) {
         ctx.font = 'bold 11px sans-serif';
-        ctx.fillStyle = '#b9a6e8';
+        ctx.fillStyle = '#d3c4fa';
         ctx.textAlign = 'center';
-        ctx.fillText('✖ 橋がないため遮断中（上の「ひねり」をONにしてみよう！）', W / 2, 232);
+        ctx.fillText('✖ 橋がないため遮断中（上の「ひねり」をONにしてみよう！）', W / 2, 272, 440);
       }
     }
 

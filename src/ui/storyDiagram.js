@@ -74,6 +74,16 @@ const GOAL_SPECS = {
       { ins: [['A = 1', 1], ['B = 1', 1], ['CIN = 1', 1]], outs: [['SUM(1の位)=1', 1], ['COUT(次へ)=1', 1]], msg: '② 1 + 1 + くり上がり1 = 3（COUT=1, SUM=1）' },
     ],
   },
+  goal_add4: {
+    boxTitle: '？ 4ビット加算器',
+    boxSub: 'A0..3 + B0..3',
+    accent: '#5ce0a8',
+    steps: [
+      { ins: [['A = 5 (0101)', 1], ['B = 3 (0011)', 1], ['CIN = 0', 0]], outs: [['S = 8 (1000)', 1], ['COUT = 0', 0]], msg: '① 5 + 3 = 8 ▶ 下の位からくり上がりをバトンリレーして4桁計算！' },
+      { ins: [['A = 9 (1001)', 1], ['B = 7 (0111)', 1], ['CIN = 0', 0]], outs: [['S = 0 (0000)', 0], ['COUT = 1 (+16)', 1]], msg: '② 9 + 7 = 16 ▶ 4桁を超えたぶんは COUT=1（16の位）へ！' },
+      { ins: [['A = 6 (0110)', 1], ['B = 5 (0101)', 1], ['CIN = 1', 1]], outs: [['S = 12 (1100)', 1], ['COUT = 0', 0]], msg: '③ 6 + 5 + CIN(1) = 12 ▶ 下位からのくり上がりも一緒に加算！' },
+    ],
+  },
   goal_sr_latch: {
     boxTitle: '？ 記憶する警報灯',
     boxSub: '手を離しても保持',
@@ -488,10 +498,20 @@ export class StoryDiagramPlayer {
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.fillStyle = active ? '#ecfff8' : '#94a9be';
-    ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + w / 2, y + h / 2 + 0.5, w - 4);
+    const lines = String(text ?? '').split('\n');
+    if (lines.length > 1) {
+      const lineGap = Math.min(13, (h - 6) / lines.length);
+      const startY = y + h / 2 - ((lines.length - 1) * lineGap) / 2;
+      lines.forEach((line, idx) => {
+        ctx.font = idx === 0 ? 'bold 9.5px monospace' : 'bold 8.5px monospace';
+        ctx.fillText(line, x + w / 2, startY + idx * lineGap + 0.5, w - 6);
+      });
+    } else {
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(text, x + w / 2, y + h / 2 + 0.5, w - 4);
+    }
     ctx.restore();
   }
 

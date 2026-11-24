@@ -162,6 +162,7 @@ class GlossaryPopoverController {
 
     this.root = root;
     this.cardEl = root.querySelector('.gp-card');
+    this.bodyEl = root.querySelector('.gp-body');
     this.categoryEl = root.querySelector('#gp-category');
     this.backTopBtn = root.querySelector('#gp-back-top');
     this.backBottomBtn = root.querySelector('#gp-back-bottom');
@@ -226,10 +227,16 @@ class GlossaryPopoverController {
     });
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isOpen()) {
-        e.stopPropagation();
+      if (!this.isOpen()) return;
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation();
+        e.preventDefault();
         sound.playSwitch(false);
         this.close();
+      } else if ((e.key === 'ArrowLeft' || e.key === 'Backspace') && this.history.length > 0) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        this.goBack();
       }
     });
 
@@ -566,7 +573,8 @@ class GlossaryPopoverController {
       }
     }
 
-    if (this.cardEl) this.cardEl.scrollTop = 0;
+    if (this.bodyEl) this.bodyEl.scrollTop = 0;
+    else if (this.cardEl) this.cardEl.scrollTop = 0;
   }
 
   close() {

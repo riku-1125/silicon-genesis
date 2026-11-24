@@ -62,6 +62,7 @@ export class WorkbenchCanvas {
     this.armedChipType = null;
     this.pendingPin = null;       // { role: 'src'|'dst', endpoint, x, y }
     this.wireDragPos = null;      // current world pointer while dragging a wire
+    this.hoverPin = null;         // desktop hover halo pin
     this.selectedNodeId = null;
     this.selectedWireId = null;
     this.highlightTestPulse = 0;
@@ -154,11 +155,13 @@ export class WorkbenchCanvas {
   fitToView() {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 20 || rect.height < 20) return;
-    const padX = 6;
-    const padY = 6;
-    const availW = Math.max(40, rect.width - padX * 2);
-    const availH = Math.max(40, rect.height - padY * 2);
     const isLandscape = rect.width > rect.height * 1.25;
+    const isShortLandscape = isLandscape && rect.height < 420;
+    const padX = 6;
+    const padTop = isShortLandscape ? 34 : 6;
+    const padBottom = 6;
+    const availW = Math.max(40, rect.width - padX * 2);
+    const availH = Math.max(40, rect.height - padTop - padBottom);
     const minH = this._getMinBoardH(isLandscape);
 
     let maxNodeRight = BASE_BOARD_W;
@@ -175,7 +178,7 @@ export class WorkbenchCanvas {
       this.boardH = clamp(Math.max(idealH, maxNodeBottom), minH, 900);
       const sy = availH / this.boardH;
       const wideWorldW = sy > 0 ? Math.floor(availW / sy) : BASE_BOARD_W;
-      this.boardW = clamp(Math.max(BASE_BOARD_W, wideWorldW, maxNodeRight), BASE_BOARD_W, 1180);
+      this.boardW = clamp(Math.max(BASE_BOARD_W, wideWorldW, maxNodeRight), BASE_BOARD_W, 1280);
     } else {
       // Portrait phone / tablet: expand boardH vertically so the PCB fills the entire workbench height!
       this.boardW = clamp(Math.max(BASE_BOARD_W, maxNodeRight), BASE_BOARD_W, 1180);
@@ -188,7 +191,7 @@ export class WorkbenchCanvas {
     const sy = availH / this.boardH;
     this.scale = clamp(Math.min(sx, sy), 0.34, 2.4);
     this.offsetX = (rect.width - this.boardW * this.scale) / 2;
-    this.offsetY = (rect.height - this.boardH * this.scale) / 2;
+    this.offsetY = padTop + (availH - this.boardH * this.scale) / 2;
   }
 
   zoomBy(factor) {
@@ -247,10 +250,14 @@ export class WorkbenchCanvas {
     if (type === 'CONST_1' || type === 'CONST_0') return { w: 78, h: 50, pinStep: 24 };
     const maxPins = Math.max(def.inputs.length, def.outputs.length, 1);
     const pinStep = maxPins >= 8 ? 22 : maxPins >= 5 ? 25 : 28;
-    const h = Math.max(56, maxPins * pinStep + 22);
+    const badgePad = def.nandCount > 0 && maxPins >= 3 ? 12 : 0;
+    const h = Math.max(56, maxPins * pinStep + 22 + badgePad);
     const labelLen = Math.max((def.name || type).length, 4);
-    const w = maxPins >= 6 ? 104 : Math.max(84, Math.round(labelLen * 10 + 34));
-    return { w, h, pinStep };
+    const w =
+      maxPins >= 6
+        ? Math.max(114, Math.round(labelLen * 9 + 36))
+        : Math.max(86, Math.round(labelLen * 10 + 34));
+    return { w, h, pinStep, badgePad };
   }
 
   _getRailMetrics(n) {
@@ -258,19 +265,24 @@ export class WorkbenchCanvas {
     const hasGroups = Boolean(
       this.stage?.pinGroups?.inputs?.length || this.stage?.pinGroups?.outputs?.length
     );
+    const isTallPortrait = this.boardH >= 760;
     const topMargin = this.boardH >= 640 ? 96 : this.boardH >= 440 ? 74 : 62;
-    const bottomMargin = this.boardH >= 640 ? 74 : this.boardH >= 440 ? 38 : 26;
+    const bottomMargin = this.boardH >= 640 ? 64 : this.boardH >= 440 ? 38 : 26;
     const avail = Math.max(120, this.boardH - topMargin - bottomMargin);
-    const idealStep = count <= 2 ? 168 : count <= 4 ? 136 : count <= 6 ? 108 : count <= 8 ? 88 : 78;
+    const idealStep = isTallPortrait
+      ? (count <= 2 ? 176 : count <= 4 ? 148 : count <= 6 ? 124 : count <= 8 ? 106 : 94)
+      : (count <= 2 ? 168 : count <= 4 ? 136 : count <= 6 ? 108 : count <= 8 ? 88 : 78);
     const totalSpan = count <= 1 ? 0 : Math.min(avail, (count - 1) * idealStep);
     const step = count <= 1 ? avail : totalSpan / (count - 1);
     const centerY = topMargin + avail / 2;
     const startY = count <= 1 ? centerY : centerY - totalSpan / 2;
 
-    const preferredH = count <= 4 ? 64 : count <= 6 ? 54 : count <= 8 ? 46 : 40;
+    const preferredH = isTallPortrait
+      ? (count <= 4 ? 66 : count <= 6 ? 60 : count <= 8 ? 54 : 50)
+      : (count <= 4 ? 64 : count <= 6 ? 54 : count <= 8 ? 46 : 40);
     const minGap = hasGroups ? 22 : 12;
     const maxSafeH = count <= 1 ? preferredH : Math.max(30, Math.floor(step - minGap));
-    const boxH = clamp(Math.min(preferredH, maxSafeH), 30, 64);
+    const boxH = clamp(Math.min(preferredH, maxSafeH), 30, 66);
 
     return { startY, step, boxH };
   }
@@ -313,7 +325,7 @@ export class WorkbenchCanvas {
     const pins = side === 'in' ? (def?.inputs || []) : (def?.outputs || []);
     const n = pins.length;
     const bodyTop = node.y + 20;
-    const bodyH = Math.max(24, dim.h - 20);
+    const bodyH = Math.max(24, dim.h - 20 - (dim.badgePad || 0));
     const totalH = (n - 1) * dim.pinStep;
     const startY = bodyTop + bodyH / 2 - totalH / 2;
     const y = n <= 1 ? bodyTop + bodyH / 2 : startY + pinIdx * dim.pinStep;
@@ -705,7 +717,22 @@ export class WorkbenchCanvas {
     });
 
     el.addEventListener('pointermove', (e) => {
-      if (!this.pointers.has(e.pointerId)) return;
+      if (!this.pointers.has(e.pointerId)) {
+        // Desktop / mouse / pen hover feedback (zero impact on touch!)
+        if (e.pointerType !== 'touch' && !this.gesture && this.stage && this.circuit) {
+          const pt = this._screenToWorld(e.clientX, e.clientY);
+          const filterRole = this.pendingPin ? (this.pendingPin.role === 'src' ? 'dst' : 'src') : null;
+          const pin = this._hitTestPin(pt.x, pt.y, filterRole);
+          this.hoverPin = pin;
+          if (this.armedChipType) el.style.cursor = 'copy';
+          else if (pin) el.style.cursor = 'crosshair';
+          else if (this._hitTestInputSwitch(pt.x, pt.y) >= 0) el.style.cursor = 'pointer';
+          else if (this._hitTestNode(pt.x, pt.y)) el.style.cursor = 'grab';
+          else if (this._hitTestOutputLamp(pt.x, pt.y) >= 0 || this._hitTestWire(pt.x, pt.y)) el.style.cursor = 'pointer';
+          else el.style.cursor = 'default';
+        }
+        return;
+      }
       this.pointers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
 
       if (!this.gesture) return;
@@ -733,6 +760,7 @@ export class WorkbenchCanvas {
       }
 
       if (this.gesture.kind === 'dragNode') {
+        el.style.cursor = 'grabbing';
         const dx = pt.x - this.gesture.startWX;
         const dy = pt.y - this.gesture.startWY;
         if (Math.hypot(dx, dy) > 4) this.gesture.moved = true;
@@ -756,6 +784,11 @@ export class WorkbenchCanvas {
         this.offsetX = this.gesture.origOffsetX + dx;
         this.offsetY = this.gesture.origOffsetY + dy;
       }
+    });
+
+    el.addEventListener('pointerleave', () => {
+      this.hoverPin = null;
+      if (!this.gesture) el.style.cursor = 'default';
     });
 
     const endPointer = (e) => {
@@ -1471,13 +1504,15 @@ export class WorkbenchCanvas {
     ctx.lineWidth = 2.2;
     ctx.stroke();
 
-    // Rubber-band wire during active drag
+    // Rubber-band wire during active drag (with magnetic snap preview onto compatible pin!)
     if (this.wireDragPos) {
       const from = startPin;
-      const to = this.wireDragPos;
+      const neededRole = startPin.role === 'src' ? 'dst' : 'src';
+      const snapPin = this._hitTestPin(this.wireDragPos.x, this.wireDragPos.y, neededRole, { dropGenerous: true });
+      const to = snapPin ? { x: snapPin.x, y: snapPin.y } : this.wireDragPos;
       const ctrl = clamp(Math.abs(to.x - from.x) * 0.45, 28, 110);
       ctx.beginPath();
-      ctx.setLineDash([6, 5]);
+      ctx.setLineDash(snapPin ? [] : [6, 5]);
       ctx.moveTo(from.x, from.y);
       ctx.bezierCurveTo(
         from.x + (startPin.role === 'src' ? ctrl : -ctrl),
@@ -1487,17 +1522,38 @@ export class WorkbenchCanvas {
         to.x,
         to.y
       );
-      ctx.strokeStyle = '#ffd166';
-      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = snapPin ? '#52e3b6' : '#ffd166';
+      ctx.lineWidth = snapPin ? 3.2 : 2.6;
       ctx.stroke();
       ctx.setLineDash([]);
+
+      if (snapPin) {
+        ctx.beginPath();
+        ctx.arc(snapPin.x, snapPin.y, 13, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(82, 227, 182, 0.22)';
+        ctx.fill();
+        ctx.strokeStyle = '#7ef7cf';
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
 
   _drawWiringTargetHighlights(ctx) {
     const activePin = this.gesture?.kind === 'wire' ? this.gesture.startPin : this.pendingPin;
-    if (!activePin) return;
+    if (!activePin) {
+      if (this.hoverPin && !this.armedChipType) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.hoverPin.x, this.hoverPin.y, 10.5, 0, Math.PI * 2);
+        ctx.strokeStyle = this.hoverPin.role === 'src' ? 'rgba(255, 209, 102, 0.85)' : 'rgba(111, 214, 255, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+      return;
+    }
     const targetRole = activePin.role === 'src' ? 'dst' : 'src';
     const r = 10 + Math.sin(this.time * 7) * 2;
     ctx.save();

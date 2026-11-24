@@ -65,6 +65,8 @@ export class AssemblyIdePanel {
     this.awaitingFinalClock = false;
     this.statusMsg = '';
     this.statusTone = 'info'; // 'info' | 'ok' | 'warn' | 'err'
+    this._clearArmed = false;
+    this._clearArmTimer = null;
   }
 
   _makeIdleState() {
@@ -96,6 +98,7 @@ export class AssemblyIdePanel {
     this.textErrors = [];
     this.statusMsg = '';
     this.statusTone = 'info';
+    this._disarmClear();
 
     this.slots = {};
     const rows = stage?.asmProgramSpec?.rows || [];
@@ -131,8 +134,21 @@ export class AssemblyIdePanel {
     this.awaitingFinalClock = false;
   }
 
+  _disarmClear() {
+    this._clearArmed = false;
+    if (this._clearArmTimer) {
+      clearTimeout(this._clearArmTimer);
+      this._clearArmTimer = null;
+    }
+  }
+
+  _hasAnyInstruction() {
+    return Object.values(this.slots || {}).some(Boolean);
+  }
+
   clearAll() {
     if (!this.stage) return;
+    this._disarmClear();
     for (const k of Object.keys(this.slots)) {
       this.slots[k] = null;
     }
@@ -390,10 +406,7 @@ export class AssemblyIdePanel {
     };
   }
 
-  render() {
-    if (!this.container || !this.stage) return;
-    const spec = this.stage.asmProgramSpec;
-    const rows = spec?.rows || [];
+  _renderHardwarePanelInnerHtml() {
     const st = this.asmState;
     const vm = this._getHardwareBridgeViewModel();
     const { decode, activePart, activeAddr, isStepping, modeLabel, accBits } = vm;
@@ -415,6 +428,136 @@ export class AssemblyIdePanel {
     const opBadgeColor = activePart?.color || '#33465a';
     const decSummary = summarizeDecodeAction(decode, activePart);
     const nandCount = this._hw?.metrics?.nandCount || 0;
+
+    return `
+      <div class="asm-hw-head">
+        <div class="asm-hw-title-wrap">
+          <span class="asm-hw-title">⚡ 自作実機チェーン</span>
+        </div>
+        <div class="asm-hw-controls">
+          <button type="button" class="asm-mini-ctrl" id="btn-asm-reset" title="電源リセット (PC=0, ACC=0)" aria-label="電源リセット">↺</button>
+          <button type="button" class="asm-step-btn ${this.awaitingFinalClock ? 'final-clock' : ''}" id="btn-asm-step">
+            ${this.awaitingFinalClock ? '⚡ 最終開門CLK' : '⚡ 1拍実行(CLK)'}
+          </button>
+        </div>
+      </div>
+
+      <div class="asm-hw-chain" aria-label="自作ハードウェア内部回路インスペクタ">
+        <button type="button" class="asm-inspect-btn" data-inspect-chip="ASM_ENC" title="自作 命令キーエンコーダ (ASM_ENC) の内部回路を見る">🔍 ENC</button>
+        <span class="asm-chain-arrow" aria-hidden="true">▸</span>
+        <button type="button" class="asm-inspect-btn" data-inspect-chip="ROM_4W" title="自作 配線ROM (ROM_4W) の内部回路を見る">🔍 ROM</button>
+        <span class="asm-chain-arrow" aria-hidden="true">▸</span>
+        <button type="button" class="asm-inspect-btn cpu" id="btn-asm-inspect" data-inspect-chip="ARK4_SYS" title="自作 ノイマン型計算機 (ARK4_SYS) の内部回路を見る">🔍 CPU${nandCount > 0 ? ` (${nandCount}N)` : ''}</button>
+      </div>
+
+      <!-- PHYSICAL BRIDGE: KEY -> ASM_ENC -> ROM -> 6 ELECTRIC SWITCH PINS -->
+      <div class="asm-bus-bridge">
+        <div class="asm-bus-source">
+          <span class="asm-bus-mode">${escapeHtml(modeLabel)}</span>
+          <span class="asm-bus-inst" style="background:${opBadgeColor}">${activeAddr}番: ${escapeHtml(opNameDisp)}</span>
+          <span class="asm-bus-arrow">▶ 6本電線へ</span>
+        </div>
+        <div class="asm-bus-pins-row">
+          <div class="asm-pin-group">
+            <span class="asm-pin-grp-title">命令</span>
+            <div class="asm-pin-cells">
+              ${pinBit('I1', decode.i1, 'op-pin')}
+              ${pinBit('I0', decode.i0, 'op-pin')}
+              ${decode.ret ? `<span class="asm-pin on ret-pin"><span class="asm-pin-lbl">RET</span><span class="asm-pin-val">1</span></span>` : ''}
+            </div>
+          </div>
+          <div class="asm-pin-group">
+            <span class="asm-pin-grp-title">IMM(${activePart ? activePart.val : 0})</span>
+            <div class="asm-pin-cells">
+              ${pinBit('3', decode.imm[3], 'imm-pin')}
+              ${pinBit('2', decode.imm[2], 'imm-pin')}
+              ${pinBit('1', decode.imm[1], 'imm-pin')}
+              ${pinBit('0', decode.imm[0], 'imm-pin')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE 4-CHIP SIGNAL MONITOR -->
+      <div class="asm-chips-grid">
+        <div class="asm-chip-card chip-dec">
+          <div class="asm-chip-hdr"><span>INST_DEC</span><span class="asm-chip-sub">翻訳</span></div>
+          <div class="asm-wire-row">
+            ${ctrlBit('OP', decode.opFlag)}
+            ${ctrlBit('SET', decode.setFlag)}
+            ${ctrlBit('WE', decode.weFlag)}
+            ${ctrlBit('BR', decode.brFlag)}
+          </div>
+          <div class="asm-chip-foot">${escapeHtml(decSummary)}</div>
+        </div>
+
+        <div class="asm-chip-card chip-cpu">
+          <div class="asm-chip-hdr"><span>ARK4_CPU</span><span class="asm-chip-sub">ACC</span></div>
+          <div class="asm-chip-big">
+            ${isStepping ? `${st.accBefore} → <strong>${st.acc}</strong>` : `ACC = <strong>${st.acc}</strong>`}
+          </div>
+          <div class="asm-bit-leds" title="2進数 ${accBits}">${accLedRow}</div>
+        </div>
+
+        <div class="asm-chip-card chip-zero ${st.z ? 'active-z' : ''}">
+          <div class="asm-chip-hdr"><span>ZERO_4B</span><span class="asm-chip-sub">ゼロ目</span></div>
+          <div class="asm-chip-big">Z = <strong>${st.z}</strong></div>
+          <div class="asm-chip-foot">${st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ'}</div>
+        </div>
+
+        <div class="asm-chip-card chip-pc ${st.jmpFired ? 'active-jmp' : ''}">
+          <div class="asm-chip-hdr"><span>COND_PC</span><span class="asm-chip-sub">行番号</span></div>
+          <div class="asm-chip-big">
+            ${isStepping ? `${st.pc} → <strong>${st.pcNext}番</strong>` : `PC = <strong>${st.pc}番</strong>`}
+          </div>
+          <div class="asm-chip-foot">${st.retBit ? '🔄 外部帰還' : st.jmpFired ? '⚡ ジャンプ!' : '通常 +1 進行'}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  _bindHardwarePanelEvents(panelEl) {
+    if (!panelEl) return;
+    panelEl.querySelector('#btn-asm-step')?.addEventListener('click', () => this.stepOnce());
+    panelEl.querySelector('#btn-asm-reset')?.addEventListener('click', () => this.resetPc());
+    panelEl.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const chipId = btn.dataset.inspectChip || 'ARK4_SYS';
+        this.cb.onSound?.('switch');
+        if (this.cb.onInspectChip) this.cb.onInspectChip(chipId);
+        else this.cb.onInspectArk4?.();
+      });
+    });
+  }
+
+  _syncHardwarePanelInPlace() {
+    const panelEl = this.container?.querySelector('.asm-hw-panel');
+    if (!panelEl) return;
+    panelEl.classList.toggle('awaiting-open', this.awaitingFinalClock);
+    panelEl.innerHTML = this._renderHardwarePanelInnerHtml();
+    this._bindHardwarePanelEvents(panelEl);
+  }
+
+  _detectAddrFromTextareaCaret(textarea) {
+    if (!textarea || !this.stage) return;
+    const pos = textarea.selectionStart ?? 0;
+    const lineIdx = textarea.value.slice(0, pos).split('\n').length - 1;
+    const lineText = (textarea.value.split('\n')[lineIdx] || '').trim();
+    const m = lineText.match(/^(\d+)\s*:/);
+    const rows = this.stage.asmProgramSpec?.rows || [];
+    const candidate = m ? Number(m[1]) : lineIdx;
+    const matchRow = rows.find((r) => r.addr === candidate);
+    if (matchRow && !matchRow.locked) {
+      this.selectedAddr = matchRow.addr;
+    }
+  }
+
+  render() {
+    if (!this.container || !this.stage) return;
+    const spec = this.stage.asmProgramSpec;
+    const rows = spec?.rows || [];
+    const st = this.asmState;
+    const isStepping = st.stepIdx >= 0;
 
     // Build visual code rows or raw text editor
     let editorContentHtml = '';
@@ -439,7 +582,9 @@ export class AssemblyIdePanel {
 
           return `
             <button type="button"
-              class="asm-code-row ${isSelected ? 'selected' : ''} ${isPcNow ? 'pc-active' : ''} ${isAwaitingOpen ? 'awaiting-open' : ''} ${r.locked ? 'locked' : ''}"
+              role="option"
+              aria-selected="${isSelected ? 'true' : 'false'}"
+              class="asm-code-row ${isSelected ? 'selected' : ''} ${isPcNow ? 'pc-active' : ''} ${isAwaitingOpen ? 'awaiting-open' : ''} ${r.locked ? 'locked' : ''} ${!part ? 'is-empty' : ''}"
               data-addr="${r.addr}"
               data-locked="${r.locked ? '1' : '0'}">
               <span class="asm-row-gutter">
@@ -485,84 +630,7 @@ export class AssemblyIdePanel {
       <div class="asm-ide-grid">
         <!-- LEFT / TOP: PHYSICAL ASM_ENC -> ROM -> ARK4_SYS HARDWARE WIRE BRIDGE -->
         <section class="asm-hw-panel ${this.awaitingFinalClock ? 'awaiting-open' : ''}">
-          <div class="asm-hw-head">
-            <div class="asm-hw-title-wrap">
-              <span class="asm-hw-title">⚡ 実機</span>
-              <button type="button" class="asm-inspect-btn" data-inspect-chip="ASM_ENC" title="自作 命令キーエンコーダ (ASM_ENC) の内部回路を見る">🔍ENC</button>
-              <button type="button" class="asm-inspect-btn" data-inspect-chip="ROM_4W" title="自作 配線ROM (ROM_4W) の内部回路を見る">🔍ROM</button>
-              <button type="button" class="asm-inspect-btn" id="btn-asm-inspect" data-inspect-chip="ARK4_SYS" title="自作 ノイマン型計算機 (ARK4_SYS) の内部回路を見る">🔍CPU${nandCount > 0 ? `(${nandCount}N)` : ''}</button>
-            </div>
-            <div class="asm-hw-controls">
-              <button type="button" class="asm-mini-ctrl" id="btn-asm-reset" title="電源リセット (PC=0, ACC=0)">↺</button>
-              <button type="button" class="asm-step-btn ${this.awaitingFinalClock ? 'final-clock' : ''}" id="btn-asm-step">
-                ${this.awaitingFinalClock ? '⚡ 最終開門CLK' : '⚡ 1拍実行(CLK)'}
-              </button>
-            </div>
-          </div>
-
-          <!-- PHYSICAL BRIDGE: KEY -> ASM_ENC -> ROM -> 6 ELECTRIC SWITCH PINS -->
-          <div class="asm-bus-bridge">
-            <div class="asm-bus-source">
-              <span class="asm-bus-mode">${escapeHtml(modeLabel)}</span>
-              <span class="asm-bus-inst" style="background:${opBadgeColor}">${activeAddr}番: ${escapeHtml(opNameDisp)}</span>
-              <span class="asm-bus-arrow">▶ ENC→ROM→6本電線</span>
-            </div>
-            <div class="asm-bus-pins-row">
-              <div class="asm-pin-group">
-                <span class="asm-pin-grp-title">命令</span>
-                <div class="asm-pin-cells">
-                  ${pinBit('I1', decode.i1, 'op-pin')}
-                  ${pinBit('I0', decode.i0, 'op-pin')}
-                  ${decode.ret ? `<span class="asm-pin on ret-pin"><span class="asm-pin-lbl">RET</span><span class="asm-pin-val">1</span></span>` : ''}
-                </div>
-              </div>
-              <div class="asm-pin-group">
-                <span class="asm-pin-grp-title">IMM(${activePart ? activePart.val : 0})</span>
-                <div class="asm-pin-cells">
-                  ${pinBit('3', decode.imm[3], 'imm-pin')}
-                  ${pinBit('2', decode.imm[2], 'imm-pin')}
-                  ${pinBit('1', decode.imm[1], 'imm-pin')}
-                  ${pinBit('0', decode.imm[0], 'imm-pin')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- LIVE 4-CHIP SIGNAL MONITOR -->
-          <div class="asm-chips-grid">
-            <div class="asm-chip-card chip-dec">
-              <div class="asm-chip-hdr"><span>INST_DEC</span><span class="asm-chip-sub">翻訳</span></div>
-              <div class="asm-wire-row">
-                ${ctrlBit('OP', decode.opFlag)}
-                ${ctrlBit('SET', decode.setFlag)}
-                ${ctrlBit('WE', decode.weFlag)}
-                ${ctrlBit('BR', decode.brFlag)}
-              </div>
-              <div class="asm-chip-foot">${escapeHtml(decSummary)}</div>
-            </div>
-
-            <div class="asm-chip-card chip-cpu">
-              <div class="asm-chip-hdr"><span>ARK4_CPU</span><span class="asm-chip-sub">ACC</span></div>
-              <div class="asm-chip-big">
-                ${isStepping ? `${st.accBefore} → <strong>${st.acc}</strong>` : `ACC = <strong>${st.acc}</strong>`}
-              </div>
-              <div class="asm-bit-leds" title="2進数 ${accBits}">${accLedRow}</div>
-            </div>
-
-            <div class="asm-chip-card chip-zero ${st.z ? 'active-z' : ''}">
-              <div class="asm-chip-hdr"><span>ZERO_4B</span><span class="asm-chip-sub">ゼロ目</span></div>
-              <div class="asm-chip-big">Z = <strong>${st.z}</strong></div>
-              <div class="asm-chip-foot">${st.retBit ? '✔ RET接地(Z=1)' : st.z ? '✔ ゼロ検知!' : '非ゼロ'}</div>
-            </div>
-
-            <div class="asm-chip-card chip-pc ${st.jmpFired ? 'active-jmp' : ''}">
-              <div class="asm-chip-hdr"><span>COND_PC</span><span class="asm-chip-sub">行番号</span></div>
-              <div class="asm-chip-big">
-                ${isStepping ? `${st.pc} → <strong>${st.pcNext}番</strong>` : `PC = <strong>${st.pc}番</strong>`}
-              </div>
-              <div class="asm-chip-foot">${st.retBit ? '🔄 外部帰還' : st.jmpFired ? '⚡ ジャンプ!' : '通常 +1 進行'}</div>
-            </div>
-          </div>
+          ${this._renderHardwarePanelInnerHtml()}
         </section>
 
         <!-- RIGHT / BOTTOM: REAL ARK-4 ASSEMBLY CODE EDITOR -->
@@ -574,9 +642,9 @@ export class AssemblyIdePanel {
               <span class="asm-file-range">ROM 0〜${rows.length - 1}番地</span>
             </div>
             <div class="asm-editor-actions">
-              <button type="button" class="asm-mode-btn ${this.editorMode === 'visual' ? 'active' : ''}" data-editor-mode="visual">🧩 行入力</button>
-              <button type="button" class="asm-mode-btn ${this.editorMode === 'text' ? 'active' : ''}" data-editor-mode="text">⌨ 直打ち</button>
-              <button type="button" class="asm-clear-btn" id="btn-asm-clear" title="プログラムを全消去">✕</button>
+              <button type="button" class="asm-mode-btn ${this.editorMode === 'visual' ? 'active' : ''}" data-editor-mode="visual" aria-pressed="${this.editorMode === 'visual' ? 'true' : 'false'}">🧩 行入力</button>
+              <button type="button" class="asm-mode-btn ${this.editorMode === 'text' ? 'active' : ''}" data-editor-mode="text" aria-pressed="${this.editorMode === 'text' ? 'true' : 'false'}">⌨ 直打ち</button>
+              <button type="button" class="asm-clear-btn ${this._clearArmed ? 'armed' : ''}" id="btn-asm-clear" title="${this._clearArmed ? 'もう1回押すと全消去' : 'プログラムを全消去'}" aria-label="プログラムを全消去">${this._clearArmed ? '消去?' : '✕'}</button>
             </div>
           </div>
           <div class="asm-goal-strip">🎯 ${escapeHtml(spec?.goalTitle || this.stage.plainGoal)}</div>
@@ -590,25 +658,44 @@ export class AssemblyIdePanel {
   }
 
   _bindContainerEvents() {
-    this.container.querySelector('#btn-asm-step')?.addEventListener('click', () => this.stepOnce());
-    this.container.querySelector('#btn-asm-reset')?.addEventListener('click', () => this.resetPc());
+    this._bindHardwarePanelEvents(this.container.querySelector('.asm-hw-panel'));
+
     this.container.querySelector('#btn-asm-clear')?.addEventListener('click', () => {
+      if (!this._hasAnyInstruction()) {
+        this.statusMsg = '消去する命令はありません（すでに空欄です）';
+        this.statusTone = 'info';
+        this.cb.onSound?.('switch');
+        this.render();
+        return;
+      }
+      if (!this._clearArmed) {
+        this._clearArmed = true;
+        this.statusMsg = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';
+        this.statusTone = 'warn';
+        this.cb.onSound?.('switch');
+        clearTimeout(this._clearArmTimer);
+        this._clearArmTimer = setTimeout(() => {
+          if (this._clearArmed) {
+            this._clearArmed = false;
+            const btn = this.container?.querySelector('#btn-asm-clear');
+            if (btn) {
+              btn.classList.remove('armed');
+              btn.textContent = '✕';
+            }
+          }
+        }, 3200);
+        this.render();
+        return;
+      }
       this.cb.onSound?.('switch');
       this.clearAll();
-    });
-    this.container.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const chipId = btn.dataset.inspectChip || 'ARK4_SYS';
-        this.cb.onSound?.('switch');
-        if (this.cb.onInspectChip) this.cb.onInspectChip(chipId);
-        else this.cb.onInspectArk4?.();
-      });
     });
 
     this.container.querySelectorAll('[data-editor-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const nextMode = btn.dataset.editorMode;
         if (nextMode === this.editorMode) return;
+        this._disarmClear();
         this.cb.onSound?.('switch');
         if (nextMode === 'text') {
           this.rawText = formatProgramText(this.stage, this.slots);
@@ -624,6 +711,7 @@ export class AssemblyIdePanel {
 
     this.container.querySelectorAll('.asm-code-row').forEach((rowBtn) => {
       rowBtn.addEventListener('click', () => {
+        this._disarmClear();
         const addr = Number(rowBtn.dataset.addr);
         const isLocked = rowBtn.dataset.locked === '1';
         if (isLocked) {
@@ -643,8 +731,19 @@ export class AssemblyIdePanel {
 
     const textarea = this.container.querySelector('#asm-raw-textarea');
     if (textarea) {
+      const syncCaretPreview = () => {
+        const prevAddr = this.selectedAddr;
+        this._detectAddrFromTextareaCaret(textarea);
+        if (this.selectedAddr !== prevAddr) {
+          this._syncHardwarePanelInPlace();
+        }
+      };
+      textarea.addEventListener('click', syncCaretPreview);
+      textarea.addEventListener('keyup', syncCaretPreview);
       textarea.addEventListener('input', () => {
+        this._disarmClear();
         this.rawText = textarea.value;
+        this._detectAddrFromTextareaCaret(textarea);
         const assembled = assembleProgramText(this.rawText, this.stage);
         this.textErrors = assembled.errors;
         if (assembled.ok) {
@@ -652,6 +751,8 @@ export class AssemblyIdePanel {
           this._resetExecution();
           this.cb.onSlotsChange?.({ ...this.slots });
           this._notifyLiveState();
+          // Live-update the 6-pin hardware wire bridge without disturbing textarea focus!
+          this._syncHardwarePanelInPlace();
         }
         // Update status banner in place without destroying textarea focus/caret!
         const statusEl = this.container.querySelector('.asm-text-status');
@@ -702,6 +803,7 @@ export class AssemblyIdePanel {
         <button type="button"
           class="asm-op-btn ${active ? 'active' : ''}"
           data-asm-op="${op}"
+          aria-pressed="${active ? 'true' : 'false'}"
           style="--op-color:${def.color}; --op-accent:${def.accent}">
           <span class="asm-op-btn-code">${op}</span>
           <span class="asm-op-btn-meta">${def.bits}·${def.shortJa}</span>
@@ -711,7 +813,7 @@ export class AssemblyIdePanel {
 
     const numPills = Array.from({ length: 16 }, (_, n) => {
       const active = curPart !== null && curVal === n;
-      return `<button type="button" class="asm-num-pill ${active ? 'active' : ''}" data-asm-val="${n}">${n}</button>`;
+      return `<button type="button" class="asm-num-pill ${active ? 'active' : ''}" data-asm-val="${n}" aria-pressed="${active ? 'true' : 'false'}">${n}</button>`;
     }).join('');
 
     this.paletteHost.innerHTML = `

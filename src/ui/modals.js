@@ -109,6 +109,43 @@ export class ModalManager {
     this.backdrop.classList.add('hidden');
   }
 
+  /**
+   * Industrial CRT in-app confirmation modal (replaces jarring native window.confirm()).
+   */
+  openConfirm({
+    title = '確認',
+    message = '',
+    subMessage = '',
+    confirmLabel = '実行する',
+    cancelLabel = 'キャンセル',
+    danger = false,
+    onConfirm = null,
+    onCancel = null,
+  }) {
+    this.open({
+      title,
+      bodyHtml: `
+        <div class="callout ${danger ? 'callout-crimson' : 'callout-amber'}">
+          <div style="font-weight:800;font-size:13.5px;line-height:1.55;">${esc(message)}</div>
+          ${subMessage ? `<div style="margin-top:6px;font-size:12px;opacity:0.88;line-height:1.5;">${esc(subMessage)}</div>` : ''}
+        </div>
+      `,
+      footerHtml: `
+        <button class="btn btn-ghost" id="btn-confirm-cancel">${esc(cancelLabel)}</button>
+        <button class="btn ${danger ? 'btn-danger-solid' : 'btn-amber'}" id="btn-confirm-ok">${esc(confirmLabel)}</button>
+      `,
+    });
+    this.footerEl.querySelector('#btn-confirm-cancel')?.addEventListener('click', () => {
+      sound.playSwitch(false);
+      this.close();
+      onCancel?.();
+    });
+    this.footerEl.querySelector('#btn-confirm-ok')?.addEventListener('click', () => {
+      this.close();
+      onConfirm?.();
+    });
+  }
+
   // ===========================================================================
   // 1. SPEC & TRUTH TABLE MODAL
   // ===========================================================================
@@ -412,6 +449,13 @@ export class ModalManager {
       })
       .join('');
 
+    const diagTip =
+      stage?.kind === 'assembly_program'
+        ? '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、そのステップの実行状態が実機モニタに再現されます。実機パネルの <b>🔍ENC / 🔍ROM / 🔍CPU</b> から内部配線もいつでも調べられます！'
+        : stage?.mode === 'physics'
+          ? '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、その条件のスイッチ状態が実験台に再現されます。枠をタップして材料を入れ替えてみよう！'
+          : '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、そのステップの入力と記憶状態がそのまま作業台に再現されます（赤枠の数字が期待値と異なる出力ビットです）。盤面上のチップを選んで <b>「📖 解説・内部」</b> を開けば、内部配線もそのまま調べられます！';
+
     this.open({
       title: `ハコ診断レポート：${evalResult.passedCount} / ${evalResult.totalCount} 合格`,
       bodyHtml: `
@@ -421,7 +465,7 @@ export class ModalManager {
             : ''
         }
         <div class="callout callout-amber">
-          不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、そのステップの入力と記憶状態がそのまま作業台に再現されます（赤枠の数字が期待値と異なる出力ビットです）。盤面上のチップを選んで <b>「📖 解説・内部」</b> を開けば、内部配線もそのまま調べられます！
+          ${diagTip}
         </div>
         <div class="table-wrap">
           <table class="crt-table">
@@ -494,8 +538,8 @@ export class ModalManager {
           <div class="vcert-chain">砂(MOSFET) → NAND → 加算器 → ラッチ → CPU → ENC＋ROM → アセンブリ → ☀青空</div>
         </div>`;
     } else if (stage.isFinale) {
-      const cpuNand = journeyStats?.ark4NandCount ?? metrics.nandCount ?? 270;
-      const forgedCount = journeyStats?.forgedChipCount ?? 17;
+      const cpuNand = journeyStats?.ark4NandCount ?? metrics.nandCount ?? 240;
+      const forgedCount = journeyStats?.forgedChipCount ?? 18;
       finaleBanner = `
         <div class="victory-cert-card">
           <div class="vcert-eyebrow">★ CHAPTER I COMPLETE // HELLO, WORLD.</div>
@@ -504,7 +548,7 @@ export class ModalManager {
           <div class="vcert-grid">
             <div class="vcert-stat"><span class="vcert-lbl">昇格称号</span><strong>アーク7 主任技師</strong></div>
             <div class="vcert-stat"><span class="vcert-lbl">自作CPU規模</span><strong>${cpuNand} NAND</strong><small>TR換算 ${cpuNand * 2}個</small></div>
-            <div class="vcert-stat"><span class="vcert-lbl">鍛えたチップ</span><strong>${forgedCount} 種</strong><small>全21図鑑連動</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">鍛えたチップ</span><strong>${forgedCount} 種</strong><small>全${MODULE_ENCYCLOPEDIA_IDS.length}図鑑連動</small></div>
           </div>
           <div class="vcert-chain">砂(MOSFET) → NAND → 論理ゲート → 4bit加算器 → 記憶回路 → 🧠ARK-4</div>
         </div>`;
@@ -621,7 +665,7 @@ export class ModalManager {
       const ch2Open = isChapter2Unlocked(save);
       const chapterBannerHtml =
         act.id === 6
-          ? `<div class="map-chapter-banner ${ch2Open ? '' : 'locked'}">
+          ? `<div id="map-ch2-anchor" class="map-chapter-banner ${ch2Open ? '' : 'locked'}">
               <span>${ch2Open ? '☀' : '🔒'} 第二章：青空への帰還（ノイマン型計算機＆アセンブリ編）</span>
               <span class="mono" style="font-size:11px;opacity:0.9;">${ch2Open ? 'STAGE 18〜26' : '第一章クリアで解放'}</span>
             </div>`
@@ -685,68 +729,36 @@ export class ModalManager {
     const ch1Ended = isChapter1Cleared(save);
     const ch2Ended = Boolean(save?.clearedStages?.includes('stage_24'));
     const clearedTotal = save.clearedStages.length;
-
-    const endingReplayHtml =
-      ch1Ended || ch2Ended
-        ? `
-          <div class="map-ending-row">
-            ${
-              ch1Ended
-                ? `<button class="map-stage-btn ending-replay-btn" id="btn-map-end1">
-                    <span class="map-code">ED1</span>
-                    <span class="map-info">
-                      <span class="map-name">🎬 第一章エンディング</span>
-                      <span class="map-sub">"HELLO, WORLD." 文明再起動ストーリーを再生</span>
-                    </span>
-                  </button>`
-                : ''
-            }
-            ${
-              ch2Ended
-                ? `<button class="map-stage-btn ending-replay-btn sky" id="btn-map-end2">
-                    <span class="map-code">ED2</span>
-                    <span class="map-info">
-                      <span class="map-name">☀ 第二章グランドエンディング</span>
-                      <span class="map-sub">42年ぶりの青空への帰還ストーリーを再生</span>
-                    </span>
-                  </button>`
-                : ''
-            }
-          </div>
-        `
-        : '';
+    const progressPct = Math.round((clearedTotal / Math.max(1, STAGES.length)) * 100);
 
     this.open({
       title: `ミッションマップ（進捗 ${clearedTotal} / ${STAGES.length}）`,
       bodyHtml: `
-        <div class="map-sandbox-wrap">
-          <button class="map-stage-btn prologue-replay-btn" id="btn-map-home">
-            <span class="map-code">HOME</span>
-            <span class="map-info">
-              <span class="map-name">🏠 タイトル画面（ホーム）へ戻る</span>
-              <span class="map-sub">第一章・第二章の選択やプロローグ再生へ戻る</span>
-            </span>
-          </button>
+        <div class="map-progress-wrap">
+          <div class="map-progress-meta">
+            <span>復興進捗 <b>${clearedTotal} / ${STAGES.length}</b> ステージ</span>
+            <span class="mono emerald bold">${progressPct}%</span>
+          </div>
+          <div class="map-progress-track"><div class="map-progress-fill" style="width:${progressPct}%"></div></div>
         </div>
-        <div class="map-sandbox-wrap">
-          <button class="map-stage-btn prologue-replay-btn" id="btn-map-prologue">
-            <span class="map-code">PRO</span>
-            <span class="map-info">
-              <span class="map-name">🎬 オープニング物語（プロローグ）</span>
-              <span class="map-sub">2094年・地下シェルター「アーク7」導入ストーリーを再生</span>
-            </span>
+
+        <div class="map-quick-grid">
+          <button type="button" class="map-quick-btn" id="btn-map-home">🏠 タイトル</button>
+          <button type="button" class="map-quick-btn" id="btn-map-prologue">🎬 プロローグ</button>
+          <button type="button" class="map-quick-btn lab ${currentStageId === 'sandbox' ? 'active' : ''} ${!sandboxUnlocked ? 'locked' : ''}" data-stage-id="sandbox" ${!sandboxUnlocked ? 'disabled' : ''}>
+            ${sandboxUnlocked ? '🧪 自由実験室' : '🔒 自由実験室 (01後)'}
           </button>
+          ${ch1Ended ? `<button type="button" class="map-quick-btn ed1" id="btn-map-end1">🎬 第一章ED</button>` : ''}
+          ${ch2Ended ? `<button type="button" class="map-quick-btn ed2" id="btn-map-end2">☀ 第二章ED</button>` : ''}
         </div>
-        ${endingReplayHtml}
-        <div class="map-sandbox-wrap">
-          <button class="map-stage-btn sandbox-btn ${currentStageId === 'sandbox' ? 'active' : ''} ${!sandboxUnlocked ? 'locked' : ''}" data-stage-id="sandbox" ${!sandboxUnlocked ? 'disabled' : ''}>
-            <span class="map-code">LAB</span>
-            <span class="map-info">
-              <span class="map-name">${esc(SANDBOX_STAGE.title)}</span>
-              <span class="map-sub">${sandboxUnlocked ? '自作チップを自由に組んで実験！' : '🔒 STAGE 01 クリアで解放'}</span>
-            </span>
-          </button>
+
+        <div class="map-jump-strip">
+          <button type="button" class="map-jump-pill" id="btn-map-jump-cur">📍 現在のステージへ</button>
+          <button type="button" class="map-jump-pill" id="btn-map-jump-ch1">第一章 (00〜17)</button>
+          <button type="button" class="map-jump-pill ch2" id="btn-map-jump-ch2">☀ 第二章 (18〜26)</button>
         </div>
+
+        <div id="map-ch1-anchor"></div>
         ${actsHtml}
         <div class="danger-zone">
           <button class="btn btn-danger-outline" id="btn-reset-save">セーブデータを初期化</button>
@@ -754,6 +766,27 @@ export class ModalManager {
       `,
       footerHtml: `<button class="btn btn-ghost" data-close-modal>閉じる</button>`,
     });
+
+    this.bodyEl.querySelector('#btn-map-jump-cur')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      this.bodyEl.querySelector('.map-stage-btn.active')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    this.bodyEl.querySelector('#btn-map-jump-ch1')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      this.bodyEl.querySelector('#map-ch1-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    this.bodyEl.querySelector('#btn-map-jump-ch2')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      this.bodyEl.querySelector('#map-ch2-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // Auto-scroll to current active stage when player is deeper in the campaign!
+    const activeStageIdx = STAGES.findIndex((s) => s.id === currentStageId);
+    if (activeStageIdx >= 4) {
+      requestAnimationFrame(() => {
+        this.bodyEl.querySelector('.map-stage-btn.active')?.scrollIntoView({ behavior: 'auto', block: 'center' });
+      });
+    }
 
     this.bodyEl.querySelector('#btn-map-home')?.addEventListener('click', () => {
       this.close();
@@ -784,10 +817,16 @@ export class ModalManager {
     });
 
     this.bodyEl.querySelector('#btn-reset-save')?.addEventListener('click', () => {
-      if (window.confirm('進行状況と自作チップをすべて初期化して最初から始めますか？')) {
-        this.close();
-        onResetSave();
-      }
+      sound.playSwitch(false);
+      this.openConfirm({
+        title: '⚠ セーブデータの初期化',
+        message: '進行状況と自作チップをすべて初期化して最初から始めますか？',
+        subMessage: 'この操作は元に戻せません。プロローグから再スタートします。',
+        confirmLabel: '🗑 初期化する',
+        cancelLabel: 'やめる',
+        danger: true,
+        onConfirm: () => onResetSave(),
+      });
     });
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());
   }
@@ -868,7 +907,8 @@ export class ModalManager {
       expandedCodexIds.add(unlockedHistoryEntries[unlockedHistoryEntries.length - 1].id);
     }
 
-    const renderModalContent = (scrollTargetId = null) => {
+    const renderModalContent = (scrollTargetId = null, { preserveScroll = false } = {}) => {
+      const prevScrollTop = preserveScroll ? this.bodyEl.scrollTop : 0;
       // -----------------------------------------------------------------------
       // 1. Build Hierarchical Module Encyclopedia HTML (Act Pull-Down -> Module Pull-Down)
       // -----------------------------------------------------------------------
@@ -1033,7 +1073,7 @@ export class ModalManager {
                 </button>
                 <div class="codex-item-body">
                   <div class="codex-entry-head">
-                    <span class="codex-act">${esc(term.category)} · ${esc(term.reading || '')}</span>
+                    <span class="codex-act">${esc(term.category)}${term.reading ? ` · ${esc(term.reading)}` : ''}</span>
                     ${detailBadge}
                   </div>
                   ${pinsHtml}
@@ -1260,7 +1300,7 @@ export class ModalManager {
           } else {
             expandedActs.add(actId);
           }
-          renderModalContent();
+          renderModalContent(null, { preserveScroll: true });
         });
       });
 
@@ -1276,7 +1316,7 @@ export class ModalManager {
           } else {
             expandedModules.delete(modId);
           }
-          renderModalContent(willOpen ? modId : null);
+          renderModalContent(willOpen ? modId : null, { preserveScroll: !willOpen });
         });
       });
 
@@ -1292,7 +1332,7 @@ export class ModalManager {
           } else {
             expandedCodexIds.delete(codexId);
           }
-          renderModalContent(willOpen ? codexId : null);
+          renderModalContent(willOpen ? codexId : null, { preserveScroll: !willOpen });
         });
       });
 
@@ -1307,7 +1347,7 @@ export class ModalManager {
             expandedModules.add(m.id);
           }
         }
-        renderModalContent();
+        renderModalContent(null, { preserveScroll: true });
       });
 
       this.bodyEl.querySelector('#btn-codex-toggle-all-hist')?.addEventListener('click', () => {
@@ -1319,7 +1359,7 @@ export class ModalManager {
             expandedCodexIds.add(e.id);
           }
         }
-        renderModalContent();
+        renderModalContent(null, { preserveScroll: true });
       });
 
       // Bind Unified Cross-Tab "◀ ひとつ前の解説へ戻る" button
@@ -1438,8 +1478,10 @@ export class ModalManager {
         });
       });
 
-      // Scroll to target module or CS history card (with golden highlight flash)
-      if (activeTab === 'modules' && scrollTargetId) {
+      // Scroll to target module or CS history card (with golden highlight flash), or preserve scroll!
+      if (preserveScroll && !scrollTargetId) {
+        this.bodyEl.scrollTop = prevScrollTop;
+      } else if (activeTab === 'modules' && scrollTargetId) {
         const card = this.bodyEl.querySelector(`[data-module-id="${scrollTargetId}"]`);
         if (card) {
           card.classList.add('codex-jump-highlight');
@@ -1475,11 +1517,13 @@ export class ModalManager {
     const term = getGlossaryTermForChip(part.id);
     const animKey =
       term?.anim ||
-      (['N_SILICON', 'P_SILICON', 'INSULATOR', 'METAL_GATE'].includes(part.id)
-        ? 'mosfet_build'
-        : ['VCC', 'RESISTOR', 'DRAIN_SW', 'GND'].includes(part.id)
-          ? 'pullup_drain'
-          : null);
+      (['N_SILICON', 'P_SILICON', 'INSULATOR', 'GATE_METAL', 'METAL_GATE'].includes(part.id)
+        ? 'mosfet_bridge'
+        : part.id === 'WIRE'
+          ? 'short_spark'
+          : ['VCC', 'RESISTOR', 'DRAIN_VALVE', 'DRAIN_SW', 'GND'].includes(part.id)
+            ? 'pullup_drain'
+            : null);
 
     const diagramHtml = animKey
       ? `
@@ -1653,7 +1697,7 @@ export class ModalManager {
       `,
       footerHtml: `
         ${onBack ? `<button class="btn btn-amber" id="btn-inspector-back">${esc(backLabel)}</button>` : ''}
-        <button class="btn btn-primary" data-close-modal>作業台（調査状態）へ戻る</button>
+        <button class="btn btn-primary" data-close-modal>${Array.isArray(liveInputs) ? '作業台（調査状態）へ戻る' : '閉じる'}</button>
       `,
     });
 
@@ -1831,6 +1875,7 @@ export class ModalManager {
     });
     sliderVol?.addEventListener('change', () => {
       const status = onTestSound?.();
+      if (chkSound) chkSound.checked = true;
       if (status && statusEl) statusEl.textContent = `音声エンジン: ${status}`;
     });
 
@@ -1840,6 +1885,7 @@ export class ModalManager {
 
     this.bodyEl.querySelector('#btn-sound-test')?.addEventListener('click', () => {
       const status = onTestSound?.();
+      if (chkSound) chkSound.checked = true;
       if (status && statusEl) statusEl.textContent = `音声エンジン: ${status}`;
     });
 
@@ -1854,10 +1900,16 @@ export class ModalManager {
     });
 
     this.bodyEl.querySelector('#btn-set-reset-save')?.addEventListener('click', () => {
-      if (window.confirm('セーブデータと自作チップをすべて消去して、最初から（プロローグから）やり直しますか？')) {
-        this.close();
-        onResetSave?.();
-      }
+      sound.playSwitch(false);
+      this.openConfirm({
+        title: '⚠ セーブデータの完全初期化',
+        message: 'セーブデータと自作チップをすべて消去して、最初から（プロローグから）やり直しますか？',
+        subMessage: 'この操作は取り消せません。',
+        confirmLabel: '🗑 消去して最初から',
+        cancelLabel: 'キャンセル',
+        danger: true,
+        onConfirm: () => onResetSave?.(),
+      });
     });
 
     this.footerEl.querySelector('[data-close-modal]')?.addEventListener('click', () => this.close());

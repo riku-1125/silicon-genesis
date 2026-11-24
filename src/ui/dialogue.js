@@ -45,6 +45,7 @@ export class DialogueController {
     this.stTapHint = theaterEl.querySelector('.st-tap-hint');
     this.btnPrev = theaterEl.querySelector('#btn-st-prev');
     this.btnNext = theaterEl.querySelector('#btn-st-next');
+    this.stProgressFill = theaterEl.querySelector('#st-progress-fill');
 
     this.lines = [];
     this.index = 0;
@@ -65,6 +66,12 @@ export class DialogueController {
     };
     this.btnOpenStory.addEventListener('click', reopen);
     this.strip.addEventListener('click', reopen);
+    this.strip.addEventListener('keydown', (e) => {
+      if (e.target === this.strip && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        reopen(e);
+      }
+    });
 
     // Story theater controls
     this.btnSkip.addEventListener('click', (e) => {
@@ -87,7 +94,7 @@ export class DialogueController {
       this._downY = e.clientY;
     });
     this.theater.addEventListener('click', (e) => {
-      if (e.target.closest('button, .vc-live-canvas')) return;
+      if (e.target.closest('button, .vc-live-wrap')) return;
       if (Math.hypot(e.clientX - this._downX, e.clientY - this._downY) > 12) return;
       this.advance();
     });
@@ -198,7 +205,10 @@ export class DialogueController {
           <div class="vc-title">${vc.title || ''}</div>
           ${
             vc.anim
-              ? `<div class="vc-live-wrap"><canvas class="vc-live-canvas" aria-label="${vc.title || '動く論理図解'}"></canvas></div>`
+              ? `<div class="vc-live-wrap">
+                  <div class="vc-live-hint">⚡ 動く図解（タップで状態切替）</div>
+                  <canvas class="vc-live-canvas" aria-label="${vc.title || '動く論理図解'}"></canvas>
+                </div>`
               : vc.diagram
                 ? `<div class="vc-diagram">${vc.diagram}</div>`
                 : ''
@@ -232,6 +242,9 @@ export class DialogueController {
     this.fullText = line.text;
     if (this.stTextScroll) this.stTextScroll.scrollTop = 0;
     this.stProgress.textContent = `${idx + 1} / ${this.lines.length}`;
+    if (this.stProgressFill) {
+      this.stProgressFill.style.width = `${Math.round(((idx + 1) / Math.max(1, this.lines.length)) * 100)}%`;
+    }
     this.btnNext.textContent = idx < this.lines.length - 1 ? '次へ ▶' : this.endBtnLabel;
 
     this._stopTimer();

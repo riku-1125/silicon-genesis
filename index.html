@@ -57,12 +57,12 @@
       <div id="assembly-ide" class="assembly-ide hidden" aria-label="ARK-4 アセンブリ開発コンソール"></div>
 
       <!-- Floating Workbench Utility Controls (Top-Left) -->
-      <div id="wb-tools-tl" class="wb-tools-tl">
-        <button id="btn-undo" class="wb-mini-btn" title="ひとつ戻す (Ctrl+Z)" disabled>↶</button>
-        <button id="btn-zoom-out" class="wb-mini-btn" title="作業台を縮小（広く見る）">－</button>
-        <button id="btn-reset-view" class="wb-mini-btn" title="表示位置をリセット">⌖</button>
-        <button id="btn-zoom-in" class="wb-mini-btn" title="作業台を拡大">＋</button>
-        <button id="btn-clear-board" class="wb-mini-btn" title="盤面クリア">✕</button>
+      <div id="wb-tools-tl" class="wb-tools-tl" role="toolbar" aria-label="作業台コントロール">
+        <button id="btn-undo" class="wb-mini-btn" title="ひとつ戻す (Ctrl+Z)" aria-label="ひとつ戻す" disabled>↶</button>
+        <button id="btn-zoom-out" class="wb-mini-btn" title="作業台を縮小（広く見る）" aria-label="縮小">－</button>
+        <button id="btn-reset-view" class="wb-mini-btn" title="表示位置をリセット" aria-label="表示リセット">⌖</button>
+        <button id="btn-zoom-in" class="wb-mini-btn" title="作業台を拡大" aria-label="拡大">＋</button>
+        <button id="btn-clear-board" class="wb-mini-btn" title="盤面クリア" aria-label="盤面クリア">✕</button>
       </div>
 
       <!-- Floating Clock Pulse & Quick Next Stage Buttons (Top-Right) -->
@@ -159,6 +159,7 @@
         </div>
 
         <div class="pro-dialogue-panel">
+          <div class="story-progress-track" aria-hidden="true"><div id="pro-progress-fill" class="story-progress-fill"></div></div>
           <div class="pro-speaker-row">
             <div id="pro-portrait-wrap" class="pro-portrait-wrap hidden">
               <img id="pro-portrait" src="./assets/portrait_kagari.jpg" alt="Speaker" />
@@ -198,6 +199,7 @@
       <div id="st-visual-card" class="st-visual-card hidden"></div>
     </div>
     <div id="st-card" class="st-card">
+      <div class="story-progress-track" aria-hidden="true"><div id="st-progress-fill" class="story-progress-fill"></div></div>
       <div class="pro-speaker-row">
         <div class="pro-portrait-wrap">
           <img id="st-portrait" src="./assets/portrait_kagari.jpg" alt="Speaker" />
@@ -240,32 +242,34 @@
         </div>
         <button id="gp-close" class="gp-close" type="button" aria-label="閉じる">✕</button>
       </div>
-      <div id="gp-title" class="gp-title"></div>
-      <div id="gp-reading" class="gp-reading"></div>
-      <div id="gp-pins-wrap" class="gp-pins-wrap hidden"></div>
-      <div id="gp-view-tabs" class="gp-view-tabs hidden" role="tablist" aria-label="表示切替">
-        <button id="gp-tab-diagram" class="gp-view-tab active" type="button" role="tab" aria-selected="true">⚡ 動く仕組み図解</button>
-        <button id="gp-tab-circuit" class="gp-view-tab" type="button" role="tab" aria-selected="false">🔧 自分が作った回路</button>
-      </div>
-      <div id="gp-diagram-wrap" class="vc-live-wrap gp-diagram-wrap hidden">
-        <div class="gp-diagram-hint">⚡ 動くモジュール図解（タップで状態切替）</div>
-        <canvas id="gp-live-canvas" class="vc-live-canvas" aria-label="モジュール動く図解"></canvas>
-      </div>
-      <div id="gp-my-circuit-wrap" class="gp-my-circuit-wrap hidden">
-        <div id="gp-circuit-head" class="gp-circuit-head"></div>
-        <div id="gp-circuit-step-badge" class="inspector-live-step-badge">⚡ 自動稼働デモ中...</div>
-        <div id="gp-circuit-svg-host" class="gp-circuit-svg-host"></div>
-        <div id="gp-circuit-meta" class="gp-circuit-meta"></div>
-        <div id="gp-circuit-subchips" class="gp-circuit-subchips hidden"></div>
-      </div>
-      <p id="gp-summary" class="gp-summary"></p>
-      <div id="gp-analogy-wrap" class="gp-analogy-wrap hidden">
-        <div class="gp-analogy-lbl">💡 たとえるなら</div>
-        <div id="gp-analogy" class="gp-analogy"></div>
-      </div>
-      <div id="gp-related-wrap" class="gp-related-wrap hidden">
-        <div class="gp-related-lbl">関連する用語・モジュール（タップで開く）</div>
-        <div id="gp-related-list" class="gp-related-list"></div>
+      <div class="gp-body">
+        <div id="gp-title" class="gp-title"></div>
+        <div id="gp-reading" class="gp-reading"></div>
+        <div id="gp-pins-wrap" class="gp-pins-wrap hidden"></div>
+        <div id="gp-view-tabs" class="gp-view-tabs hidden" role="tablist" aria-label="表示切替">
+          <button id="gp-tab-diagram" class="gp-view-tab active" type="button" role="tab" aria-selected="true">⚡ 動く仕組み図解</button>
+          <button id="gp-tab-circuit" class="gp-view-tab" type="button" role="tab" aria-selected="false">🔧 自分が作った回路</button>
+        </div>
+        <div id="gp-diagram-wrap" class="vc-live-wrap gp-diagram-wrap hidden">
+          <div class="gp-diagram-hint">⚡ 動くモジュール図解（タップで状態切替）</div>
+          <canvas id="gp-live-canvas" class="vc-live-canvas" aria-label="モジュール動く図解"></canvas>
+        </div>
+        <div id="gp-my-circuit-wrap" class="gp-my-circuit-wrap hidden">
+          <div id="gp-circuit-head" class="gp-circuit-head"></div>
+          <div id="gp-circuit-step-badge" class="inspector-live-step-badge">⚡ 自動稼働デモ中...</div>
+          <div id="gp-circuit-svg-host" class="gp-circuit-svg-host"></div>
+          <div id="gp-circuit-meta" class="gp-circuit-meta"></div>
+          <div id="gp-circuit-subchips" class="gp-circuit-subchips hidden"></div>
+        </div>
+        <p id="gp-summary" class="gp-summary"></p>
+        <div id="gp-analogy-wrap" class="gp-analogy-wrap hidden">
+          <div class="gp-analogy-lbl">💡 たとえるなら</div>
+          <div id="gp-analogy" class="gp-analogy"></div>
+        </div>
+        <div id="gp-related-wrap" class="gp-related-wrap hidden">
+          <div class="gp-related-lbl">関連する用語・モジュール（タップで開く）</div>
+          <div id="gp-related-list" class="gp-related-list"></div>
+        </div>
       </div>
       <div class="gp-footer">
         <button id="gp-back-bottom" class="btn btn-amber gp-back-bottom hidden" type="button">◀ ひとつ戻る</button>

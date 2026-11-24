@@ -141,32 +141,65 @@ export class SceneCanvas {
     ctx.fillStyle = sweepGrad;
     ctx.fillRect(0, sweepY - 10, w, 20);
 
-    // 3. Live Reactive Machinery Telemetry Widget (top-right corner HUD)
+    // 3. Collapsed compact strip (h <= 34): clean single-line status on the right, clear of toggle button!
+    const sceneMeta = SCENES[sceneKey] || SCENES.shelter_hub;
+    const locLabel = this.stage?.incidentBrief?.where?.split('・')[0] || sceneMeta.label;
+
+    if (h <= 34) {
+      // Subtle CRT scanlines
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
+      for (let y = 0; y < h; y += 3) {
+        ctx.fillRect(0, y, w, 1);
+      }
+
+      const statusText = this._getCollapsedStatusText();
+      const pillText = `● ${locLabel}${statusText ? ` ｜ ${statusText}` : ''}`;
+      ctx.font = 'bold 10px monospace';
+      const maxPillW = Math.max(80, w - 118);
+      const pillW = Math.min(maxPillW, ctx.measureText(pillText).width + 14);
+      const px = w - pillW - 6;
+      const py = Math.max(2, Math.floor((h - 18) / 2));
+      ctx.fillStyle = 'rgba(11, 16, 22, 0.86)';
+      ctx.fillRect(px, py, pillW, 18);
+      ctx.strokeStyle = this.unstable
+        ? 'rgba(255, 107, 107, 0.7)'
+        : this.cleared
+          ? 'rgba(82, 227, 182, 0.65)'
+          : 'rgba(235, 162, 68, 0.52)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, pillW - 1, 17);
+      ctx.fillStyle = this.unstable ? '#ff8a8a' : this.cleared ? '#7ef7cf' : '#ffd166';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pillText, px + 7, py + 9.5, pillW - 12);
+      ctx.restore();
+      return;
+    }
+
+    // 4. Live Reactive Machinery Telemetry Widget (top-right corner HUD)
     this._drawWidget(ctx, w, h);
 
-    // 3. Subtle CRT scanlines
+    // 5. Subtle CRT scanlines
     ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
     for (let y = 0; y < h; y += 3) {
       ctx.fillRect(0, y, w, 1);
     }
 
-    // 4. Location tag (top-left, synced to the current mission location!)
-    const sceneMeta = SCENES[sceneKey] || SCENES.shelter_hub;
-    const locLabel = this.stage?.incidentBrief?.where?.split('・')[0] || sceneMeta.label;
+    // 6. Location tag (top-left, synced to the current mission location!)
     ctx.font = 'bold 10px monospace';
     const tagText = `● ${locLabel}`;
-    const tagW = ctx.measureText(tagText).width + 14;
-    ctx.fillStyle = 'rgba(13, 18, 24, 0.78)';
-    ctx.fillRect(8, 7, tagW, 18);
+    const maxTagW = Math.max(68, w - Math.min(184, w * 0.48) - 22);
+    const tagW = Math.min(maxTagW, ctx.measureText(tagText).width + 14);
+    ctx.fillStyle = 'rgba(13, 18, 24, 0.8)';
+    ctx.fillRect(8, 5, tagW, 18);
     ctx.strokeStyle = this.cleared ? 'rgba(82, 227, 182, 0.65)' : 'rgba(235, 162, 68, 0.5)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(8.5, 7.5, tagW - 1, 17);
+    ctx.strokeRect(8.5, 5.5, tagW - 1, 17);
     ctx.fillStyle = this.cleared ? '#52e3b6' : '#f0b159';
-    ctx.fillText(tagText, 14, 19);
+    ctx.fillText(tagText, 14, 17, tagW - 10);
 
-    // 5. Ambient Repaired Facility Log Ticker (shows previously repaired equipment still working!)
+    // 7. Ambient Repaired Facility Log Ticker (shows previously repaired equipment still working!)
     const ambientLog = this._getAmbientFacilityLog();
-    if (ambientLog && h >= 68) {
+    if (ambientLog && h >= 72) {
       ctx.font = 'bold 9.5px -apple-system, BlinkMacSystemFont, monospace';
       const logW = Math.min(w - 130, ctx.measureText(ambientLog).width + 14);
       const lx = w - logW - 8;
@@ -181,6 +214,35 @@ export class SceneCanvas {
     }
 
     ctx.restore();
+  }
+
+  _getCollapsedStatusText() {
+    if (this.unstable) return '⚠ 発振エラー';
+    if (this.stage?.kind === 'assembly_program') {
+      const acc = this._bitsToNum(this.outputs, 0, 4);
+      const pc = this.inputs[0] || 0;
+      return `PC:${pc} ACC:${acc} [${acc.toString(2).padStart(4, '0')}]`;
+    }
+    if (this.stage?.id === 'stage_asm_enc') {
+      const i1 = this.outputs[0] ? 1 : 0;
+      const i0 = this.outputs[1] ? 1 : 0;
+      const key = this.outputs[2] ? 1 : 0;
+      return `I=${i1}${i0} KEY=${key}`;
+    }
+    if (this.stage?.id === 'stage_rom_4w') {
+      const i1 = this.outputs[0] ? 1 : 0;
+      const i0 = this.outputs[1] ? 1 : 0;
+      const imm = [this.outputs[5], this.outputs[4], this.outputs[3], this.outputs[2]]
+        .map((b) => (b ? '1' : '0'))
+        .join('');
+      return `ROM ${i1}${i0}:${imm}`;
+    }
+    if (!this.outputs || this.outputs.length === 0) return '';
+    if (this.outputs.length >= 4) {
+      const val = this._bitsToNum(this.outputs, 0, 4);
+      return `OUT:${val} [${val.toString(2).padStart(4, '0')}]`;
+    }
+    return `OUT:${this.outputs.map((b) => (b ? '1' : '0')).join('')}`;
   }
 
   _getAmbientFacilityLog() {
@@ -204,13 +266,18 @@ export class SceneCanvas {
 
   _drawWidget(ctx, w, h) {
     const widget = this.stage?.widget || 'air_scrubber';
-    const boxW = Math.min(176, w * 0.46);
-    const boxH = Math.min(62, h - 18);
+    const isAssembly = this.stage?.kind === 'assembly_program';
+    const compact = h < 74;
+    const boxW = Math.min(182, Math.max(132, w * 0.46));
+    const by = compact ? 4 : 7;
+    const boxH = compact ? Math.max(30, h - 8) : Math.min(62, h - 18);
     const bx = w - boxW - 8;
-    const by = 7;
+    const hdrY = by + Math.round(boxH * 0.31);
+    const bodyY = by + Math.round(boxH * 0.76);
 
-    // Industrial CRT telemetry frame
-    ctx.fillStyle = 'rgba(11, 16, 22, 0.84)';
+    // Industrial CRT telemetry frame (clipped cleanly so text never bleeds outside!)
+    ctx.save();
+    ctx.fillStyle = 'rgba(11, 16, 22, 0.86)';
     ctx.fillRect(bx, by, boxW, boxH);
     ctx.strokeStyle = this.unstable
       ? '#ff4d4d'
@@ -220,32 +287,72 @@ export class SceneCanvas {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
 
+    ctx.beginPath();
+    ctx.rect(bx + 1, by + 1, boxW - 2, boxH - 2);
+    ctx.clip();
+
     if (this.unstable) {
       ctx.fillStyle = '#ff6b6b';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText('⚠ 発振エラー', bx + 10, by + 26);
-      ctx.font = '10px monospace';
+      ctx.font = `bold ${compact ? 10.5 : 11}px monospace`;
+      ctx.fillText('⚠ 発振エラー', bx + 9, hdrY + 2, boxW - 16);
+      ctx.font = `${compact ? 9 : 10}px monospace`;
       ctx.fillStyle = '#ffaaaa';
-      ctx.fillText('OSCILLATION LOOP', bx + 10, by + 44);
+      ctx.fillText('OSCILLATION LOOP', bx + 9, bodyY + 1, boxW - 16);
+      ctx.restore();
       return;
     }
 
     const out0 = this.outputs[0] ? 1 : 0;
     const in0 = this.inputs[0] ? 1 : 0;
 
+    if (this.stage?.id === 'stage_asm_enc') {
+      const i1 = this.outputs[0] ? 1 : 0;
+      const i0 = this.outputs[1] ? 1 : 0;
+      const key = this.outputs[2] ? 1 : 0;
+      const opNames = ['LDI', 'ADD', 'SUB', 'JZ'];
+      const opLabel = key ? opNames[(i1 << 1) | i0] : 'IDLE';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('ASM_ENC KEY→2BIT', bx + 9, hdrY, boxW - 16);
+      ctx.font = `bold ${compact ? 12 : 13.5}px monospace`;
+      ctx.fillStyle = key ? '#52e3b6' : '#8ea5bc';
+      ctx.fillText(`${opLabel} [${i1}${i0}] K:${key}`, bx + 9, bodyY, boxW - 16);
+      ctx.restore();
+      return;
+    }
+
+    if (this.stage?.id === 'stage_rom_4w') {
+      const a0 = this.inputs[0] ? 1 : 0;
+      const a1 = this.inputs[1] ? 1 : 0;
+      const addr = (a1 << 1) | a0;
+      const i1 = this.outputs[0] ? 1 : 0;
+      const i0 = this.outputs[1] ? 1 : 0;
+      const imm = this._bitsToNum(this.outputs, 2, 4);
+      const opNames = ['LDI', 'ADD', 'SUB', 'JZ'];
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
+      ctx.fillStyle = '#52e3b6';
+      ctx.fillText(`ROM_4W [ADDR ${addr}]`, bx + 9, hdrY, boxW - 16);
+      ctx.font = `bold ${compact ? 12 : 13.5}px monospace`;
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(`${opNames[(i1 << 1) | i0]} ${imm} (${i1}${i0})`, bx + 9, bodyY, boxW - 16);
+      ctx.restore();
+      return;
+    }
+
     if (widget === 'silicon_lab' || widget === 'pullup_lab') {
       const isTr = widget === 'silicon_lab';
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = isTr ? '#ffbe6b' : '#7cd4f5';
-      ctx.fillText(isTr ? 'SILICON MOSFET LAB' : 'PULL-UP VOLTAGE LAB', bx + 10, by + 17);
+      ctx.fillText(isTr ? 'SILICON MOSFET LAB' : 'PULL-UP VOLTAGE LAB', bx + 9, hdrY, boxW - 16);
 
-      ctx.font = 'bold 12px monospace';
+      ctx.font = `bold ${compact ? 11.5 : 12}px monospace`;
       ctx.fillStyle = out0 ? '#52e3b6' : '#8ea5bc';
       if (isTr) {
-        ctx.fillText(`GATE:${in0} → OUT:${out0}`, bx + 10, by + 40);
+        ctx.fillText(`GATE:${in0} → OUT:${out0}`, bx + 9, bodyY, boxW - 16);
       } else {
-        ctx.fillText(`DRAIN:${in0} → ${out0 ? '5.0V(1)' : '0.0V(0)'}`, bx + 10, by + 40);
+        ctx.fillText(`DRAIN:${in0} → ${out0 ? '5.0V(1)' : '0.0V(0)'}`, bx + 9, bodyY, boxW - 16);
       }
+      ctx.restore();
       return;
     }
 
@@ -253,39 +360,41 @@ export class SceneCanvas {
       // Live Emergency Reactor Coolant Valve visualizer!
       const a = this.inputs[0] ? 1 : 0;
       const b = this.inputs[1] ? 1 : 0;
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = out0 ? '#52e3b6' : '#ffb84d';
-      ctx.fillText('REACTOR COOLANT', bx + 10, by + 16);
+      ctx.fillText('REACTOR COOLANT', bx + 9, by + (compact ? 12 : 16), boxW - 16);
 
       // Animated coolant flow pipe when OUT=1
-      const pipeX = bx + 10;
-      const pipeY = by + 24;
-      const pipeW = boxW - 20;
+      const pipeX = bx + 9;
+      const pipeY = by + (compact ? 17 : 23);
+      const pipeW = boxW - 18;
+      const pipeH = compact ? 9 : 12;
       ctx.fillStyle = '#0d1822';
-      ctx.fillRect(pipeX, pipeY, pipeW, 12);
+      ctx.fillRect(pipeX, pipeY, pipeW, pipeH);
       ctx.strokeStyle = out0 ? '#52e3b6' : '#586c80';
-      ctx.strokeRect(pipeX, pipeY, pipeW, 12);
+      ctx.strokeRect(pipeX, pipeY, pipeW, pipeH);
       if (out0) {
         const shift = (this.time * 28) % 16;
         ctx.fillStyle = '#38d9a9';
         for (let fx = pipeX - 16 + shift; fx < pipeX + pipeW; fx += 16) {
           const sx = Math.max(pipeX + 1, fx);
           const ex = Math.min(pipeX + pipeW - 1, fx + 9);
-          if (ex > sx) ctx.fillRect(sx, pipeY + 2, ex - sx, 8);
+          if (ex > sx) ctx.fillRect(sx, pipeY + 2, ex - sx, pipeH - 4);
         }
       }
 
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = out0 ? '#8fffdc' : '#ffd166';
-      ctx.fillText(out0 ? `FLOWING (1) A:${a} B:${b}` : `VALVE SHUT (0)`, bx + 10, by + 51);
+      ctx.fillText(out0 ? `FLOWING (1) A:${a} B:${b}` : `VALVE SHUT (0)`, bx + 9, by + boxH - (compact ? 5 : 9), boxW - 16);
+      ctx.restore();
       return;
     }
 
-    if (widget === 'air_scrubber' || widget === 'alarm_grid' || widget === 'corridor_lamp') {
+    if (!isAssembly && (widget === 'air_scrubber' || widget === 'alarm_grid' || widget === 'corridor_lamp')) {
       // Rotating turbine + live alarm LED
-      const cx = bx + 26;
+      const cx = bx + (compact ? 22 : 26);
       const cy = by + boxH / 2;
-      const r = Math.min(18, boxH * 0.34);
+      const r = Math.min(18, boxH * 0.33);
       ctx.save();
       ctx.translate(cx, cy);
       const speed = this.cleared ? 4.5 : (out0 ? 0.8 : 2.8);
@@ -310,29 +419,31 @@ export class SceneCanvas {
       // Status lamp & label
       const lampOn = out0 === 1;
       const blink = Math.sin(this.time * 8) > 0;
+      const lampX = bx + (compact ? 52 : 60);
+      const lampY = hdrY - 2;
       ctx.fillStyle = lampOn
         ? (widget === 'corridor_lamp' ? '#ffd97d' : (blink ? '#ff5c5c' : '#b83232'))
         : '#2a3744';
       ctx.beginPath();
-      ctx.arc(bx + 62, by + 21, 5.5, 0, Math.PI * 2);
+      ctx.arc(lampX, lampY, compact ? 4.5 : 5.5, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#d7e3ee';
       const title =
         widget === 'air_scrubber' ? 'O2 SCRUBBER' : widget === 'alarm_grid' ? 'SMOKE GRID' : 'STAIR LAMP';
-      ctx.fillText(title, bx + 73, by + 25);
+      ctx.fillText(title, lampX + 9, hdrY + 2, boxW - (lampX - bx) - 14);
 
-      ctx.font = 'bold 11px monospace';
+      ctx.font = `bold ${compact ? 10.5 : 11}px monospace`;
       ctx.fillStyle = lampOn ? '#ffb347' : '#6c8094';
-      ctx.fillText(`IN:${in0} → OUT:${out0}`, bx + 56, by + 46);
-    } else if (widget === 'bulkhead') {
+      ctx.fillText(`IN:${in0} → OUT:${out0}`, bx + (compact ? 48 : 56), bodyY + 1, boxW - 56);
+    } else if (!isAssembly && widget === 'bulkhead') {
       // Steel vault bars sliding open when OUT=1
       const openAmt = out0 ? 1 : 0;
-      const doorX = bx + 10;
-      const doorY = by + 12;
-      const doorW = 46;
-      const doorH = boxH - 24;
+      const doorX = bx + 9;
+      const doorY = by + (compact ? 8 : 11);
+      const doorW = compact ? 38 : 46;
+      const doorH = Math.max(18, boxH - (compact ? 16 : 22));
       ctx.fillStyle = '#1b242d';
       ctx.fillRect(doorX, doorY, doorW, doorH);
       const half = (doorW / 2) * (1 - openAmt * 0.72);
@@ -342,22 +453,23 @@ export class SceneCanvas {
       ctx.strokeStyle = out0 ? '#52e3b6' : '#d98a36';
       ctx.strokeRect(doorX, doorY, doorW, doorH);
 
-      ctx.font = 'bold 10px monospace';
+      const tx = doorX + doorW + 9;
+      ctx.font = `bold ${compact ? 10 : 10.5}px monospace`;
       ctx.fillStyle = out0 ? '#52e3b6' : '#f0b159';
-      ctx.fillText(out0 ? 'UNLOCKED' : 'LOCKED', bx + 65, by + 26);
+      ctx.fillText(out0 ? 'UNLOCKED' : 'LOCKED', tx, hdrY + 2, boxW - (tx - bx) - 6);
       ctx.fillStyle = '#9bb0c4';
-      ctx.fillText(`A=${this.inputs[0] || 0} B=${this.inputs[1] || 0}`, bx + 65, by + 45);
-    } else if (widget === 'ration_counter' || widget === 'ration_terminal' || widget === 'rover_alu') {
+      ctx.fillText(`A=${this.inputs[0] || 0} B=${this.inputs[1] || 0}`, tx, bodyY + 1, boxW - (tx - bx) - 6);
+    } else if (!isAssembly && (widget === 'ration_counter' || widget === 'ration_terminal' || widget === 'rover_alu')) {
       // Live Nixie-style arithmetic equation!
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#8fa8be';
       const header =
         widget === 'rover_alu'
           ? (this.inputs[8] ? 'ALU MODE: SUB (-)' : 'ALU MODE: ADD (+)')
           : 'BINARY ARITHMETIC';
-      ctx.fillText(header, bx + 10, by + 17);
+      ctx.fillText(header, bx + 9, hdrY, boxW - 16);
 
-      ctx.font = 'bold 15px monospace';
+      ctx.font = `bold ${compact ? 13 : 15}px monospace`;
       ctx.fillStyle = '#ffb84d';
       if (this.stage.inputs.length >= 9) {
         const a = this._bitsToNum(this.inputs, 0, 4);
@@ -367,13 +479,13 @@ export class SceneCanvas {
         const c = this.outputs[4] ? 1 : 0;
         if (widget === 'rover_alu') {
           const op = flag ? '-' : '+';
-          ctx.fillText(`${a}${op}${b}=${y}`, bx + 10, by + 40);
-          ctx.font = '10px monospace';
+          ctx.fillText(`${a}${op}${b}=${y}`, bx + 9, bodyY + 1, boxW - 46);
+          ctx.font = 'bold 10px monospace';
           ctx.fillStyle = '#52e3b6';
-          ctx.fillText(`C=${c}`, bx + boxW - 34, by + 40);
+          ctx.fillText(`C=${c}`, bx + boxW - 34, bodyY + 1);
         } else {
           const total = y + c * 16;
-          ctx.fillText(`${a}+${b}${flag ? '+1' : ''}=${total}`, bx + 10, by + 42);
+          ctx.fillText(`${a}+${b}${flag ? '+1' : ''}=${total}`, bx + 9, bodyY + 1, boxW - 16);
         }
       } else {
         const a = this.inputs[0] || 0;
@@ -381,11 +493,11 @@ export class SceneCanvas {
         const cin = this.stage.inputs.length === 3 ? (this.inputs[2] || 0) : null;
         const val = (this.outputs[0] || 0) + (this.outputs[1] || 0) * 2;
         const expr = cin === null ? `${a}+${b} = ${val}` : `${a}+${b}+${cin} = ${val}`;
-        ctx.fillText(expr, bx + 10, by + 42);
+        ctx.fillText(expr, bx + 9, bodyY + 1, boxW - 16);
       }
-    } else if (widget === 'pipe_mux' || widget === 'data_bus' || widget === 'hydroponics') {
+    } else if (!isAssembly && (widget === 'pipe_mux' || widget === 'data_bus' || widget === 'hydroponics')) {
       // Routing / channel indicator blocks
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#6ec3ff';
       const label =
         this.stage?.id === 'stage_20'
@@ -395,40 +507,39 @@ export class SceneCanvas {
             : widget === 'data_bus'
               ? '4-BIT BUS MUX'
               : 'ROUTE SELECT';
-      ctx.fillText(label, bx + 10, by + 17);
+      ctx.fillText(label, bx + 9, hdrY, boxW - 16);
 
       const n = this.outputs.length;
-      const cellW = Math.min(26, (boxW - 24) / Math.max(1, n) - 4);
+      const cellH = compact ? Math.max(14, boxH - 22) : 22;
+      const cellY = by + boxH - cellH - (compact ? 4 : 6);
+      const cellW = Math.min(26, (boxW - 22) / Math.max(1, n) - 4);
       for (let i = 0; i < n; i++) {
         const on = this.outputs[i] === 1;
-        const x = bx + 10 + i * (cellW + 5);
-        const y = by + 26;
+        const x = bx + 9 + i * (cellW + 5);
         ctx.fillStyle = on ? '#52e3b6' : '#1f2b36';
-        ctx.fillRect(x, y, cellW, 22);
+        ctx.fillRect(x, cellY, cellW, cellH);
         ctx.strokeStyle = on ? '#b8ffe8' : '#415568';
-        ctx.strokeRect(x, y, cellW, 22);
+        ctx.strokeRect(x, cellY, cellW, cellH);
         ctx.fillStyle = on ? '#081a14' : '#7f95aa';
-        ctx.font = 'bold 10px monospace';
-        ctx.fillText(`${on ? '1' : '0'}`, x + cellW / 2 - 3, y + 15);
+        ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
+        ctx.fillText(`${on ? '1' : '0'}`, x + cellW / 2 - 3, cellY + cellH * 0.72);
       }
-    } else if (widget === 'seismic_lamp' || widget === 'memory_vault' || widget === 'clock_pulse') {
+    } else if (!isAssembly && (widget === 'seismic_lamp' || widget === 'memory_vault' || widget === 'clock_pulse')) {
       // Live scrolling oscilloscope trace!
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = '#c89bff';
       const traceTitle =
         this.stage?.id === 'stage_18'
           ? 'ZERO FLAG Z (ΔP=0)'
-          : this.stage?.kind === 'assembly_program'
-            ? 'ROM ASM MONITOR'
-            : widget === 'clock_pulse'
-              ? 'CLOCK SYNC Q'
-              : 'MEMORY STATE Q';
-      ctx.fillText(traceTitle, bx + 10, by + 16);
+          : widget === 'clock_pulse'
+            ? 'CLOCK SYNC Q'
+            : 'MEMORY STATE Q';
+      ctx.fillText(traceTitle, bx + 9, by + (compact ? 12 : 16), boxW - 16);
 
-      const gx = bx + 10;
-      const gy = by + 23;
-      const gw = boxW - 20;
-      const gh = boxH - 30;
+      const gx = bx + 9;
+      const gy = by + (compact ? 16 : 23);
+      const gw = boxW - 18;
+      const gh = Math.max(14, boxH - (compact ? 20 : 29));
       ctx.fillStyle = '#0a1017';
       ctx.fillRect(gx, gy, gw, gh);
       ctx.strokeStyle = '#314154';
@@ -439,44 +550,47 @@ export class SceneCanvas {
       ctx.lineWidth = 1.7;
       for (let i = 0; i < this.waveHistory.length; i++) {
         const px = gx + (i / (this.waveHistory.length - 1)) * gw;
-        const py = gy + (this.waveHistory[i] ? 5 : gh - 5);
+        const py = gy + (this.waveHistory[i] ? 3 : gh - 3);
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.stroke();
     } else {
-      // Register / PC / ARK-4 CPU Core Finale HUD!
+      // Register / PC / ARK-4 CPU Core & Assembly Program Finale HUD!
       const val = this._bitsToNum(this.outputs, 0, 4);
       const bin = val.toString(2).padStart(4, '0');
-      ctx.font = 'bold 10px monospace';
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
       ctx.fillStyle = this.cleared ? '#52e3b6' : '#ff9f6b';
       const title =
         this.stage?.isChapter2Finale
           ? (this.cleared ? 'HATCH: BLUE SKY!' : 'ARK4_SYS HATCH ACC')
-          : this.stage?.chapter === 2 && widget === 'ark4_finale'
-            ? (this.cleared ? 'ARK4_SYS READY' : 'ARK4_SYS CPU ACC')
-            : widget === 'ark4_finale'
-              ? (this.cleared ? 'BEACON: HELLO WORLD' : 'ARK-4 CPU ACC')
-              : widget === 'program_counter'
-                ? 'PC ADDRESS'
-                : 'REG_4BIT MEM';
-      ctx.fillText(title, bx + 10, by + 17);
+          : isAssembly
+            ? `ARK4_SYS PC:${this.inputs[0] || 0} ACC`
+            : this.stage?.chapter === 2 && widget === 'ark4_finale'
+              ? (this.cleared ? 'ARK4_SYS READY' : 'ARK4_SYS CPU ACC')
+              : widget === 'ark4_finale'
+                ? (this.cleared ? 'BEACON: HELLO WORLD' : 'ARK-4 CPU ACC')
+                : widget === 'program_counter'
+                  ? 'PC ADDRESS'
+                  : 'REG_4BIT MEM';
+      ctx.fillText(title, bx + 9, hdrY, boxW - 16);
 
-      ctx.font = 'bold 18px monospace';
+      ctx.font = `bold ${compact ? 15 : 18}px monospace`;
       ctx.fillStyle = '#ffd166';
-      ctx.fillText(`${String(val).padStart(2, '0')}`, bx + 12, by + 44);
-      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`${String(val).padStart(2, '0')}`, bx + 10, bodyY + 2);
+      ctx.font = `bold ${compact ? 10.5 : 11}px monospace`;
       ctx.fillStyle = '#7bdff2';
-      ctx.fillText(`[${bin}]`, bx + 52, by + 42);
+      ctx.fillText(`[${bin}]`, bx + (compact ? 42 : 50), bodyY + 1);
 
       // Beacon pulse wave when cleared
       if (this.cleared) {
-        const pulse = (this.time * 24) % 18;
+        const pulse = (this.time * 24) % 16;
         ctx.beginPath();
-        ctx.arc(bx + boxW - 20, by + 36, 4 + pulse * 0.5, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(82, 227, 182, ${Math.max(0, 1 - pulse / 18)})`;
+        ctx.arc(bx + boxW - 18, bodyY - 3, 3.5 + pulse * 0.45, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(82, 227, 182, ${Math.max(0, 1 - pulse / 16)})`;
         ctx.stroke();
       }
     }
+    ctx.restore();
   }
 }

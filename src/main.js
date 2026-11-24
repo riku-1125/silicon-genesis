@@ -404,17 +404,28 @@ class SiliconGenesisApp {
         return;
       }
       if (this.stage.mode === 'physics') {
+        if (!Object.values(this.physicsLab.slots || {}).some(Boolean)) return;
         this.physicsLab.clearAll();
         sound.playDelete();
         return;
       }
       if (this.circuit.nodes.length === 0 && this.circuit.wires.length === 0) return;
-      if (window.confirm('作業台の部品と配線をすべてクリアしますか？（元に戻すこともできます）')) {
-        this._pushUndo();
-        this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs);
-        sound.playDelete();
-        this._afterCircuitEdit();
-      }
+      sound.playSwitch(false);
+      this.modals.openConfirm({
+        title: '盤面クリアの確認',
+        message: '作業台の部品と配線をすべてクリアしますか？',
+        subMessage: 'クリア後も左上の「↶ 戻す」ボタン（または Ctrl+Z）で元に戻せます。',
+        confirmLabel: '✕ すべてクリア',
+        cancelLabel: 'キャンセル',
+        danger: true,
+        onConfirm: () => {
+          this._pushUndo();
+          this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs);
+          sound.playDelete();
+          this._afterCircuitEdit();
+          this.showToast('作業台をクリアしました（↶ で元に戻せます）');
+        },
+      });
     });
 
     this.dom.btnClockPulse.addEventListener('click', () => this.pulseClock());
@@ -452,25 +463,95 @@ class SiliconGenesisApp {
       this.runAnimatedTestSuite();
     });
 
-    // Keyboard shortcuts for desktop players
+    // Keyboard shortcuts & layered Escape/Story navigation for desktop & keyboard players
     window.addEventListener('keydown', (e) => {
-      if (!this.dom.modalBackdrop.classList.contains('hidden')) {
-        if (e.key === 'Escape') this.modals.close();
+      // 1. Glossary Popover is always topmost (prevents Escape from double-closing underlying modal!)
+      if (glossaryPopover.isOpen()) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          sound.playSwitch(false);
+          glossaryPopover.close();
+        } else if (e.key === 'ArrowLeft' && glossaryPopover.history.length > 0) {
+          e.preventDefault();
+          glossaryPopover.goBack();
+        }
         return;
       }
+
+      // 2. Active Modal
+      if (!this.dom.modalBackdrop.classList.contains('hidden')) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          sound.playSwitch(false);
+          this.modals.close();
+        }
+        return;
+      }
+
       const tag = e.target?.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT' || e.target?.isContentEditable) {
         return;
       }
+
+      // 3. Prologue / Cinematic Ending reader navigation
+      if (this.prologue.isStoryOpen()) {
+        if (e.key === 'ArrowRight' || (e.key === ' ' && tag !== 'BUTTON')) {
+          e.preventDefault();
+          this.prologue.advanceByKey();
+        } else if (e.key === 'Enter' && tag !== 'BUTTON') {
+          e.preventDefault();
+          this.prologue.advanceByKey();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.prologue.goBackByKey();
+        }
+        return;
+      }
+
+      // 4. Story Theater reader navigation
+      if (this.dialogue.isOpen()) {
+        if (e.key === 'ArrowRight' || (e.key === ' ' && tag !== 'BUTTON')) {
+          e.preventDefault();
+          this.dialogue.advance();
+        } else if (e.key === 'Enter' && tag !== 'BUTTON') {
+          e.preventDefault();
+          this.dialogue.advance();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.dialogue.goBack();
+        }
+        return;
+      }
+
+      // Ignore workbench shortcuts while Title Screen is open
+      if (!this.dom.prologueOverlay.classList.contains('hidden')) {
+        return;
+      }
+
+      // 5. Circuit Workbench shortcuts
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        this.undo();
+        if (e.shiftKey) this.redo();
+        else this.undo();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        this.redo();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.selection.nodeId) this.deleteSelectedNode();
         else if (this.selection.wireId) this.deleteWire(this.selection.wireId);
       } else if (e.key === 'Escape') {
-        this.workbench.setArmedChip(null);
-        this.workbench.clearSelection();
+        if (this.stage?.mode === 'physics') {
+          this.physicsLab.setArmedPart(null);
+        } else {
+          this.workbench.setArmedChip(null);
+          this.workbench.clearSelection();
+        }
+      } else if (this.stage?.mode !== 'physics' && (e.key === '+' || e.key === '=')) {
+        this.workbench.zoomBy(1.18);
+      } else if (this.stage?.mode !== 'physics' && e.key === '-') {
+        this.workbench.zoomBy(0.84);
+      } else if (this.stage?.mode !== 'physics' && e.key === '0') {
+        this._fitActiveCanvas();
       }
     });
 
@@ -561,6 +642,7 @@ class SiliconGenesisApp {
   _applySceneCollapse(collapsed) {
     this.dom.storySection.classList.toggle('collapsed', Boolean(collapsed));
     this.dom.btnToggleScene.textContent = collapsed ? '▼ 物語を開く' : '▲ 回路を広く';
+    this.dom.btnToggleScene.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
 
   // ===========================================================================
@@ -610,6 +692,7 @@ class SiliconGenesisApp {
 
     // Test button label (reflects Chief Engineer promotion in Chapter 2!)
     this.dom.btnRunTest.disabled = false;
+    this.dom.btnRunTest.classList.remove('final-clock-ready');
     this.dom.btnRunTest.textContent = this._getDefaultRunBtnLabel();
     this.dom.testProgressBar.classList.add('hidden');
 
@@ -886,6 +969,15 @@ class SiliconGenesisApp {
     this.redoStack.push(cloneCircuit(this.circuit));
     this.circuit = this.undoStack.pop();
     sound.playDelete();
+    this.workbench.clearSelection();
+    this._afterCircuitEdit();
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return;
+    this.undoStack.push(cloneCircuit(this.circuit));
+    this.circuit = this.redoStack.pop();
+    sound.playChipPlace();
     this.workbench.clearSelection();
     this._afterCircuitEdit();
   }
@@ -1218,7 +1310,8 @@ class SiliconGenesisApp {
       this.dom.testProgressLabel.textContent =
         '⚡ カウント0達成・4番地到達！ 最終開門クロックを入力せよ！';
       this.dom.btnRunTest.disabled = false;
-      this.dom.btnRunTest.textContent = '⚡ 主任決裁・最終開門クロック送出 (1111)！';
+      this.dom.btnRunTest.classList.add('final-clock-ready');
+      this.dom.btnRunTest.textContent = '⚡ 最終開門CLK送出 (1111)！';
 
       await new Promise((resolve) => {
         this._pendingFinalClockResolve = resolve;
@@ -1228,6 +1321,7 @@ class SiliconGenesisApp {
       if (isAsm) this.assemblyIde.setAwaitingFinalClock(false);
       else this.physicsLab.setAwaitingFinalClock(false);
       this.dom.btnRunTest.disabled = true;
+      this.dom.btnRunTest.classList.remove('final-clock-ready');
       this.dom.testProgressLabel.textContent = `⚡ 最終開門クロック実行: ${finalStep.label}`;
       showStep(finalStep.input[0]);
       sound.playClockPulse();
@@ -1387,7 +1481,7 @@ class SiliconGenesisApp {
       this.save?.bestNandCounts?.stage_17 ??
       chips.ARK4_CORE?.nandCount ??
       (this.stage?.id === 'stage_17' ? latestMetrics?.nandCount : null) ??
-      270;
+      240;
     const ark4SysNandCount =
       chips.ARK4_SYS?.nandCount ??
       this.save?.bestNandCounts?.stage_21 ??
