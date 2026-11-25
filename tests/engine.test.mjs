@@ -1971,7 +1971,7 @@ test('v39 Chapter 3 6-Chapter Continuity: zero stale 16-bit CPU/RAM rebuild text
   for (const relPath of ['index.html', 'sw.js', 'src/main.js', 'src/ui/modals.js', 'src/ui/ark8Ide.js']) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=38|silicon-genesis-v38/.test(src), false, `Leftover v38 cache string in ${relPath}`);
-    assert.equal(/\?v=(?:39|40|41|42)|silicon-genesis-v(?:39|40|41|42)/.test(src), true, `Missing v39+ cache string in ${relPath}`);
+    assert.equal(/\?v=(?:39|40|41|42|43)|silicon-genesis-v(?:39|40|41|42|43)/.test(src), true, `Missing v39+ cache string in ${relPath}`);
   }
 });
 
@@ -2273,8 +2273,8 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.match(swSrc, /portrait_ren\.jpg/);
   assert.match(swSrc, /scene_ark5_station\.jpg/);
-  assert.match(swSrc, /osHwRunner\.js\?v=(?:40|41|42)/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=(?:40|41|42)/);
+  assert.match(swSrc, /osHwRunner\.js\?v=(?:40|41|42|43)/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=(?:40|41|42|43)/);
   for (const relPath of [
     'index.html',
     'sw.js',
@@ -2288,7 +2288,7 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
   ]) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=39|silicon-genesis-v39/.test(src), false, `Leftover v39 cache string in ${relPath}`);
-    assert.equal(/\?v=(?:40|41|42)|silicon-genesis-v(?:40|41|42)/.test(src), true, `Missing v40+ cache string in ${relPath}`);
+    assert.equal(/\?v=(?:40|41|42|43)|silicon-genesis-v(?:40|41|42|43)/.test(src), true, `Missing v40+ cache string in ${relPath}`);
   }
 });
 
@@ -2593,17 +2593,17 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
 
   // 6. index.html, sw.js (silicon-genesis-v41/42, scene_storm_core.jpg, chapter5Stages.js) & ZERO leftover v=40 across codebase
   const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /styles\/main\.css\?v=(?:41|42)/);
-  assert.match(indexHtml, /src\/main\.js\?v=(?:41|42)/);
+  assert.match(indexHtml, /styles\/main\.css\?v=(?:41|42|43)/);
+  assert.match(indexHtml, /src\/main\.js\?v=(?:41|42|43)/);
   assert.match(indexHtml, /id="btn-title-chapter5"/);
   assert.match(indexHtml, /id="btn-title-end5"/);
 
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(swSrc, /silicon-genesis-v(?:41|42)/);
+  assert.match(swSrc, /silicon-genesis-v(?:41|42|43)/);
   assert.match(swSrc, /scene_storm_core\.jpg/);
   assert.match(swSrc, /chapter5Stages\.js/);
-  assert.match(swSrc, /osHwRunner\.js\?v=(?:41|42)/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=(?:41|42)/);
+  assert.match(swSrc, /osHwRunner\.js\?v=(?:41|42|43)/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=(?:41|42|43)/);
 
   const collectFiles = (dirUrl, prefix) => {
     const out = [];
@@ -2808,13 +2808,13 @@ test('v42 Chapter 5 Complete: STACK_ABI, MALLOC_STRDUP & RAM Write-Blame Observa
   assert.match(ideSrc, /os-dual-gutter/);
 
   const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /styles\/main\.css\?v=42/);
-  assert.match(indexHtml, /src\/main\.js\?v=42/);
+  assert.match(indexHtml, /styles\/main\.css\?v=43/);
+  assert.match(indexHtml, /src\/main\.js\?v=43/);
 
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(swSrc, /silicon-genesis-v42/);
-  assert.match(swSrc, /osHwRunner\.js\?v=42/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=42/);
+  assert.match(swSrc, /silicon-genesis-v43/);
+  assert.match(swSrc, /osHwRunner\.js\?v=43/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=43/);
 
   const collectFiles = (dirUrl, prefix) => {
     const out = [];
@@ -2837,9 +2837,9 @@ test('v42 Chapter 5 Complete: STACK_ABI, MALLOC_STRDUP & RAM Write-Blame Observa
   for (const relPath of checkedPaths) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(
-      /\?v=41\b|silicon-genesis-v41\b/.test(src),
+      /\?v=42\b|silicon-genesis-v42\b/.test(src),
       false,
-      `Leftover v41 cache string found in ${relPath}`
+      `Leftover v42 cache string found in ${relPath}`
     );
   }
 });

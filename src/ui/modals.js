@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=42';
-import { CODEX_ENTRIES } from '../data/codex.js?v=42';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=43';
+import { CODEX_ENTRIES } from '../data/codex.js?v=43';
 import {
   ARK4_ISA_TABLE,
   ARK8_ISA_TABLE,
@@ -14,7 +14,7 @@ import {
   stageUsesIsaTable,
   stageUsesArk8IsaTable,
   stageUsesArk8OsIsaTable,
-} from '../data/symbolReference.js?v=42';
+} from '../data/symbolReference.js?v=43';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -23,9 +23,9 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=42';
+} from '../data/glossary.js?v=43';
 import { PRIMITIVE_CHIPS, getChipDef, computeCircuitMetrics, parsePinSpec } from '../engine/circuit.js';
-import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=42';
+import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=43';
 import {
   isStageUnlocked,
   isChapter1Cleared,
@@ -37,11 +37,11 @@ import {
   isChapter4Cleared,
   isChapter5Unlocked,
   isChapter5Cleared,
-} from '../state/storage.js?v=42';
-import { sound } from '../audio/sound.js?v=42';
-import { StoryDiagramGroup } from './storyDiagram.js?v=42';
-import { glossaryPopover } from './glossaryPopover.js?v=42';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=42';
+} from '../state/storage.js?v=43';
+import { sound } from '../audio/sound.js?v=43';
+import { StoryDiagramGroup } from './storyDiagram.js?v=43';
+import { glossaryPopover } from './glossaryPopover.js?v=43';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=43';
 
 function resolveSiliconStats(defOrMetrics, circuit = null, customChips = {}) {
   const calc = circuit ? computeCircuitMetrics(circuit, customChips) : null;

@@ -33,7 +33,7 @@ import {
   getRamWriterAtStep,
   runArk8OsProgram,
   evaluateArk8OsStage,
-} from '../engine/osHwRunner.js?v=42';
+} from '../engine/osHwRunner.js?v=43';
 
 const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと編集可能な命令をクリアします';
 

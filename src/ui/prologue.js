@@ -3,9 +3,9 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=42';
-import { STAGES } from '../data/stages.js?v=42';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=42';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=43';
+import { STAGES } from '../data/stages.js?v=43';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=43';
 import {
   isChapter1Cleared,
   isChapter2Unlocked,
@@ -16,15 +16,15 @@ import {
   isChapter4Cleared,
   isChapter5Unlocked,
   isChapter5Cleared,
-} from '../state/storage.js?v=42';
-import { sound } from '../audio/sound.js?v=42';
+} from '../state/storage.js?v=43';
+import { sound } from '../audio/sound.js?v=43';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=42';
-import { EndingSceneCanvas } from './endingCanvas.js?v=42';
+} from './glossaryPopover.js?v=43';
+import { EndingSceneCanvas } from './endingCanvas.js?v=43';
 
 export class PrologueOverlay {
   constructor(
