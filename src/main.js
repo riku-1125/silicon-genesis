@@ -2,12 +2,12 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=38';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=39';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
   buildChapter3EndingSteps,
-} from './data/endings.js?v=38';
+} from './data/endings.js?v=39';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -31,17 +31,17 @@ import {
   resetSaveData,
   isChapter2Unlocked,
   isChapter3Unlocked,
-} from './state/storage.js?v=38';
-import { sound } from './audio/sound.js?v=38';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=38';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=38';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=38';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=38';
-import { Ark8IdePanel } from './ui/ark8Ide.js?v=38';
-import { DialogueController } from './ui/dialogue.js?v=38';
-import { ModalManager } from './ui/modals.js?v=38';
-import { PrologueOverlay } from './ui/prologue.js?v=38';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=38';
+} from './state/storage.js?v=39';
+import { sound } from './audio/sound.js?v=39';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=39';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=39';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=39';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=39';
+import { Ark8IdePanel } from './ui/ark8Ide.js?v=39';
+import { DialogueController } from './ui/dialogue.js?v=39';
+import { ModalManager } from './ui/modals.js?v=39';
+import { PrologueOverlay } from './ui/prologue.js?v=39';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=39';
 
 class SiliconGenesisApp {
   constructor() {
@@ -1880,7 +1880,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=38', { updateViaCache: 'none' })
+        .register('./sw.js?v=39', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

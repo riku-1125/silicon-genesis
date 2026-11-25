@@ -112,7 +112,7 @@ export const SYMBOL_CATALOG = [
     key: 'PC',
     tokens: ['PC', 'PC0', 'PC1', 'PC2', 'PC3'],
     en: 'Program Counter（プログラムカウンタ）',
-    ja: '「いま何番地の命令を実行しているか（0〜15番地）」を指し示す行番号カウンタ',
+    ja: '「いま何番地の命令を実行しているか（第2章は0〜15番地／第3章以降は0〜255番地）」を指し示す行番号カウンタ',
     category: 'signal',
   },
   {
@@ -126,7 +126,7 @@ export const SYMBOL_CATALOG = [
     key: 'IMM',
     tokens: ['IMM', 'IMM0', 'IMM1', 'IMM2', 'IMM3'],
     en: 'Immediate（即値）',
-    ja: '命令のすぐ横に書かれた「直接使う4ビット数値 (0〜15)」またはジャンプ先番地',
+    ja: '命令のすぐ横に書かれた直接使う数値（第2章は4bit 0〜15／第3章以降は8bit 0〜255）またはジャンプ先・メモリ番地',
     category: 'signal',
   },
   {
@@ -168,7 +168,7 @@ export const SYMBOL_CATALOG = [
     key: 'Z',
     tokens: ['Z'],
     en: 'Zero Flag（ゼロ検知フラグ）',
-    ja: '4ビットの数値がぴったり 0（0000）のときだけ 1 に光る判定信号',
+    ja: '計算結果や入力値がぴったり 0 のときだけ 1 に光る判定信号',
     category: 'signal',
   },
   {

@@ -4,15 +4,15 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=38';
-import { CODEX_ENTRIES } from '../data/codex.js?v=38';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=39';
+import { CODEX_ENTRIES } from '../data/codex.js?v=39';
 import {
   ARK4_ISA_TABLE,
   ARK8_ISA_TABLE,
   getStageSymbolReferences,
   stageUsesIsaTable,
   stageUsesArk8IsaTable,
-} from '../data/symbolReference.js?v=38';
+} from '../data/symbolReference.js?v=39';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -21,9 +21,9 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=38';
+} from '../data/glossary.js?v=39';
 import { PRIMITIVE_CHIPS, getChipDef, computeCircuitMetrics, parsePinSpec } from '../engine/circuit.js';
-import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=38';
+import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=39';
 import {
   isStageUnlocked,
   isChapter1Cleared,
@@ -31,11 +31,11 @@ import {
   isChapter2Cleared,
   isChapter3Unlocked,
   isChapter3Cleared,
-} from '../state/storage.js?v=38';
-import { sound } from '../audio/sound.js?v=38';
-import { StoryDiagramGroup } from './storyDiagram.js?v=38';
-import { glossaryPopover } from './glossaryPopover.js?v=38';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=38';
+} from '../state/storage.js?v=39';
+import { sound } from '../audio/sound.js?v=39';
+import { StoryDiagramGroup } from './storyDiagram.js?v=39';
+import { glossaryPopover } from './glossaryPopover.js?v=39';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=39';
 
 function resolveSiliconStats(defOrMetrics, circuit = null, customChips = {}) {
   const calc = circuit ? computeCircuitMetrics(circuit, customChips) : null;
@@ -615,13 +615,13 @@ export class ModalManager {
         <div class="victory-cert-card horizon">
           <div class="vcert-eyebrow">📡 SILICON GENESIS // CHAPTER III COMPLETE</div>
           <div class="vcert-title">第三章完結 — 記憶の大地と8ビット汎用計算機！！</div>
-          <p class="vcert-desc">1万4千個超の自作MOSFETからなる新世代8ビット計算機 <code>ARK8_SYS</code> と書き換え可能な <code>SRAM_16B</code> 上で、真の汎用ループ乗算（22×11＝242）が完全動作しました！ 次はいよいよ16ビット真ノイマン型とOS『ARK-OS』への道へ！</p>
+          <p class="vcert-desc">1万4千個超の自作MOSFETからなる新世代8ビット計算機 <code>ARK8_SYS</code> と書き換え可能な <code>SRAM_16B</code> 上で、真の汎用ループ乗算（22×11＝242）が完全動作しました！ 次はいよいよ第4章の統一RAM・スタック・MMIO・MMU、第5章のカーネル、第6章のUNIX系OS『ARK-OS』へ（全6章）！</p>
           <div class="vcert-grid">
             <div class="vcert-stat"><span class="vcert-lbl">最終称号</span><strong>ホライズン 総括設計主任</strong></div>
             <div class="vcert-stat"><span class="vcert-lbl">8bit自作機</span><strong>${sysNand.toLocaleString()} NAND</strong><small>MOSFET ${sysSw.toLocaleString()}個 ＋ 抵抗 ${sysPull.toLocaleString()}本</small></div>
             <div class="vcert-stat"><span class="vcert-lbl">復元レコード</span><strong>${clearedCount} / ${STAGES.length}</strong><small>自作チップ ${forgedCount}種</small></div>
           </div>
-          <div class="vcert-chain">砂(MOSFET) → NAND → 4bit → バス束線 → 8bit ALU → 4レジスタ → SRAM → ARK8_SYS → 汎用OS</div>
+          <div class="vcert-chain">砂(MOSFET) → NAND → 4bit → 8bit ALU/SRAM → ARK8_SYS → 統一RAM・MMU → カーネル → ARK-OS</div>
           ${
             onExportSilicon
               ? `<div class="vcert-export-row">

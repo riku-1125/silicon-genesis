@@ -25,7 +25,7 @@ import {
   resetArk8Hardware,
   runArk8Program,
   evaluateArk8Stage,
-} from '../engine/romRunner8.js?v=38';
+} from '../engine/romRunner8.js?v=39';
 
 const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JNZ', 'LOAD', 'STOR', 'ADDI', 'HALT'];
 const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';
@@ -560,7 +560,7 @@ export class Ark8IdePanel {
             <tbody>${rowsHtml}</tbody>
           </table>
         </div>
-        <div class="asm-fuse-legend">● = OR配線焼付(1) ／ · = 未接続(0) ／ 16bit語 = OP[2:0] | RD[1:0] | RS[1:0] | IMM[7:0]</div>
+        <div class="asm-fuse-legend">● = OR配線焼付(1) ／ · = 未接続(0) ／ 16bit語 = OP3(第4章予備0) | OP[2:0] | RD[1:0] | RS[1:0] | IMM[7:0]</div>
       </div>
     `;
   }

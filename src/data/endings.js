@@ -1,5 +1,5 @@
 /**
- * SILICON GENESIS — Cinematic Chapter I & Chapter II Ending Scripts
+ * SILICON GENESIS — Cinematic Chapter I, II & III Ending Scripts
  *
  * Played in the full-screen Visual-Novel Theater (`PrologueOverlay.playSequence`)
  * upon clearing Stage 17 (Chapter I Finale) and Stage 26 (id: stage_24, Chapter II Grand Finale),
@@ -415,7 +415,7 @@ export function buildChapter3EndingSteps(rawStats = {}) {
         {
           label: '「誰がどんなアプリを書いても安全に同時に動く、本物の『OS』まで作り上げます！」',
           replySpeaker: 'kagari',
-          replyText: 'ほうっ……UNIX のような本物のカーネルとマルチタスクOSか！ 素晴らしい野望だ！ 今作った R0〜R3 と物理リセット線 RST、そして16ビット命令の空き枠は、まさにその日のために設計したんだよ！',
+          replyText: 'ほうっ……UNIX のような本物のカーネルとマルチタスクOSか！ 素晴らしい野望だ！ 今作った R0〜R3、8ビット（1バイト＝ASCII文字幅）のデータと 0〜255番地、物理リセット線 RST、そして16ビット命令の上位空き枠は、まさにその日のために設計したんだよ！',
         },
         {
           label: '「画面に文字を映して、242人みんながキーボードで使える道具にしたいです！」',
@@ -458,16 +458,16 @@ export function buildChapter3EndingSteps(rawStats = {}) {
     {
       scene: './assets/scene_horizon_camp.jpg',
       canvasScene: 'fx_hub_awaken',
-      dateline: '2094.12.01 17:08 // 真のノイマン型への扉',
+      dateline: '2094.12.01 17:08 // OS対応PCハードウェア完結への扉',
       mood: 'amber',
       sfx: 'powerup',
       speaker: 'kagari',
-      text: '……ついにその時が来たな、主任！\n「命令」と「データ」を同じ1本の大きな16ビットRAMに載せ、起動用ブートROMから外部プログラムをメモリへ読み込んで走らせる──真の【ストアードプログラム方式（16ビット統一ノイマン型）】へ進化する時だ！',
+      text: '……ついにその時が来たな、主任！ だがな、これまで君が鍛えた ADD_8B・ALU_8B・REGFILE_4・PC_8B・SRAM_16B は、1つも捨てずにそのまま使うんだ！\n1バイト（8ビット）データと 0〜255番地の設計のまま「命令」と「データ」を1本の統一RAMへ同居させ、スタック（SP）・画面/キーボード/ディスク（MMIO）・タイマー割込（IRQ）、さらに ADD_8B と ALU_8B で組む特権保護（K/U ＆ Base/Limit MMU）とシステムコール（SYSCALL）まで──次なる第4章で、OSが動く本物のPCハードウェアを完結させるぞ！',
     },
     {
       scene: './assets/scene_horizon_camp.jpg',
       canvasScene: 'fx_bluesky_breeze',
-      dateline: 'CHAPTER III COMPLETE // ROAD TO ARK-OS',
+      dateline: 'CHAPTER III COMPLETE // ROAD TO ARK-OS（全6章）',
       mood: 'bluesky',
       sfx: 'powerup',
       chapterCard: {
@@ -476,7 +476,7 @@ export function buildChapter3EndingSteps(rawStats = {}) {
         sub: `自作8bit計算機 ARK8_SYS (${s.ark8SysNand} NAND / MOSFET ${s.ark8SysTr}個＋抵抗 ${s.ark8SysPull}本) 完成`,
       },
       speaker: null,
-      text: `バス束線・書き込み可能SRAM・リセット付8bitレジスタ・Z/C/Nフラグ付ALU・4本汎用レジスタ・16バイト主記憶・16ビット拡張命令対応【ARK8_SYS】──すべての部品を砂のMOSFETから1ミリの飛躍もなく組み上げ、242人の地上拠点「ホライズン」に計算の記憶が宿った。\nそして物語は次なる舞台、第4章『汎用計算機とブート（16bit真ノイマン型）』──やがて誕生する自作UNIX系OS『ARK-OS』への道へと続く！`,
+      text: `バス束線・書き込み可能SRAM・リセット付8bitレジスタ・Z/C/Nフラグ付ALU・4本汎用レジスタ・16バイト主記憶・16ビット拡張命令対応【ARK8_SYS】──すべての部品を砂のMOSFETから1ミリの飛躍もなく組み上げ、242人の地上拠点「ホライズン」に計算の記憶が宿った。\nそして全6章の物語は後半戦へ──第3章の8ビット部品を1つも捨てず統一RAM・スタック（SP）・画面/キーボード/ディスクMMIO・タイマー割込（IRQ）・Base/Limit MMUを完成させる第4章『OS対応PCハードウェア完結』、ブートローダ・ヒープ確保（alloc/free）・プロセス別スタック切替マルチタスクを築く第5章『OSカーネル中核』、そして簡易ファイルシステムと対話シェル『arksh』が複数アプリを同時稼働させる第6章『UNIX環境 ARK-OS』へと続く！`,
     },
   ];
 }

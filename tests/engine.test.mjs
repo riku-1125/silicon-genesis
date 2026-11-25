@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { STAGES, getStageById } from '../src/data/stages.js';
 import { CODEX_ENTRIES } from '../src/data/codex.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
@@ -1851,5 +1852,105 @@ test('v38 Chapter 3: Bus Bundles, Writable SRAM, 8-Bit ARK8_SYS (14,806 MOSFETs)
       assert.ok(validSpeakers.has(line.speaker), `Unexpected Ch3 speaker '${line.speaker}' in ${st.id}`);
       assert.ok(!line.text.includes('**') && !line.text.includes('`'), `Raw markdown in ${st.id}: ${line.text}`);
     }
+  }
+});
+
+test('v39 Chapter 3 6-Chapter Continuity: zero stale 16-bit CPU/RAM rebuild text, accurate Ch.4-6 foreshadowing & v39 cache bump', () => {
+  // 1. ZERO stale 16-bit CPU/RAM rebuild or 10-chapter strings across Chapter 3 data & UI files
+  const ch3Files = [
+    'src/data/chapter3Stages.js',
+    'src/data/endings.js',
+    'src/data/codex.js',
+    'src/data/glossary.js',
+    'src/ui/modals.js',
+  ];
+  const forbiddenPatterns = [
+    /16ビット化/,
+    /16ビットRAM/,
+    /16ビット統一ノイマン/,
+    /16bit真ノイマン/,
+    /16ビット真ノイマン/,
+    /10章/,
+    /汎用計算機とブート/,
+  ];
+  for (const relPath of ch3Files) {
+    const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
+    for (const pat of forbiddenPatterns) {
+      assert.equal(pat.test(src), false, `Stale text matching ${pat} found in ${relPath}`);
+    }
+  }
+
+  // 2. Accurate 16-bit instruction-word mentions remain intact
+  const codexSrc = readFileSync(new URL('../src/data/codex.js', import.meta.url), 'utf8');
+  assert.match(codexSrc, /16bit拡張命令|16ビット/);
+
+  // 3. Stage 29 (ADD_8B) & Stage 32 (ALU_8B) & Stage 40 (ARK8_SYS) accurately foreshadow Ch.4-6 reuse
+  const st29Outro = getStageById('stage_29').outroDialogue.map((d) => d.text).join('\n');
+  assert.match(st29Outro, /Base\/Limit MMU/);
+  assert.match(st29Outro, /スタックポインタ/);
+
+  const st32Outro = getStageById('stage_32').outroDialogue.map((d) => d.text).join('\n');
+  assert.match(st32Outro, /Base\/Limit MMU/);
+
+  const st40Outro = getStageById('stage_40').outroDialogue.map((d) => d.text).join('\n');
+  assert.match(st40Outro, /第4章/);
+  assert.match(st40Outro, /第6章/);
+
+  // 4. Chapter 3 Ending asserts full 6-Chapter continuity (Ch.4 Hardware -> Ch.5 Kernel -> Ch.6 UNIX ARK-OS)
+  const ch3Ending = buildChapter3EndingSteps({
+    ark8SysNandCount: 7403,
+    ark8SysSwCount: 14806,
+    ark8SysPullCount: 7403,
+  });
+  const endingCorpus = ch3Ending
+    .flatMap((s) => [s.text, ...(s.choices || []).map((c) => c.replyText)])
+    .join('\n');
+  for (const expectedToken of [
+    '全6章',
+    'ADD_8B',
+    'ALU_8B',
+    'REGFILE_4',
+    'PC_8B',
+    'SRAM_16B',
+    '統一RAM',
+    'スタック',
+    'MMIO',
+    'IRQ',
+    'Base/Limit MMU',
+    'SYSCALL',
+    '第4章',
+    'OS対応PCハードウェア完結',
+    '第5章',
+    'OSカーネル中核',
+    'ブートローダ',
+    'alloc/free',
+    'マルチタスク',
+    '第6章',
+    'ファイルシステム',
+    'arksh',
+    'ARK-OS',
+  ]) {
+    assert.ok(endingCorpus.includes(expectedToken), `Chapter 3 Ending missing 6-chapter continuity token '${expectedToken}'`);
+  }
+  for (const step of ch3Ending) {
+    assert.ok(!step.text.includes('**') && !step.text.includes('`'));
+    assert.equal(tokenizeGlossaryText(step.text).map((t) => t.text).join(''), step.text);
+    for (const c of step.choices || []) {
+      assert.ok(!c.replyText.includes('**') && !c.replyText.includes('`'));
+      assert.equal(tokenizeGlossaryText(c.replyText).map((t) => t.text).join(''), c.replyText);
+    }
+  }
+
+  // 5. Codex entry `ark8_horizon` accurately documents 8-bit UNIX continuity & exact silicon counts
+  const ark8CodexText = CODEX_ENTRIES.ark8_horizon.body.join('\n');
+  for (const token of ['14,806', '7,403', 'UZI', 'FUZIX', '全6章', '第4章', 'Base/Limit MMU', '第5章', '第6章', 'arksh', 'ARK-OS']) {
+    assert.ok(ark8CodexText.includes(token), `CODEX_ENTRIES.ark8_horizon missing '${token}'`);
+  }
+
+  // 6. Cache version consistently bumped to v39 with zero leftover v38 references
+  for (const relPath of ['index.html', 'sw.js', 'src/main.js', 'src/ui/modals.js', 'src/ui/ark8Ide.js']) {
+    const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
+    assert.equal(/\?v=38|silicon-genesis-v38/.test(src), false, `Leftover v38 cache string in ${relPath}`);
+    assert.equal(/\?v=39|silicon-genesis-v39/.test(src), true, `Missing v39 cache string in ${relPath}`);
   }
 });

@@ -1066,7 +1066,7 @@ export const GLOSSARY_TERMS = {
     unlockClearedStage: 'stage_29',
     unlockLabel: 'STAGE 29 クリア',
     summary:
-      '4ビット加算器（ADD_4B）を2個 COUT→CIN で連結し、0〜255（1バイト＝ASCII文字1文字幅）の加算と桁あふれ COUT を行う加算器。',
+      '4ビット加算器（ADD_4B）を2個 COUT→CIN で連結し、0〜255（1バイト＝ASCII文字1文字幅）の加算と桁あふれ COUT を行う加算器。第4章ではスタック計算や Base/Limit MMU の物理番地加算にもそのまま再利用されます。',
     analogy: '4桁のそろばんを2台横に繋いで8桁（0〜255）まで数えられるようにした拡張計算盤。',
     pins: { inputs: ['A[7:0]', 'B[7:0]', 'CIN'], outputs: ['S[7:0]', 'COUT'] },
     anim: 'add_8b',
@@ -1131,7 +1131,7 @@ export const GLOSSARY_TERMS = {
     unlockClearedStage: 'stage_32',
     unlockLabel: 'STAGE 32 クリア',
     summary:
-      '8ビット加減算と同時に、Z（結果が0）・C（キャリー／ボロー）・N（最上位bit7＝負符号）の3フラグを出力する演算心臓。大小比較までハードウェアで判定できます。',
+      '8ビット加減算と同時に、Z（結果が0）・C（キャリー／ボロー）・N（最上位bit7＝負符号）の3フラグを出力する演算心臓。大小比較までハードウェアで判定でき、第4章では Base/Limit MMU の上限チェック回路にもそのまま使われます。',
     analogy: '計算結果だけでなく「0か・桁あふれか・マイナスか」の3つの警告灯も同時に点ける算術ユニット。',
     pins: { inputs: ['A[7:0]', 'B[7:0]', 'SUB'], outputs: ['Y[7:0]', 'Z', 'C', 'N'] },
     anim: 'alu_8b',
@@ -1203,7 +1203,7 @@ export const GLOSSARY_TERMS = {
     unlockClearedStage: 'stage_36',
     unlockLabel: 'STAGE 36 クリア',
     summary:
-      '4つの RAM4_8B バンクを上位2ビット番地で切り替え、0〜15番地の16バイトを読み書きできる階層タイリング主記憶。約4,578 NAND（MOSFET 9,156個）が協調動作します。',
+      '4つの RAM4_8B バンクを上位2ビット番地で切り替え、0〜15番地の16バイトを読み書きできる階層タイリング主記憶。4,578 NAND（MOSFET 9,156個）が協調動作し、第4章では同じ階層構造で命令・データ同居の 256バイト統一RAM へ拡張されます。',
     analogy: '4段ロッカーを4棟並べて「何棟目の何段目か」で16個を管理する大型倉庫。',
     pins: { inputs: ['A[3:0]', 'D[7:0]', 'WE', 'CLK'], outputs: ['Q[7:0]'] },
     anim: 'sram_16b',
@@ -1275,7 +1275,7 @@ export const GLOSSARY_TERMS = {
     unlockClearedStage: 'stage_40',
     unlockLabel: 'STAGE 40 クリア',
     summary:
-      'INST_DEC8・REGFILE_4・ALU_8B・SRAM_16B・PC_8B を1本の8ビットデータバスで統合した新世代計算機。標準 7,403 NAND（実機 MOSFET 14,806個＋抵抗 7,403本）が連動し、将来のUNIX系OS『ARK-OS』へ直結します。',
+      'INST_DEC8・REGFILE_4・ALU_8B・SRAM_16B・PC_8B を8ビットデータバス（1バイト＝ASCII）× 16ビット拡張命令で統合した新世代計算機。標準 7,403 NAND（実機 MOSFET 14,806個＋抵抗 7,403本）が連動し、部品を1つも捨てずに第4章の統一RAM・MMU・割込から第6章のUNIX系OS『ARK-OS』まで直結します。',
     analogy: '4つの作業机と書き換えできる16段の記憶棚を自由自在に操る8ビット・コンピュータ。',
     pins: { inputs: ['OP0..2', 'RD0..1', 'RS0..1', 'IMM[7:0]', 'RST', 'CLK'], outputs: ['QA[7:0]', 'MEM[7:0]', 'PC[7:0]', 'Z', 'HALT'] },
     anim: 'ark8_sys',
