@@ -23,6 +23,7 @@ export function createDefaultSave() {
     chapter2Unlocked: false,
     chapter3Unlocked: false,
     chapter4Unlocked: false,
+    chapter5Unlocked: false,
     seenIntroStages: [],
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
     soundEnabled: true,
@@ -146,6 +147,23 @@ export function isChapter4Unlocked(save) {
 export function isChapter4Cleared(save) {
   const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
   return cleared.includes('stage_54');
+}
+
+/**
+ * Chapter 5 unlocks upon clearing Chapter 4 (STAGE 54) or if any Chapter 5 stage is cleared.
+ */
+export function isChapter5Unlocked(save) {
+  if (isChapter4Cleared(save)) return true;
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.some((id) => (STAGES.find((s) => s.id === id)?.chapter || 1) >= 5);
+}
+
+/**
+ * Returns true once the player has cleared Chapter 5 (STAGE 62 / id: stage_62).
+ */
+export function isChapter5Cleared(save) {
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.includes('stage_62');
 }
 
 /**

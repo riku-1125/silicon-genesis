@@ -120,20 +120,24 @@ export class SceneCanvas {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Drifting atmospheric dust motes / surface embers / northern station CRT motes
+    // 2. Drifting atmospheric dust motes / surface embers / northern station CRT motes / storm core sparks
     const isSurface = sceneKey === 'surface_rover';
     const isArk5Station = sceneKey === 'ark5_station';
+    const isStormCore = sceneKey === 'storm_core';
     for (const m of this.motes) {
-      const mx = ((m.x + this.time * m.vx) % 1 + 1) % 1 * w;
-      const my = ((m.y - this.time * m.vy) % 1 + 1) % 1 * h;
-      const alpha = 0.25 + 0.25 * Math.sin(this.time * 2.4 + m.phase);
+      const speedMult = isStormCore ? 2.2 : 1;
+      const mx = ((m.x + this.time * m.vx * speedMult) % 1 + 1) % 1 * w;
+      const my = ((m.y - this.time * m.vy * speedMult) % 1 + 1) % 1 * h;
+      const alpha = 0.25 + 0.25 * Math.sin(this.time * (isStormCore ? 4.2 : 2.4) + m.phase);
       ctx.fillStyle = this.cleared
         ? `rgba(82, 227, 182, ${alpha})`
-        : isArk5Station
-          ? `rgba(126, 232, 255, ${alpha * 1.15})`
-          : isSurface
-            ? `rgba(255, 168, 76, ${alpha * 1.3})`
-            : `rgba(255, 210, 140, ${alpha})`;
+        : isStormCore
+          ? `rgba(196, 152, 255, ${alpha * 1.25})`
+          : isArk5Station
+            ? `rgba(126, 232, 255, ${alpha * 1.15})`
+            : isSurface
+              ? `rgba(255, 168, 76, ${alpha * 1.3})`
+              : `rgba(255, 210, 140, ${alpha})`;
       ctx.fillRect(mx, my, m.r * 1.6, m.r * 1.6);
     }
 
@@ -232,7 +236,8 @@ export class SceneCanvas {
       const sp = t.sp ?? 0xf0;
       const spHex = sp.toString(16).toUpperCase().padStart(2, '0');
       const crt = String(t.crtText || '').replace(/[\r\n]+/g, ' ').slice(-8);
-      return `OS[${mode}] PC:${pc} SP:${spHex}${crt ? ` "${crt}"` : ''}`;
+      const extraTag = t.hudTag ? ` ${t.hudTag}` : '';
+      return `OS[${mode}]${extraTag} PC:${pc} SP:${spHex}${crt ? ` "${crt}"` : ''}`;
     }
 
     if (this.stage?.kind === 'ark8_program') {
@@ -270,6 +275,8 @@ export class SceneCanvas {
 
   _getAmbientFacilityLog() {
     const n = this.stage?.number ?? 0;
+    if (n >= 59) return '⚡ 磁気嵐防衛ログ: 328名生命維持稼働中・マルチタスク＆暴走隔離カーネル展開中';
+    if (n >= 55) return '✔ 司令室ログ: ARK-5合流(328名)・第5章OSカーネル起動/メモリ/SYSCALL基盤構築中';
     if (n >= 49) return '✔ 司令室ログ: ARK-5北方回線・MMU砂箱＆K/U特権保護プロトコル構築中';
     if (n >= 43) return '✔ 司令室ログ: ARK-5救難符号受信中・統一RAM＆周辺機器バス拡張稼働';
     if (n >= 36) return '✔ 地上ログ: ARK-7(118)+ARK-3(124)=242人 拠点ホライズン稼働中';
@@ -348,10 +355,14 @@ export class SceneCanvas {
       const crtRaw = String(t.crtText || '').replace(/[\r\n]+/g, ' ');
       const crtView = crtRaw.length > 10 ? crtRaw.slice(-10) : crtRaw;
       const cursor = Math.floor(this.time * 2.4) % 2 === 0 ? '▌' : '';
+      const hasFault = t.trapCause === 'MMU_FAULT' || t.trapCause === 'PRIV_FAULT' || (t.faultCount ?? 0) > 0;
+      const headerRight = t.hudTag
+        ? `${t.hudTag} PC:${pc}`
+        : `PC:${pc} SP:${spHex}`;
 
       ctx.font = `bold ${compact ? 9 : 9.5}px monospace`;
-      ctx.fillStyle = isUser ? '#7ee8ff' : '#ffd166';
-      ctx.fillText(`OS[${modeTag}] PC:${pc} SP:${spHex}`, bx + 9, hdrY, boxW - 16);
+      ctx.fillStyle = hasFault ? '#ff9ea6' : isUser ? '#7ee8ff' : '#ffd166';
+      ctx.fillText(`OS[${modeTag}] ${headerRight}`, bx + 9, hdrY, boxW - 16);
 
       ctx.font = `bold ${compact ? 11.5 : 13}px monospace`;
       ctx.fillStyle = crtView ? '#6effc8' : '#58a88b';

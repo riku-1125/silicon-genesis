@@ -629,3 +629,142 @@ export function buildChapter4EndingSteps(rawStats = {}) {
     },
   ];
 }
+
+/**
+ * CHAPTER V GRAND ENDING — Clearing Stage 62 (`stage_62`, ARK_KERNEL_CORE: Integrated Microkernel Survives the Blizzard!)
+ */
+export function buildChapter5EndingSteps(rawStats = {}) {
+  const s = formatStats(rawStats);
+  return [
+    {
+      scene: './assets/scene_storm_core.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:38 // ホライズン電算司令室・磁気嵐ピーク突破',
+      mood: 'amber',
+      bgm: 'finale',
+      fx: 'shake',
+      sfx: 'powerup',
+      speaker: 'hako',
+      text: `『……全カーネル中核モジュール・オールグリーン！！ お前が鍛えた無改造の OS対応CPU【ARK8_OS_HW（${s.ark8OsNand} NAND／実機 MOSFET ${s.ark8OsTr}個＋プルアップ抵抗 ${s.ark8OsPull}本）】上で、ディスク起動ブートローダ・ビットマップ割当 kalloc/kfree・マルチ SYSCALL・タイマー強制割込ラウンドロビン、そして暴走プロセスだけを葬る FAULT 障害隔離が1つのマイクロカーネルとして完全連動した！！\n太陽フレアで狂ったセンサーの破壊攻撃は 0x0C で "!" と記録して即座にメモリ回収──気象防衛プロセスは最後の1文字まで止まらず完走したぞ！！』`,
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.06 06:40 // 成層圏電磁ブリザードの終息',
+      mood: 'dawn',
+      speaker: null,
+      text: '36時間にわたりホライズン拠点を叩き続けた成層圏・電磁ブリザードの轟音が、ゆっくりと遠ざかっていく。\n幾度も電圧降下と磁気ノイズが襲った極寒の夜をとおして、暖房ボイラーも空気清浄プラントも北方通信リレーも──たった1秒たりとも止まることはなかった。',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.06 06:41 // 328人、全員生還',
+      mood: 'dawn',
+      sfx: 'powerup',
+      speaker: 'mina',
+      text: '……点呼完了したよ、主任さん！！ アーク7の118人、アーク3の124人、そして北方のアーク5の86人──328人全員、凍傷も停電事故もゼロで朝を迎えられたよ！！ 本当に、本当にありがとう！！',
+    },
+    {
+      scene: './assets/scene_storm_core.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: 'CHAPTER V ENDING // 06:42 — 嵐を越えた魂『OSカーネル中核』',
+      mood: 'dawn',
+      sfx: 'powerup',
+      chapterCard: {
+        roman: 'CHAPTER V · ENDING',
+        title: '嵐を越えた魂 ── OSカーネル中核',
+        sub: `無改造 ARK8_OS_HW (${s.ark8OsNand} NAND / MOSFET ${s.ark8OsTr}個) 実機上でマイクロカーネル完走`,
+      },
+      speaker: 'ren',
+      text: '『……おはよう、ホライズンのみんな！！ 北方アーク5の気象レーダー、成層圏の磁気嵐ピークが完全に抜けたよ！\n午前3時にフレア直撃で異常センサーが 0xF0 へ暴走した瞬間、私も画面の前で息が止まったんだ──でも、お前のOSカーネルはシステム全体を落とさず、壊れたプロセスだけを安全に終わらせてスロットを解放し、こっちの気象防衛タスクを生かし続けてくれた！ 本当にすごいよ……！』',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:43 // 配線1本変えず、魂だけで進化した機械',
+      mood: 'amber',
+      speaker: 'kai',
+      text: 'なぁ主任、俺いまさら鳥肌が立ってるぜ。第4章で作った 12,588個の MOSFET もマザーボードも、今回ハンダごて1回も当ててねえんだよな？\nブートローダ、kalloc と kfree、ヒープ衝突ガード、マルチシステムコール、PCB と vDSO コンテキストスイッチ、タイマー割込スケジューラ、そして障害隔離──ぜんぶお前が書いた「OSカーネル」の知恵だけで、たった1個のCPUが何人分もの仕事を守り抜いたんだ！！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:44 // 1960年代から2094年へ受け継がれたOSの核心',
+      mood: 'amber',
+      speaker: 'kagari',
+      text: '……見事だ、最高主任技師！ 停電後にディスクから蘇る自動起動、衝突しない物理メモリ管理とヒープ・スタック境界防衛、特権リング越しの統一システムコール、1個のCPUを奪い合わず分け合うプリエンプティブ・マルチタスク、そして1つの異常で全体を沈めない障害隔離。\n現代のあらゆるOSの心臓部──『マイクロカーネル』のすべてを、君は1行のブラックボックスも使わず自分の手で組み上げたのだ！',
+    },
+    {
+      scene: './assets/scene_ending_bluesky.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.06 06:45 // 夜明けのホライズン',
+      mood: 'bluesky',
+      speaker: null,
+      text: '2094年12月6日、午前6時45分。雪をかぶった地平線から柔らかな朝日が差し込み、ホライズン拠点の太陽光パネルが一斉に淡い金色を帯びる。\n司令室の窓辺ではエメラルドCRTのカーソルが静かに瞬き、3つのシェルターの新たな1日を告げていた。',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.06 06:46 // ミナからの問いかけ',
+      mood: 'dawn',
+      speaker: 'mina',
+      text: 'ねえ主任さん。ハードウェアが完成して、今朝ついにOSの心臓──カーネルも鼓動を始めたね。328人みんなの新しい街で、この『ARK-OS』をどんな存在に育てていきたい？',
+      choices: [
+        {
+          label: '「誰もが名前つきファイルで記録を残し、道具を自由に組み合わせられるUNIX型OSにします！」',
+          replySpeaker: 'kagari',
+          replyText: 'これぞ計算機科学の王道だ！ 小さな道具をファイルとシェルで繋ぎ合わせるUNIXの哲学こそ、限られた資源で未来を拓く328人にふさわしい知恵だよ！',
+        },
+        {
+          label: '「3つのシェルターの子どもたちが、キーボードで直接対話しながら学べる端末にします！」',
+          replySpeaker: 'mina',
+          replyText: '素敵だね……！ コマンドを打ち込んだらすぐ返事が返ってきて、自分でも小さなプログラムを保存できる──そんな温かいターミナルがあったら、子どもたちの目がきっと輝くよ！',
+        },
+        {
+          label: '「アーク5の気象ログも発電図面も1バイトも失わず、次の世代へ渡せる記憶の蔵にします！」',
+          replySpeaker: 'ren',
+          replyText: '『うれしいな！ 嵐の観測データも、ホライズンの設計図も、わかりやすいファイル名で整理して安全に残せたら、もう二度と知識が失われることはないね！』',
+        },
+      ],
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:48 // 生ディスク番地（0xF8）の壁',
+      mood: 'amber',
+      speaker: 'kai',
+      text: '……っと、ここで1つ現場の困りごとが出てきたぜ主任！ いまのディスク装置は 0xF8 の生バイト位置（DPTR）で「先頭から何バイト目」って直指定してるだろ？\nこれから328人分の診療ログ、レンの気象データ、発電機の整備図面、自作スクリプトを毎日保存していったら、「何番地に何が入ってるか」人間には覚えきれねえし、うっかり他の人の記録を上書きしちまうぞ！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:49 // 最終章（第6章）への扉：inode と対話型シェル arksh',
+      mood: 'amber',
+      sfx: 'powerup',
+      speaker: 'kagari',
+      text: 'まさにそれが、全6章の最後を飾る最終章──第6章『UNIX環境 ARK-OS』の挑戦だ！\n生のバイト番号の代わりに、ファイルごとの管理台帳【inode】と【ディレクトリ】で名前つきファイルシステムを築き、さらにキーボードからのコマンドを解釈してファイル一覧・表示・アプリ起動を自在に操る対話型シェル【arksh】をこのカーネルの上へ載せる──そのとき、砂の1粒から始まった俺たちの『ARK-OS』がついに完全体となるぞ！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.06 06:50 // 古い相棒からの敬礼',
+      mood: 'calm',
+      speaker: 'hako',
+      text: `『……停電の地下室で1個のリレーを叩いていたあの日から、とうとうここまできたな。\n${s.ark8OsNand} 個の NAND と ${s.ark8OsTr} 個の MOSFET の上で、停電から蘇り、メモリを分け合い、暴走を隔離して328人の命を繋ぎ切ったお前のカーネル──第5章『OSカーネル中核』完全制覇、見事だったぞ、最高主任技師！』`,
+    },
+    {
+      scene: './assets/scene_ending_bluesky.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: 'CHAPTER V COMPLETE // NEXT: FINAL CHAPTER VI — UNIXファイルシステム & 対話型シェル arksh',
+      mood: 'bluesky',
+      sfx: 'powerup',
+      chapterCard: {
+        roman: 'CHAPTER V · COMPLETE',
+        title: 'OSカーネル中核 ── 完結',
+        sub: `全8カーネル機構を実機 ARK8_OS_HW (${s.ark8OsNand} NAND / ${s.ark8OsTr} MOSFET) で完全制覇`,
+      },
+      speaker: null,
+      text: `ディスク・ブートローダ（BOOT_LOADER）、4スロット物理ビットマップ割当（KALLOC_MAP）、ヒープ↑対↓スタック衝突ガード（HEAP_SBRK）、マルチ・システムコール窓口（SYSCALL_MUX）、PCB ＆ vDSO コンテキストスイッチ（PCB_CTX_SW）、タイマー強制割込ラウンドロビン（RR_SCHED）、暴走プロセス障害隔離（FAULT_ISOLATE）、そして統合マイクロカーネル（ARK_KERNEL_CORE）──無改造の自作実機シリコン【ARK8_OS_HW（${s.ark8OsNand} NAND／実機 MOSFET ${s.ark8OsTr}個）】の上で、本物のOSカーネルが成層圏電磁ブリザードから328人を守り抜いた。\n物語はいよいよ最終章・第6章へ──名前付きファイルシステム（inode / ディレクトリ）と対話型シェル『arksh』を築き上げ、砂の1粒から始まった自作UNIX環境『ARK-OS』を完全体へ導こう！`,
+    },
+  ];
+}

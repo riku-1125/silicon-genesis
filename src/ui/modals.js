@@ -4,8 +4,8 @@
  * Campaign Map, CS History Codex, and Custom Chip Internal Schematic Inspector.
  */
 
-import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=40';
-import { CODEX_ENTRIES } from '../data/codex.js?v=40';
+import { ACTS, STAGES, SANDBOX_STAGE } from '../data/stages.js?v=41';
+import { CODEX_ENTRIES } from '../data/codex.js?v=41';
 import {
   ARK4_ISA_TABLE,
   ARK8_ISA_TABLE,
@@ -14,7 +14,7 @@ import {
   stageUsesIsaTable,
   stageUsesArk8IsaTable,
   stageUsesArk8OsIsaTable,
-} from '../data/symbolReference.js?v=40';
+} from '../data/symbolReference.js?v=41';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -23,9 +23,9 @@ import {
   getModulesForCodexId,
   isGlossaryTermUnlocked,
   isModuleEncyclopediaUnlocked,
-} from '../data/glossary.js?v=40';
+} from '../data/glossary.js?v=41';
 import { PRIMITIVE_CHIPS, getChipDef, computeCircuitMetrics, parsePinSpec } from '../engine/circuit.js';
-import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=40';
+import { exportSiliconBlueprint } from '../engine/siliconExport.js?v=41';
 import {
   isStageUnlocked,
   isChapter1Cleared,
@@ -35,11 +35,13 @@ import {
   isChapter3Cleared,
   isChapter4Unlocked,
   isChapter4Cleared,
-} from '../state/storage.js?v=40';
-import { sound } from '../audio/sound.js?v=40';
-import { StoryDiagramGroup } from './storyDiagram.js?v=40';
-import { glossaryPopover } from './glossaryPopover.js?v=40';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=40';
+  isChapter5Unlocked,
+  isChapter5Cleared,
+} from '../state/storage.js?v=41';
+import { sound } from '../audio/sound.js?v=41';
+import { StoryDiagramGroup } from './storyDiagram.js?v=41';
+import { glossaryPopover } from './glossaryPopover.js?v=41';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=41';
 
 function resolveSiliconStats(defOrMetrics, circuit = null, customChips = {}) {
   const calc = circuit ? computeCircuitMetrics(circuit, customChips) : null;
@@ -277,11 +279,18 @@ export class ModalManager {
         <div class="callout-title">🎯 ミッション採点仕様（自作OS対応PC実機 [ARK8_OS_HW] で物理検証）</div>
         <ul style="margin:4px 0 0;padding-left:16px;font-size:12px;line-height:1.6;">
           <li><b>実機マザーボード</b>：<code>ARK8_OS_HW</code>（12,588 MOSFET）＋ <code>MEM_BUS8</code> ＋ <code>MMIO_DEC</code> ＋ <code>TMR_IRQ</code> ＋ <code>MMU_8B</code> ＋ 256B統一RAM 上で3相フェッチ＆実行！</li>
-          <li><b>主要MMIOポート</b>：<code>0xF0</code> CRT文字出力 ／ <code>0xF3</code> タイマー周期 ／ <code>0xF4/F5</code> MMU BASE・LIMIT ／ <code>0xE0..0xEF</code> スタック（<code>SP</code> 初期値 <code>0xF0</code>）</li>
+          <li><b>主要MMIOポート</b>：<code>0xF0</code> CRT ／ <code>0xF1</code> KB ／ <code>0xF2</code> DISK ／ <code>0xF3</code> TMR ／ <code>0xF4/F5</code> MMU BASE・LIMIT ／ <code>0xF6</code> SP ／ <code>0xF7</code> EPC ／ <code>0xF8</code> DPTR ／ <code>0xF9</code> CAUSE</li>
+          ${
+            Array.isArray(stage.asmProgramSpec.kernelLib) && stage.asmProgramSpec.kernelLib.length > 0
+              ? `<li><b>稼働中カーネル基盤</b>：前ステージまでに構築した <code>${stage.asmProgramSpec.kernelLib.length}命令</code> のカーネル共通ルーチンが RAM 上で同時稼働しています。</li>`
+              : ''
+          }
           <li><b>汎用・防衛検証ルール</b>：${esc(
             stage.id === 'stage_53'
               ? 'CALL/RET と間接読込 LDR Rd,[Rs] を使い、0x60 からの0終端文字列を 0xF0 CRT へ出力すること（主検証 "ARK5:SOS" ＋ 汎用検証 "HI,ARK7!" の両方で合格！）'
-              : '起動コード(0..3)とカーネル初期化(16..19)は固定済み。3大トラップハンドラ（0x04 IRQ / 0x08 SYSCALL / 0x0C FAULT）を記述し、正規SYSCALL・タイマー割込・不正STOR "X" 攻撃をさばいて主検証 "A5!" ＋ 別データ "OK!" の両方で合格すること！'
+              : stage.id === 'stage_54'
+                ? '起動コード(0..3)とカーネル初期化(16..19)は固定済み。3大トラップハンドラ（0x04 IRQ / 0x08 SYSCALL / 0x0C FAULT）を記述し、正規SYSCALL・タイマー割込・不正STOR "X" 攻撃をさばいて主検証 "A5!" ＋ 別データ "OK!" の両方で合格すること！'
+                : `${stage.asmProgramSpec.goalTitle || stage.plainGoal}${stage.asmProgramSpec.targetCrt ? `（主検証 CRT "${stage.asmProgramSpec.targetCrt}"${stage.asmProgramSpec.altCrt ? ` ＋ 汎用別データ検証 "${stage.asmProgramSpec.altCrt}"` : ''} の両方で実機合格！）` : ''}`
           )}</li>
         </ul>
       </div>
@@ -568,7 +577,7 @@ export class ModalManager {
 
     const diagTip =
       stage?.kind === 'ark8_os_program'
-        ? '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、その拍の CRT出力・K/Uモード・PC/SP/EPC・TRAP種別・スタック/砂箱メモリが実機モニタに再現されます。実機パネルの <b>🔍MMU / 🔍PRIV / 🔍CPU</b> から内部配線もいつでも調べられます！'
+        ? '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、その拍の CRT出力・K/Uモード・PC/SP/EPC・TRAP種別・カーネル実メモリ（PCB/ビットマップ/ヒープ/ディスク）が実機モニタに再現されます。実機パネルの <b>🔍MMU / 🔍PRIV / 🔍CPU</b> から内部配線もいつでも調べられます！'
         : stage?.kind === 'ark8_program'
           ? '不合格の行にある <b>「🔍 この入力を盤面で調べる」</b> を押すと、その拍の R0〜R3 と SRAM[0..15] が実機モニタに再現されます。実機パネルの <b>🔍ENC8 / 🔍SRAM / 🔍CPU</b> から内部配線もいつでも調べられます！'
           : stage?.kind === 'assembly_program'
@@ -644,8 +653,35 @@ export class ModalManager {
     const metricSw = metrics?.swCount ?? (stage.id === 'stage_00' ? 2 : (metrics?.nandCount || 0) * 2);
     const metricPull = metrics?.pullCount ?? (stage.id === 'stage_00' ? 1 : metrics?.nandCount || 0);
 
+    const isCh5Finale = Boolean(stage.isChapter5Finale || stage.id === 'stage_62');
+
     let finaleBanner = '';
-    if (stage.isChapter4Finale) {
+    if (isCh5Finale) {
+      const osNand = journeyStats?.ark8OsNandCount ?? metrics.nandCount ?? 6294;
+      const osSw = journeyStats?.ark8OsSwCount ?? osNand * 2;
+      const osPull = journeyStats?.ark8OsPullCount ?? osNand;
+      const forgedCount = journeyStats?.forgedChipCount ?? 45;
+      const clearedCount = journeyStats?.clearedCount ?? STAGES.length;
+      finaleBanner = `
+        <div class="victory-cert-card kernel-core">
+          <div class="vcert-eyebrow">⚡ SILICON GENESIS // CHAPTER V COMPLETE (OS KERNEL CORE)</div>
+          <div class="vcert-title">第五章完結 — ARK-OS マイクロカーネル中核稼働！！</div>
+          <p class="vcert-desc">ディスク起動（Bootloader）・物理メモリ管理（<code>kalloc/kfree</code>）・動的ヒープ衝突ガード（<code>sbrk</code>）・マルチ <code>SYSCALL</code>・<code>PCB</code>＋<code>vDSO</code> 文脈切替・<code>TMR_IRQ</code> 強制プリエンプション・暴走プロセス隔離のすべてを自作 <code>ARK8_OS_HW</code> 実シリコン上で統合稼働させ、328名全員を磁気嵐から守り抜きました！ 次はいよいよ最終章・第6章「ファイルシステム <code>inode</code> ＆ 対話シェル <code>arksh</code>」へ！</p>
+          <div class="vcert-grid">
+            <div class="vcert-stat"><span class="vcert-lbl">最終称号</span><strong>ARK-OS カーネル主任設計官</strong></div>
+            <div class="vcert-stat"><span class="vcert-lbl">実機シリコン</span><strong>${osNand.toLocaleString()} NAND</strong><small>MOSFET ${osSw.toLocaleString()}個 ＋ 抵抗 ${osPull.toLocaleString()}本</small></div>
+            <div class="vcert-stat"><span class="vcert-lbl">復元レコード</span><strong>${clearedCount} / ${STAGES.length}</strong><small>自作チップ ${forgedCount}種</small></div>
+          </div>
+          <div class="vcert-chain">砂(MOSFET) → ARK8_OS_HW → Boot/kalloc/sbrk/SYSCALL → PCB/RR/隔離 → ⚡ARK-OS中核 → 第6章 inode＆arksh</div>
+          ${
+            onExportSilicon
+              ? `<div class="vcert-export-row">
+                  <button type="button" class="btn-silicon-pill cert" id="btn-victory-cert-verilog">💾 ARK-OS実シリコン＋カーネル設計図 (Verilog HDL) を書き出す</button>
+                </div>`
+              : ''
+          }
+        </div>`;
+    } else if (stage.isChapter4Finale) {
       const osNand = journeyStats?.ark8OsNandCount ?? metrics.nandCount ?? 6294;
       const osSw = journeyStats?.ark8OsSwCount ?? osNand * 2;
       const osPull = journeyStats?.ark8OsPullCount ?? osNand;
@@ -762,7 +798,9 @@ export class ModalManager {
           : stage.id === 'stage_00'
             ? `物理スイッチから組み上げた原板 <b>[NAND]</b> をB4焼付け機へセットしました！ これ以降はこの <b>NAND</b> だけを量産して上位回路を創り上げます。`
             : stage.kind === 'ark8_os_program'
-              ? `あなたのOS対応PC実機 <b>[ARK8_OS_HW]</b>（MMU・特権保護・割込ベクタ・緑色CRT搭載）の上で、16命令OSプログラム <b>[${esc(chipDef.name)}]</b> が完全動作しました！`
+              ? stage.chapter === 5
+                ? `あなたのOS対応PC実機 <b>[ARK8_OS_HW]</b> の上で、第5章OSカーネルモジュール <b>[${esc(chipDef.name)}]</b> が完全動作しました！`
+                : `あなたのOS対応PC実機 <b>[ARK8_OS_HW]</b>（MMU・特権保護・割込ベクタ・緑色CRT搭載）の上で、16命令OSプログラム <b>[${esc(chipDef.name)}]</b> が完全動作しました！`
               : stage.kind === 'ark8_program'
                 ? `あなたの8ビット汎用計算機 <b>[ARK8_SYS]</b> と書き換え可能な <b>[SRAM_16B]</b> の上で、16ビットアセンブリ <b>[${esc(chipDef.name)}]</b> が完全動作しました！`
                 : stage.kind === 'assembly_program'
@@ -776,18 +814,22 @@ export class ModalManager {
           ? '📡 第三章「記憶の大地」(STAGE 27) へ進む ▶'
           : stage.id === 'stage_42'
             ? '🖥️ 第四章「OS対応PCハード完結」(STAGE 43) へ進む ▶'
-            : '次のミッションへ進む ▶';
+            : stage.id === 'stage_54'
+              ? '⚡ 第五章「OSカーネル中核」(STAGE 55) へ進む ▶'
+              : '次のミッションへ進む ▶';
 
     this.open({
-      title: stage.isChapter4Finale
-        ? '🖥️ SILICON GENESIS — 第四章・OS対応PCハード 完結！！'
-        : stage.isChapter3Finale
-          ? '📡 SILICON GENESIS — 第三章・記憶の大地 完結！！'
-          : stage.isChapter2Finale
-            ? '☀ SILICON GENESIS — 第二章・青空への帰還 完結！！'
-            : stage.isFinale
-              ? '★ 第一章完結 — 文明再起動完了！'
-              : `✔ STAGE ${stage.code} クリア！`,
+      title: isCh5Finale
+        ? '⚡ SILICON GENESIS — 第五章・OSカーネル中核 完結！！'
+        : stage.isChapter4Finale
+          ? '🖥️ SILICON GENESIS — 第四章・OS対応PCハード 完結！！'
+          : stage.isChapter3Finale
+            ? '📡 SILICON GENESIS — 第三章・記憶の大地 完結！！'
+            : stage.isChapter2Finale
+              ? '☀ SILICON GENESIS — 第二章・青空への帰還 完結！！'
+              : stage.isFinale
+                ? '★ 第一章完結 — 文明再起動完了！'
+                : `✔ STAGE ${stage.code} クリア！`,
       bodyHtml: `
         ${finaleBanner}
         <div class="victory-chip-stage">
@@ -820,13 +862,15 @@ export class ModalManager {
         ${
           onReplayEnding
             ? `<button class="btn btn-sky" id="btn-victory-ending">${
-                stage.isChapter4Finale
-                  ? '🖥️ 第四章エンディングをもう一度観る'
-                  : stage.isChapter3Finale
-                    ? '📡 第三章エンディングをもう一度観る'
-                    : stage.isChapter2Finale
-                      ? '☀ 第二章エンディングをもう一度観る'
-                      : '🎬 第一章エンディングをもう一度観る'
+                isCh5Finale
+                  ? '⚡ 第五章エンディングをもう一度観る'
+                  : stage.isChapter4Finale
+                    ? '🖥️ 第四章エンディングをもう一度観る'
+                    : stage.isChapter3Finale
+                      ? '📡 第三章エンディングをもう一度観る'
+                      : stage.isChapter2Finale
+                        ? '☀ 第二章エンディングをもう一度観る'
+                        : '🎬 第一章エンディングをもう一度観る'
               }</button>`
             : ''
         }
@@ -883,6 +927,7 @@ export class ModalManager {
       onReplayEnding2,
       onReplayEnding3,
       onReplayEnding4,
+      onReplayEnding5,
       onGoHome,
       onResetSave,
     }
@@ -890,6 +935,7 @@ export class ModalManager {
     const ch2Open = isChapter2Unlocked(save);
     const ch3Open = isChapter3Unlocked(save);
     const ch4Open = isChapter4Unlocked(save);
+    const ch5Open = isChapter5Unlocked(save);
     const actsHtml = ACTS.map((act) => {
       const stagesInAct = STAGES.filter((s) => s.act === act.id);
       const chapterBannerHtml =
@@ -908,7 +954,12 @@ export class ModalManager {
                   <span>${ch4Open ? '🖥️' : '🔒'} 第四章：OS対応PCハード完結（統一RAM・MMIO・MMU・特権保護編）</span>
                   <span class="mono" style="font-size:11px;opacity:0.9;">${ch4Open ? 'STAGE 43〜54' : '第三章クリアで解放'}</span>
                 </div>`
-              : '';
+              : act.id === 12
+                ? `<div id="map-ch5-anchor" class="map-chapter-banner ch5 ${ch5Open ? '' : 'locked'}">
+                    <span>${ch5Open ? '⚡' : '🔒'} 第五章：OSカーネル中核（ACT XII 起動とメモリ管理 ／ ACT XIII マルチタスク＆隔離編）</span>
+                    <span class="mono" style="font-size:11px;opacity:0.9;">${ch5Open ? 'STAGE 55〜62' : '第四章クリアで解放'}</span>
+                  </div>`
+                : '';
       const cards = stagesInAct
         .map((st) => {
           const unlocked = isStageUnlocked(save, st.id);
@@ -936,7 +987,9 @@ export class ModalManager {
                           : st.id === 'stage_00'
                             ? `✔ 自作原板登録済 [NAND] · 物理スイッチ`
                             : st.kind === 'ark8_os_program'
-                              ? `✔ OS対応16命令稼働済 [${st.rewardChip?.name || 'ARK8_OS'}] · CRT/MMU実機`
+                              ? st.chapter === 5
+                                ? `✔ カーネル中核稼働済 [${st.rewardChip?.name || 'KERNEL'}] · ARK8_OS_HW実機`
+                                : `✔ OS対応16命令稼働済 [${st.rewardChip?.name || 'ARK8_OS'}] · CRT/MMU実機`
                               : st.kind === 'ark8_program'
                                 ? `✔ 16bitプログラム稼働済 [${st.rewardChip?.name || 'ARK8'}] · SRAM実機`
                                 : st.kind === 'assembly_program'
@@ -973,6 +1026,7 @@ export class ModalManager {
     const ch2Ended = isChapter2Cleared(save);
     const ch3Ended = isChapter3Cleared(save);
     const ch4Ended = isChapter4Cleared(save);
+    const ch5Ended = isChapter5Cleared(save);
     const clearedTotal = save.clearedStages.length;
     const progressPct = Math.round((clearedTotal / Math.max(1, STAGES.length)) * 100);
 
@@ -997,6 +1051,7 @@ export class ModalManager {
           ${ch2Ended ? `<button type="button" class="map-quick-btn ed2" id="btn-map-end2">☀ 第二章ED</button>` : ''}
           ${ch3Ended ? `<button type="button" class="map-quick-btn ed3" id="btn-map-end3">📡 第三章ED</button>` : ''}
           ${ch4Ended ? `<button type="button" class="map-quick-btn ed4" id="btn-map-end4">🖥️ 第四章ED</button>` : ''}
+          ${ch5Ended ? `<button type="button" class="map-quick-btn ed5" id="btn-map-end5">⚡ 第五章ED</button>` : ''}
         </div>
 
         <div class="map-jump-strip">
@@ -1005,6 +1060,7 @@ export class ModalManager {
           <button type="button" class="map-jump-pill ch2" id="btn-map-jump-ch2">☀ 第二章 (18〜26)</button>
           <button type="button" class="map-jump-pill ch3" id="btn-map-jump-ch3">📡 第三章 (27〜42)</button>
           <button type="button" class="map-jump-pill ch4" id="btn-map-jump-ch4">🖥️ 第四章 (43〜54)</button>
+          <button type="button" class="map-jump-pill ch5" id="btn-map-jump-ch5">⚡ 第五章 (55〜62)</button>
         </div>
 
         <div id="map-ch1-anchor"></div>
@@ -1035,6 +1091,10 @@ export class ModalManager {
     this.bodyEl.querySelector('#btn-map-jump-ch4')?.addEventListener('click', () => {
       sound.playSwitch(true);
       this.bodyEl.querySelector('#map-ch4-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    this.bodyEl.querySelector('#btn-map-jump-ch5')?.addEventListener('click', () => {
+      sound.playSwitch(true);
+      this.bodyEl.querySelector('#map-ch5-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
     // Auto-scroll to current active stage when player is deeper in the campaign!
@@ -1073,6 +1133,11 @@ export class ModalManager {
     this.bodyEl.querySelector('#btn-map-end4')?.addEventListener('click', () => {
       this.close();
       onReplayEnding4?.();
+    });
+
+    this.bodyEl.querySelector('#btn-map-end5')?.addEventListener('click', () => {
+      this.close();
+      onReplayEnding5?.();
     });
 
     this.bodyEl.querySelectorAll('[data-stage-id]').forEach((btn) => {
@@ -1373,7 +1438,19 @@ export class ModalManager {
           })
           .join('');
 
+        const chapterDividerHtml =
+          act.id === 12
+            ? `<div class="codex-chapter-divider ch5">⚡ 第五章：OSカーネル中核（ACT XII 起動とメモリ管理 ／ ACT XIII マルチタスク＆隔離）</div>`
+            : act.id === 10
+              ? `<div class="codex-chapter-divider ch4">🖥️ 第四章：OS対応PCハード完結（ACT X〜XI）</div>`
+              : act.id === 8
+                ? `<div class="codex-chapter-divider ch3">📡 第三章：記憶の大地（ACT VIII〜IX）</div>`
+                : act.id === 6
+                  ? `<div class="codex-chapter-divider ch2">☀ 第二章：青空への帰還（ACT VI〜VII）</div>`
+                  : '';
+
         return `
+          ${chapterDividerHtml}
           <div class="codex-act-group ${isActOpen ? 'open' : 'collapsed'}" data-act-group="${act.id}">
             <button
               type="button"
@@ -1491,9 +1568,11 @@ export class ModalManager {
 
       const canExportSilicon = Boolean(
         isChapter1Cleared(save) ||
+          isChapter4Cleared(save) ||
           clearedSet.has('stage_21') ||
           clearedSet.has('stage_40') ||
           clearedSet.has('stage_52') ||
+          clearedSet.has('stage_62') ||
           customChips?.ARK4_CORE ||
           customChips?.ARK4_SYS ||
           customChips?.ARK8_SYS ||

@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=40';
+import { sound } from '../audio/sound.js?v=41';
 
 const W = 340;
 const H = 126;
@@ -829,6 +829,30 @@ export class StoryDiagramPlayer {
         break;
       case 'asm_program_flow':
         this._drawAsmProgramFlow(ctx);
+        break;
+      case 'ch5_boot_loader':
+        this._drawCh5BootLoader(ctx);
+        break;
+      case 'ch5_kalloc_map':
+        this._drawCh5KallocMap(ctx);
+        break;
+      case 'ch5_heap_sbrk':
+        this._drawCh5HeapSbrk(ctx);
+        break;
+      case 'ch5_syscall_mux':
+        this._drawCh5SyscallMux(ctx);
+        break;
+      case 'ch5_pcb_ctx':
+        this._drawCh5PcbCtx(ctx);
+        break;
+      case 'ch5_rr_sched':
+        this._drawCh5RrSched(ctx);
+        break;
+      case 'ch5_fault_isolate':
+        this._drawCh5FaultIsolate(ctx);
+        break;
+      case 'ch5_kernel_core':
+        this._drawCh5KernelCore(ctx);
         break;
       default:
         if (GOAL_SPECS[this.kind]) {
@@ -2058,6 +2082,340 @@ export class StoryDiagramPlayer {
     this._pill(ctx, 248, 54, 82, 24, `ZERO Z=${p.z}`, p.z === 1, '#52e3b6');
 
     this._caption(ctx, p.msg, this.stepIdx, 4, '#6fcf97');
+  }
+
+  // =========================================================================
+  // CHAPTER 5: OS KERNEL CORE LIVE DIAGRAMS (STAGES 55–62)
+  // =========================================================================
+
+  // 55: BOOT_LOADER — Disk 0xF2 -> RAM 0x40..0x5F -> CALL 32 -> CRT
+  _drawCh5BootLoader(ctx) {
+    const phases = [
+      { dptr: 1, loaded: 0, jumped: false, crt: '...', msg: '① LOAD R2,[0xF2] ▶ 先頭1バイトからプログラム長(14B)を取得！' },
+      { dptr: 8, loaded: 4, jumped: false, crt: '...', msg: '② LOAD [0xF2] → STR [R1] ループ ▶ ディスク機械語をRAM 0x40〜へ連続転送！' },
+      { dptr: 15, loaded: 7, jumped: false, crt: '...', msg: '③ R2=0 到達 ▶ 全14バイトが揮発RAM 0x40..0x4D へ完全展開！' },
+      { dptr: 15, loaded: 7, jumped: true, crt: 'OS!', msg: '④ CALL 32 (0x40) ▶ 読み込んだOS本体へ飛び、CRTに "OS!" を点灯！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    this._chip(ctx, 8, 16, 76, 62, 'DISK 0xF2', `DPTR=${p.dptr}/15`, '#ffd166', !p.jumped);
+    this._wire(ctx, [[84, 47], [116, 47]], !p.jumped, '#ffd166');
+
+    // Target RAM slots filling byte-by-byte
+    ctx.save();
+    ctx.fillStyle = '#0e1b27';
+    this._roundRect(ctx, 116, 12, 118, 72, 6);
+    ctx.fill();
+    ctx.strokeStyle = p.jumped ? '#52e3b6' : '#56ccf2';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.fillStyle = '#9be8ff';
+    ctx.font = 'bold 8.5px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('RAM 0x40..0x4D (PC 32~)', 175, 23);
+
+    for (let i = 0; i < 7; i++) {
+      const filled = i < p.loaded;
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const bx = 123 + col * 26;
+      const by = 30 + row * 24;
+      ctx.fillStyle = filled ? (p.jumped ? 'rgba(42,148,108,0.85)' : 'rgba(34,104,138,0.85)') : '#172330';
+      this._roundRect(ctx, bx, by, 23, 19, 3);
+      ctx.fill();
+      ctx.strokeStyle = filled ? (p.jumped ? '#7effcf' : '#7ee8ff') : '#324558';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = filled ? '#ecfff8' : '#5c748a';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText(filled ? `I${i}` : '--', bx + 11.5, by + 10);
+    }
+    ctx.restore();
+
+    this._wire(ctx, [[234, 47], [262, 47]], p.jumped, '#52e3b6');
+    this._pill(ctx, 262, 22, 70, 50, p.jumped ? `CALL 32!\nCRT "${p.crt}"` : 'WAIT\n展開中', p.jumped, '#52e3b6');
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.jumped ? '#52e3b6' : '#ffd166');
+  }
+
+  // 56: KALLOC_MAP — 4-Slot Physical Bitmap Allocator ([0x60..0x63])
+  _drawCh5KallocMap(ctx) {
+    const phases = [
+      { slots: [1, 0, 1, 0], focus: 1, act: 'kalloc()', out: 'SLOT 1', msg: '① 初期ビットマップ [1,0,1,0] ▶ 先頭から空き(0)を走査し SLOT 1 を確保！' },
+      { slots: [1, 1, 1, 0], focus: 3, act: 'kalloc()', out: 'SLOT 3', msg: '② 次の kalloc() ▶ 0..2 は使用中(1)、空き SLOT 3 を発見し 1 に更新！' },
+      { slots: [0, 1, 1, 1], focus: 0, act: 'kfree(0)', out: '0→FREE', msg: '③ kfree(0) ▶ 終了プロセスの SLOT 0 へ 0 を書き戻し再利用可能に！' },
+      { slots: [1, 1, 1, 1], focus: 0, act: 'kalloc()', out: 'SLOT 0!', msg: '④ 再確保 kalloc() ▶ 解放された SLOT 0 を即座に再利用 → CRT "130"！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    this._pill(ctx, 8, 28, 74, 34, `${p.act}\n→ ${p.out}`, true, p.act.startsWith('kfree') ? '#56ccf2' : '#52e3b6');
+    this._wire(ctx, [[82, 45], [104, 45]], true, p.act.startsWith('kfree') ? '#56ccf2' : '#ffd166');
+
+    // 4 physical memory slot tiles
+    for (let i = 0; i < 4; i++) {
+      const used = p.slots[i] === 1;
+      const isFocus = p.focus === i;
+      const x = 104 + i * 57;
+      ctx.save();
+      ctx.fillStyle = used ? 'rgba(130, 82, 20, 0.85)' : 'rgba(16, 86, 62, 0.88)';
+      this._roundRect(ctx, x, 14, 52, 64, 6);
+      ctx.fill();
+      ctx.strokeStyle = isFocus ? '#ffffff' : used ? '#ffd166' : '#52e3b6';
+      ctx.lineWidth = isFocus ? 2.2 : 1.3;
+      if (isFocus) {
+        ctx.shadowColor = used ? '#ffd166' : '#52e3b6';
+        ctx.shadowBlur = 9;
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#d4e8f8';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.fillText(`SLOT ${i}`, x + 26, 26);
+      ctx.fillStyle = used ? '#ffe39b' : '#96ffda';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(used ? 'USED' : 'FREE', x + 26, 46);
+      ctx.fillStyle = '#99b8d0';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText(`0x6${i}=${p.slots[i]}`, x + 26, 65);
+      ctx.restore();
+    }
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.act.startsWith('kfree') ? '#56ccf2' : '#52e3b6');
+  }
+
+  // 57: HEAP_SBRK — Heap ↑ (BRK) vs ↓ Stack (SP) Collision Guard
+  _drawCh5HeapSbrk(ctx) {
+    const phases = [
+      { brk: 46, sp: 62, req: 6, status: 'ok', msg: '① 初期空間(LIMIT=64): BRK=46, SP=62 (空き16B) ▶ sbrk(+6) を要求！' },
+      { brk: 52, sp: 62, req: 0, status: 'ok', msg: '② 46+6=52 <= SP(62) ▶ 安全なので許可！ BRK=52へ拡張し "H" を書込！' },
+      { brk: 52, sp: 62, req: 14, status: 'oom', msg: '③ sbrk(+14) 要求 ▶ 52+14=66 > SP(62)！ 衝突を検知し OOM拒否("!")！' },
+      { brk: 52, sp: 64, req: 0, status: 'safe', msg: '④ スタック無傷 ▶ POP で退避値 "S" を復元 → CRT "H!S" 安全完了！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    const barX = 14;
+    const barY = 26;
+    const barW = 312;
+    const barH = 38;
+    const toX = (v) => barX + Math.round((v / 64) * barW);
+
+    ctx.save();
+    // Base 64B sandbox frame
+    ctx.fillStyle = '#0e1925';
+    this._roundRect(ctx, barX, barY, barW, barH, 6);
+    ctx.fill();
+    ctx.strokeStyle = p.status === 'oom' ? '#ff6b72' : '#56ccf2';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    // Code region 0..46
+    const codeEnd = toX(46);
+    ctx.fillStyle = 'rgba(54, 88, 122, 0.72)';
+    ctx.fillRect(barX + 1, barY + 1, codeEnd - barX - 1, barH - 2);
+    ctx.fillStyle = '#cce4fa';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('USER CODE (0..45)', (barX + codeEnd) / 2, barY + barH / 2);
+
+    // Heap region 46..brk
+    const brkX = toX(p.brk);
+    if (brkX > codeEnd) {
+      ctx.fillStyle = 'rgba(42, 168, 120, 0.85)';
+      ctx.fillRect(codeEnd, barY + 1, brkX - codeEnd, barH - 2);
+      ctx.fillStyle = '#ecfff8';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.fillText('HEAP↑', (codeEnd + brkX) / 2, barY + barH / 2);
+    }
+
+    // Requested OOM overlay
+    if (p.status === 'oom') {
+      const reqEnd = Math.min(barX + barW - 1, toX(Math.min(64, p.brk + p.req)));
+      ctx.fillStyle = 'rgba(220, 48, 64, 0.52)';
+      ctx.fillRect(brkX, barY + 2, reqEnd - brkX, barH - 4);
+      ctx.strokeStyle = '#ff7b82';
+      ctx.setLineDash([3, 2]);
+      ctx.strokeRect(brkX, barY + 2, reqEnd - brkX, barH - 4);
+      ctx.setLineDash([]);
+    }
+
+    // Stack region sp..64
+    const spX = toX(p.sp);
+    if (spX < barX + barW) {
+      ctx.fillStyle = 'rgba(186, 128, 32, 0.82)';
+      ctx.fillRect(spX, barY + 1, barX + barW - spX - 1, barH - 2);
+      ctx.fillStyle = '#fff5d1';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText('↓SP', (spX + barX + barW) / 2, barY + barH / 2);
+    }
+
+    // Top markers for BRK & SP
+    ctx.fillStyle = '#52e3b6';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`BRK=${p.brk}`, brkX, 16);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(`SP=${p.sp}`, Math.min(barX + barW - 18, spX), 76);
+
+    // Status pill
+    ctx.restore();
+    this._pill(
+      ctx,
+      14,
+      70,
+      152,
+      20,
+      p.status === 'oom' ? '🛡 OOM拒否 (BRK+14 > SP!)' : p.status === 'safe' ? '✔ スタック無傷 "H!S"' : `空き領域: ${p.sp - p.brk}B`,
+      true,
+      p.status === 'oom' ? '#ff6b72' : '#52e3b6'
+    );
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.status === 'oom' ? '#ff7b82' : '#52e3b6');
+  }
+
+  // 58: SYSCALL_MUX — Multi-Syscall Dispatcher (1=WRITE, 2=READ, 3=EXIT)
+  _drawCh5SyscallMux(ctx) {
+    const phases = [
+      { num: 2, active: 1, detail: 'KB 0xF1 → R1', msg: '① R0=2 (SYS_READ) ▶ キーボード 0xF1 から1文字取得し R1 で返却！' },
+      { num: 1, active: 0, detail: 'R1 → CRT 0xF0', msg: '② R0=1 (SYS_WRITE) ▶ R1 の文字を緑色 CRT 0xF0 へ代行出力し IRET！' },
+      { num: 3, active: 2, detail: 'K=1 安全HALT', msg: '③ R0=3 (SYS_EXIT) ▶ 入力終了(0)を検知 → カーネルが安全に HALT！' },
+    ];
+    const p = phases[this.stepIdx % 3];
+
+    this._pill(ctx, 8, 28, 72, 34, `USER K=0\nSYSCALL\nR0 = ${p.num}`, true, '#c89bff');
+    this._wire(ctx, [[80, 45], [108, 45]], true, '#c89bff');
+
+    this._chip(ctx, 108, 16, 76, 58, '0x08 MUX', 'R0 分岐判定', '#7ee8ff', true);
+
+    const routes = [
+      { lbl: '1: WRITE → CRT', y: 10, c: '#52e3b6' },
+      { lbl: '2: READ ← KB', y: 36, c: '#ffd166' },
+      { lbl: '3: EXIT → HALT', y: 62, c: '#ff8a7a' },
+    ];
+    routes.forEach((r, i) => {
+      const on = p.active === i;
+      this._wire(ctx, [[184, 28 + i * 17], [216, r.y + 11]], on, r.c);
+      this._pill(ctx, 216, r.y, 116, 22, r.lbl, on, r.c);
+    });
+
+    this._caption(ctx, p.msg, this.stepIdx, 3, routes[p.active].c);
+  }
+
+  // 59: PCB_CTX_SW — PCB Context Switch + vDSO (POP R0; RET) Trampoline
+  _drawCh5PcbCtx(ctx) {
+    const phases = [
+      { stage: 0, msg: '① Proc 0 ("A") が YIELD ▶ save_ctx が R0..R3・SP・EPC を PCB 0 へ退避！' },
+      { stage: 1, msg: '② restore_ctx が PCB 1 の BASE=0xA4 を MMU へ設定し [EPC, R0] を積む！' },
+      { stage: 2, msg: '③ SYSCALL 0 → IRET ▶ vDSO (POP R0; RET) で Proc 1 へ無傷復帰！' },
+      { stage: 3, msg: '④ 交互に切替完了 ▶ レジスタもスタックも一切壊さず CRT "A1B2"！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    const p0On = p.stage === 0 || p.stage === 3;
+    const p1On = p.stage >= 1;
+    this._chip(ctx, 8, 12, 86, 34, 'PCB 0 (A→B)', 'BASE:0x80', '#7ee8ff', p0On);
+    this._chip(ctx, 8, 52, 86, 34, 'PCB 1 (1→2)', 'BASE:0xA4', '#ffd166', p1On);
+
+    this._wire(ctx, [[94, 29], [122, 46]], p.stage === 0, '#7ee8ff');
+    this._wire(ctx, [[94, 69], [122, 52]], p.stage >= 1, '#ffd166');
+
+    this._chip(ctx, 122, 16, 92, 64, 'CTX SWITCH', p.stage === 0 ? 'save_ctx' : 'MMU+SP切替', '#c89bff', true);
+
+    this._wire(ctx, [[214, 48], [238, 48]], p.stage >= 2, '#52e3b6');
+    this._pill(ctx, 238, 18, 94, 58, p.stage >= 2 ? 'vDSO復帰\nPOP R0\nRET → K=0' : '退避・準備\n[EPC, R0]\nPUSH完了', p.stage >= 2, '#52e3b6');
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.stage >= 2 ? '#52e3b6' : '#c89bff');
+  }
+
+  // 60: RR_SCHED — Preemptive Timer IRQ Round-Robin Scheduler
+  _drawCh5RrSched(ctx) {
+    const phases = [
+      { pid: 0, irq: false, crt: 'W', msg: '① Proc 0 (気象W) 実行中 ▶ 自ら譲らない無限ループでもタイマーが減算！' },
+      { pid: 0, irq: true, crt: 'W', msg: '② TMR_IRQ 発火(0x04)！ ▶ ハードウェアが強制割込 → save_ctx → sched_next！' },
+      { pid: 1, irq: false, crt: 'WP', msg: '③ sched_next (240−cur) ▶ Proc 1 (電力P) へ強制切替！ 電力制御も動く！' },
+      { pid: 1, irq: true, crt: 'WPWPPP', msg: '④ 一定拍ごとに W ↔ P を自動交代 ▶ 1つのCPUで並列稼働 "WPWPPP"！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    this._chip(ctx, 8, 18, 74, 56, 'TMR_IRQ', p.irq ? '⚡ IRQ=1!' : 'CNT 減算中', '#52e3b6', p.irq);
+    this._wire(ctx, [[82, 46], [108, 46]], p.irq, '#52e3b6');
+
+    this._chip(ctx, 108, 16, 90, 60, 'sched_next', '240 − cur_pcb', '#7ee8ff', true);
+
+    this._wire(ctx, [[198, 32], [228, 26]], p.pid === 0, '#7ee8ff');
+    this._wire(ctx, [[198, 60], [228, 66]], p.pid === 1, '#ffd166');
+
+    this._pill(ctx, 228, 12, 104, 28, `P0: 気象 "W"${p.pid === 0 ? ' ◀RUN' : ''}`, p.pid === 0, '#7ee8ff');
+    this._pill(ctx, 228, 52, 104, 28, `P1: 電力 "P"${p.pid === 1 ? ' ◀RUN' : ''}`, p.pid === 1, '#ffd166');
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.irq ? '#52e3b6' : '#7ee8ff');
+  }
+
+  // 61: FAULT_ISOLATE — Faulty Process Isolation (Kill Rogue, Keep Survivor Alive!)
+  _drawCh5FaultIsolate(ctx) {
+    const phases = [
+      { rogueDead: false, fault: true, crt: 'ARB', msg: '① 磁気嵐で暴走した P1 が CRT 0xF0 へ不正攻撃("X") ▶ MMU+PRIVが物理遮断！' },
+      { rogueDead: true, fault: true, crt: 'ARB!', msg: '② 0x0C FAULT処理 ▶ P1 を DEAD(0) にして SLOT1 を kfree、警告 "!" 出力！' },
+      { rogueDead: true, fault: false, crt: 'ARB!K', msg: '③ HALTせず sched_next へ復帰 ▶ 無事な生命維持 P0 が完走 → "ARB!K"！' },
+    ];
+    const p = phases[this.stepIdx % 3];
+
+    this._chip(ctx, 8, 12, 92, 32, 'P0 生命維持', 'READY/RUN', '#52e3b6', !p.fault);
+    this._chip(
+      ctx,
+      8,
+      52,
+      92,
+      32,
+      p.rogueDead ? 'P1 隔離済' : 'P1 暴走攻撃!',
+      p.rogueDead ? 'DEAD / FREE' : 'STOR [0xF0] X',
+      '#ff7b82',
+      !p.rogueDead
+    );
+
+    this._wire(ctx, [[100, 68], [134, 54]], p.fault, '#ff7b82');
+    this._wire(ctx, [[100, 28], [134, 38]], !p.fault, '#52e3b6');
+
+    this._chip(ctx, 134, 16, 94, 62, '0x0C 隔離盾', p.rogueDead ? 'kill + kfree' : 'SAFE=0 遮断', p.fault ? '#ff7b82' : '#52e3b6', true);
+
+    this._wire(ctx, [[228, 47], [252, 47]], true, p.fault ? '#ff7b82' : '#52e3b6');
+    this._pill(ctx, 252, 22, 80, 48, `CRT出力\n"${p.crt}"`, true, p.fault ? '#ffd166' : '#52e3b6');
+
+    this._caption(ctx, p.msg, this.stepIdx, 3, p.fault ? '#ff7b82' : '#52e3b6');
+  }
+
+  // 62: ARK_KERNEL_CORE — Integrated 4-Pillar ARK-OS Microkernel
+  _drawCh5KernelCore(ctx) {
+    const phases = [
+      { pillar: 0, msg: '① 起動＋確保 ▶ kalloc で Slot0 を確保し DISK 0xF2 から防衛アプリを展開！' },
+      { pillar: 1, msg: '② 割込並列 ▶ TMR_IRQ と SYSCALL が2プロセスを自動交代しながら実行！' },
+      { pillar: 2, msg: '③ 異常隔離 ▶ 暴走タスクを 0x0C で即殺＆kfree、シェルターは止まらない！' },
+      { pillar: 3, msg: '④ 統合完結 ▶ 4本柱のマイクロカーネルが 12,588 MOSFET 上で完全稼働！' },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    const pillars = [
+      { x: 8, y: 10, t: 'DISK起動', s: '0xF2→RAM', c: '#ffd166' },
+      { x: 8, y: 54, t: 'kalloc/free', s: 'Slot管理', c: '#52e3b6' },
+      { x: 244, y: 10, t: 'RRマルチ', s: 'IRQ+SYS', c: '#7ee8ff' },
+      { x: 244, y: 54, t: '異常隔離', s: '0x0C防衛', c: '#ff7b82' },
+    ];
+
+    pillars.forEach((pl, i) => {
+      const on = p.pillar === 3 || p.pillar === i;
+      this._chip(ctx, pl.x, pl.y, 88, 34, pl.t, pl.s, pl.c, on);
+      if (i < 2) {
+        this._wire(ctx, [[96, pl.y + 17], [122, 47]], on, pl.c);
+      } else {
+        this._wire(ctx, [[218, 47], [244, pl.y + 17]], on, pl.c);
+      }
+    });
+
+    this._chip(ctx, 122, 16, 96, 62, 'ARK-OS', 'KERNEL CORE', '#c89bff', true);
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.pillar === 3 ? '#52e3b6' : pillars[p.pillar].c);
   }
 }
 

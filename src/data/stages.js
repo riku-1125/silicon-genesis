@@ -1,10 +1,11 @@
 /**
- * SILICON GENESIS — 57-Stage Bottom-Up Campaign (Chapter I–IV / 12 Acts)
+ * SILICON GENESIS — 65-Stage Bottom-Up Campaign (Chapter I–V / 14 Acts)
  * Every stage builds strictly from silicon physics & NAND + custom chips the player has forged.
  */
 
 import { CHAPTER3_STAGES } from './chapter3Stages.js';
 import { CHAPTER4_STAGES } from './chapter4Stages.js';
+import { CHAPTER5_STAGES } from './chapter5Stages.js';
 
 function bits4(n) {
   const v = ((n % 16) + 16) % 16;
@@ -126,6 +127,8 @@ export const ACTS = [
   { id: 9, roman: 'ACT IX', title: '第三章：8ビット汎用計算機『ARK-8』', subtitle: 'R0〜R3・16B SRAM・汎用アルゴリズム', color: '#ffd166', chapter: 3 },
   { id: 10, roman: 'ACT X', title: '第四章：統一メモリ・スタックと周辺機器', subtitle: '統一バス・MMIO・SP・タイマー割込・MMU', color: '#7ee8ff', chapter: 4 },
   { id: 11, roman: 'ACT XI', title: '第四章：特権保護とOS対応CPU『ARK8_OS_HW』', subtitle: 'K/Uリング・割込ベクタ・16命令・OS保護実戦', color: '#ff8cb0', chapter: 4 },
+  { id: 12, roman: 'ACT XII', title: '第五章：起動とメモリ管理', subtitle: 'ブートローダ・ビットマップ割当・ヒープ保護・マルチSYSCALL', color: '#45d4a8', chapter: 5 },
+  { id: 13, roman: 'ACT XIII', title: '第五章：マルチタスクとカーネル中核', subtitle: 'PCB切替・タイマー割込RR・障害隔離・ARK-OS中核統合', color: '#ff7b54', chapter: 5 },
 ];
 
 export const STAGES = [
@@ -3378,6 +3381,7 @@ export const STAGES = [
   },
   ...CHAPTER3_STAGES,
   ...CHAPTER4_STAGES,
+  ...CHAPTER5_STAGES,
 ];
 
 export const SANDBOX_STAGE = {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { STAGES, getStageById } from '../src/data/stages.js';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { STAGES, ACTS, getStageById } from '../src/data/stages.js';
 import { CODEX_ENTRIES } from '../src/data/codex.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
 import {
@@ -9,6 +9,7 @@ import {
   buildChapter2EndingSteps,
   buildChapter3EndingSteps,
   buildChapter4EndingSteps,
+  buildChapter5EndingSteps,
 } from '../src/data/endings.js';
 import { CHARACTERS, SCENES } from '../src/data/characters.js';
 import {
@@ -35,6 +36,8 @@ import {
   isChapter3Cleared,
   isChapter4Unlocked,
   isChapter4Cleared,
+  isChapter5Unlocked,
+  isChapter5Cleared,
 } from '../src/state/storage.js';
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
@@ -109,8 +112,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 57-stage campaign (Ch.1 + Ch.2 + Ch.3 + Ch.4): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 57);
+test('Full 65-stage campaign (Ch.1 + Ch.2 + Ch.3 + Ch.4 + Ch.5): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 65);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -894,7 +897,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 52);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 60);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
@@ -1966,7 +1969,7 @@ test('v39 Chapter 3 6-Chapter Continuity: zero stale 16-bit CPU/RAM rebuild text
   for (const relPath of ['index.html', 'sw.js', 'src/main.js', 'src/ui/modals.js', 'src/ui/ark8Ide.js']) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=38|silicon-genesis-v38/.test(src), false, `Leftover v38 cache string in ${relPath}`);
-    assert.equal(/\?v=(?:39|40)|silicon-genesis-v(?:39|40)/.test(src), true, `Missing v39/v40 cache string in ${relPath}`);
+    assert.equal(/\?v=(?:39|40|41)|silicon-genesis-v(?:39|40|41)/.test(src), true, `Missing v39+ cache string in ${relPath}`);
   }
 });
 
@@ -2264,12 +2267,12 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
     );
   }
 
-  // Cache consistency: ?v=40 across index.html, sw.js & UI modules, zero v=39 leftovers, Ren & ARK-5 assets in sw.js
+  // Cache consistency: ?v=40/41 across index.html, sw.js & UI modules, zero v=39 leftovers, Ren & ARK-5 assets in sw.js
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.match(swSrc, /portrait_ren\.jpg/);
   assert.match(swSrc, /scene_ark5_station\.jpg/);
-  assert.match(swSrc, /osHwRunner\.js\?v=40/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=40/);
+  assert.match(swSrc, /osHwRunner\.js\?v=(?:40|41)/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=(?:40|41)/);
   for (const relPath of [
     'index.html',
     'sw.js',
@@ -2283,6 +2286,322 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
   ]) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=39|silicon-genesis-v39/.test(src), false, `Leftover v39 cache string in ${relPath}`);
-    assert.equal(/\?v=40|silicon-genesis-v40/.test(src), true, `Missing v40 cache string in ${relPath}`);
+    assert.equal(/\?v=(?:40|41)|silicon-genesis-v(?:40|41)/.test(src), true, `Missing v40/v41 cache string in ${relPath}`);
+  }
+});
+
+test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Execution, Silicon Fault Propagation, Progression, Ending & v41 Cache', () => {
+  // 1. ACT XII & ACT XIII + all 8 Chapter 5 stages (stage_55..stage_62) metadata, scenes, and anim keys
+  const act12 = ACTS.find((a) => a.id === 12);
+  const act13 = ACTS.find((a) => a.id === 13);
+  assert.ok(act12 && act12.chapter === 5 && act12.roman === 'ACT XII', 'ACT XII must exist for Chapter 5');
+  assert.ok(act13 && act13.chapter === 5 && act13.roman === 'ACT XIII', 'ACT XIII must exist for Chapter 5');
+
+  const ch5Stages = STAGES.filter((s) => s.chapter === 5);
+  const expectedIds = [
+    'stage_55', 'stage_56', 'stage_57', 'stage_58',
+    'stage_59', 'stage_60', 'stage_61', 'stage_62',
+  ];
+  assert.deepEqual(ch5Stages.map((s) => s.id), expectedIds);
+  assert.equal(getStageById('stage_62').isChapter5Finale, true);
+  assert.ok(SCENES.storm_core && SCENES.storm_core.image === './assets/scene_storm_core.jpg');
+  assert.equal(existsSync(new URL('../assets/scene_storm_core.jpg', import.meta.url)), true);
+
+  const storyDiagramSrc = readFileSync(new URL('../src/ui/storyDiagram.js', import.meta.url), 'utf8');
+  const validSpeakers = new Set([null, 'kagari', 'mina', 'hako', 'kai', 'ren']);
+  const assertNoRawMarkdown = (text, ctxLabel) => {
+    if (typeof text !== 'string') return;
+    assert.equal(
+      text.includes('**') || text.includes('`'),
+      false,
+      `Raw Markdown found in ${ctxLabel}: ${text.slice(0, 120)}`
+    );
+  };
+
+  for (const st of ch5Stages) {
+    assert.equal(st.chapter, 5);
+    assert.equal(st.kind, 'ark8_os_program');
+    assert.ok(SCENES[st.scene], `Invalid scene '${st.scene}' in ${st.id}`);
+    assert.ok(st.act === 12 || st.act === 13, `Unexpected act ${st.act} in ${st.id}`);
+
+    // Zero raw Markdown in all player-facing stage text fields
+    for (const [field, val] of [
+      ['title', st.title],
+      ['revealedTitle', st.revealedTitle],
+      ['plainGoal', st.plainGoal],
+      ['beginnerNote', st.beginnerNote],
+      ['clearText', st.clearText],
+      ['incidentBrief.where', st.incidentBrief?.where],
+      ['incidentBrief.trouble', st.incidentBrief?.trouble],
+      ['incidentBrief.condition', st.incidentBrief?.condition],
+      ['incidentBrief.shortRule', st.incidentBrief?.shortRule],
+      ['incidentBrief.stakes', st.incidentBrief?.stakes],
+      ['asmProgramSpec.goalTitle', st.asmProgramSpec?.goalTitle],
+      ['rewardChip.description', st.rewardChip?.description],
+    ]) {
+      assertNoRawMarkdown(val, `${st.id}.${field}`);
+    }
+    for (const [i, hint] of (st.hints || []).entries()) {
+      assertNoRawMarkdown(hint, `${st.id}.hints[${i}]`);
+    }
+    for (const r of st.asmProgramSpec?.rows || []) {
+      assertNoRawMarkdown(r.label, `${st.id}.rows[${r.addr}].label`);
+    }
+    for (const line of [...(st.introDialogue || []), ...(st.outroDialogue || [])]) {
+      assert.ok(validSpeakers.has(line.speaker), `Unexpected speaker '${line.speaker}' in ${st.id}`);
+      assertNoRawMarkdown(line.text, `${st.id}.dialogue`);
+      assert.equal(tokenizeGlossaryText(line.text).map((t) => t.text).join(''), line.text);
+      if (line.visualCard) {
+        assertNoRawMarkdown(line.visualCard.tag, `${st.id}.visualCard.tag`);
+        assertNoRawMarkdown(line.visualCard.title, `${st.id}.visualCard.title`);
+        assertNoRawMarkdown(line.visualCard.rule, `${st.id}.visualCard.rule`);
+        if (line.visualCard.anim) {
+          assert.ok(
+            new RegExp(`case '${line.visualCard.anim}'`).test(storyDiagramSrc),
+            `Missing storyDiagram.js anim '${line.visualCard.anim}' in ${st.id}`
+          );
+        }
+      }
+    }
+    for (const cid of st.codexUnlock || []) {
+      assert.ok(CODEX_ENTRIES[cid], `Missing codex entry '${cid}' referenced by ${st.id}`);
+    }
+  }
+
+  // Zero raw Markdown in Chapter 5 Codex & Glossary entries + valid anim keys for Ch.5 modules (52..59)
+  for (const cid of ['disk_bootloader', 'memory_allocator_heap', 'syscall_abi_dispatch', 'preemptive_microkernel']) {
+    const entry = CODEX_ENTRIES[cid];
+    assert.ok(entry, `Missing Chapter 5 codex entry '${cid}'`);
+    assertNoRawMarkdown(entry.term, `codex.${cid}.term`);
+    assertNoRawMarkdown(entry.subtitle, `codex.${cid}.subtitle`);
+    for (const [i, para] of (entry.body || []).entries()) {
+      assertNoRawMarkdown(para, `codex.${cid}.body[${i}]`);
+    }
+  }
+  const ch5ModIds = MODULE_ENCYCLOPEDIA_IDS.slice(52);
+  assert.deepEqual(ch5ModIds, [
+    'boot_loader',
+    'kalloc_map',
+    'heap_sbrk',
+    'syscall_mux',
+    'pcb_ctx',
+    'rr_sched',
+    'fault_isolate',
+    'ark_kernel_core',
+  ]);
+  for (const modId of ch5ModIds) {
+    const entry = getGlossaryTerm(modId);
+    assert.ok(entry?.anim, `Missing Ch5 glossary anim for '${modId}'`);
+    assert.ok(
+      new RegExp(`case '${entry.anim}'`).test(storyDiagramSrc),
+      `Missing storyDiagram.js anim '${entry.anim}' for Ch5 module '${modId}'`
+    );
+    assertNoRawMarkdown(entry.title, `glossary.${modId}.title`);
+    assertNoRawMarkdown(entry.summary, `glossary.${modId}.summary`);
+    assertNoRawMarkdown(entry.analogy, `glossary.${modId}.analogy`);
+  }
+  for (const termId of [
+    'bootloader', 'bitmap_alloc', 'heap_memory', 'pcb_concept',
+    'vdso_trampoline', 'round_robin', 'fault_isolation', 'microkernel',
+  ]) {
+    const entry = getGlossaryTerm(termId);
+    assert.ok(entry, `Missing Ch5 glossary term '${termId}'`);
+    assertNoRawMarkdown(entry.title, `glossary.${termId}.title`);
+    assertNoRawMarkdown(entry.summary, `glossary.${termId}.summary`);
+    assertNoRawMarkdown(entry.analogy, `glossary.${termId}.analogy`);
+  }
+
+  // 2. Live 18,880-MOSFET execution of ALL 8 Chapter 5 stages (Primary + Anti-cheat)
+  //    PLUS formatArk8OsProgramText -> assembleArk8OsProgramText round-trip!
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter4Hardware: true, provisioned: false });
+  const idealSlotsById = {};
+
+  for (const st of ch5Stages) {
+    const idealSlots = {};
+    for (const r of st.asmProgramSpec.rows) {
+      if (!r.locked) {
+        assert.ok(r.ideal, `Missing ideal instruction for ${st.id} addr ${r.addr}`);
+        idealSlots[r.slotId] = r.ideal;
+      }
+    }
+    const formatted = formatArk8OsProgramText(st, idealSlots);
+    const reparsed = assembleArk8OsProgramText(formatted, st);
+    assert.equal(reparsed.ok, true, `${st.id} text round-trip failed: ${JSON.stringify(reparsed.errors)}`);
+    assert.deepEqual(reparsed.slots, idealSlots, `${st.id} slots mismatch after round-trip`);
+    idealSlotsById[st.id] = reparsed.slots;
+
+    const evalRes = evaluateArk8OsStage(st, reparsed.slots, customChips);
+    assert.equal(evalRes.passed, true, `${st.id} live MOSFET execution failed: ${evalRes.message}`);
+    assertNoRawMarkdown(evalRes.message, `${st.id}.evalRes.message`);
+    assert.equal(evalRes.run.haltedNormally, true, `${st.id} must halt cleanly`);
+    assert.equal(evalRes.run.hw.siliconStats.isPhysicalSilicon, true);
+    assert.equal(evalRes.run.hw.siliconStats.boardSwCount, 18880);
+
+    if (st.id === 'stage_55') {
+      assert.equal(evalRes.run.final.crtText, 'OS!');
+      assert.equal(evalRes.run.final.diskPtr, 15);
+      assert.equal(evalRes.run.stats.usedStr, true);
+      assert.equal(evalRes.run.stats.usedCall, true);
+      assert.equal(evalRes.run.stats.usedRet, true);
+      assert.ok(evalRes.run.stats.maxPcExecuted >= 32);
+    } else if (st.id === 'stage_56') {
+      assert.equal(evalRes.run.final.crtText, '130');
+      assert.deepEqual(evalRes.run.final.ram.slice(96, 100), [1, 1, 1, 1]);
+    } else if (st.id === 'stage_57') {
+      assert.equal(evalRes.run.final.crtText, 'H!S');
+      assert.equal(evalRes.run.final.ram[96], 52);
+      assert.equal(evalRes.run.final.ram[0x80 + 46], 72);
+      assert.equal(evalRes.run.stats.enteredUserMode, true);
+    } else if (st.id === 'stage_58') {
+      assert.equal(evalRes.run.final.crtText, 'ARK8');
+      assert.equal(evalRes.run.final.kbLen, 0);
+      assert.ok(evalRes.run.stats.userSyscallCount >= 10);
+    } else if (st.id === 'stage_59') {
+      assert.equal(evalRes.run.final.crtText, 'A1B2');
+      assert.ok(evalRes.run.stats.contextSwitchCount >= 4);
+      assert.ok(evalRes.run.stats.userBaseVisited.size >= 2);
+      assert.equal(evalRes.run.final.ram[96], 0);
+      assert.equal(evalRes.run.final.ram[104], 0);
+    } else if (st.id === 'stage_60') {
+      assert.equal(evalRes.run.final.crtText, 'WPWPPP');
+      assert.ok(evalRes.run.stats.irqCount >= 3);
+      assert.ok(evalRes.run.stats.contextSwitchCount >= 4);
+      assert.ok(evalRes.run.stats.userBaseVisited.size >= 2);
+    } else if (st.id === 'stage_61') {
+      assert.equal(evalRes.run.final.crtText, 'ARB!K');
+      assert.equal(evalRes.run.final.crtText.includes('X'), false);
+      assert.equal(evalRes.run.stats.faultCount, 1);
+      assert.ok(evalRes.run.stats.blockedAttacks >= 1);
+      assert.equal(evalRes.run.final.ram[220], 0);
+      assert.equal(evalRes.run.final.ram[236], 0);
+    } else if (st.id === 'stage_62') {
+      assert.equal(evalRes.run.final.crtText, 'ARB!K');
+      assert.equal(evalRes.run.final.crtText.includes('X'), false);
+      assert.equal(evalRes.run.final.diskPtr, 29);
+      assert.equal(evalRes.run.stats.bitmap0SetHigh, true);
+      assert.ok(evalRes.run.stats.irqCount >= 1);
+      assert.equal(evalRes.run.stats.faultCount, 1);
+      assert.ok(evalRes.run.stats.blockedAttacks >= 1);
+      assert.ok(evalRes.run.stats.contextSwitchCount >= 2);
+      assert.equal(evalRes.run.final.ram[214], 0);
+      assert.equal(evalRes.run.final.ram[222], 0);
+      assert.equal(evalRes.run.final.ram[230], 0);
+      assert.equal(evalRes.run.final.ram[238], 0);
+    }
+  }
+
+  // 3. Physical silicon fault propagation across all 5 core chips (NAND, SRAM_16B, TMR_IRQ, MMU_8B, PRIV_CTRL)
+  const sabotageChecks = [
+    ['NAND', 'stage_55'],
+    ['SRAM_16B', 'stage_56'],
+    ['TMR_IRQ', 'stage_60'],
+    ['MMU_8B', 'stage_61'],
+    ['PRIV_CTRL', 'stage_62'],
+  ];
+  for (const [chipId, targetStageId] of sabotageChecks) {
+    const brokenChips = { ...customChips };
+    const brokenCircuit = cloneCircuit(customChips[chipId].circuit);
+    brokenCircuit.wires = brokenCircuit.wires.filter((w) => w.to.kind !== 'output');
+    brokenChips[chipId] = { ...customChips[chipId], circuit: brokenCircuit };
+    const targetSt = getStageById(targetStageId);
+    const faultRes = evaluateArk8OsStage(targetSt, idealSlotsById[targetStageId], brokenChips);
+    assert.equal(
+      faultRes.passed,
+      false,
+      `Sabotaging physical chip ${chipId} must propagate and fail ${targetStageId}`
+    );
+  }
+
+  // 4. storage.js Chapter 5 unlock/clear & sequential stage_55..stage_62 progression
+  const preCh5Save = { clearedStages: ['stage_17', 'stage_24', 'stage_42', 'stage_53'], chapter5Unlocked: true };
+  assert.equal(isChapter5Unlocked(preCh5Save), false, 'Stale chapter5Unlocked flag must not bypass stage_54');
+  assert.equal(isChapter5Cleared(preCh5Save), false);
+  assert.equal(isStageUnlocked(preCh5Save, 'stage_55'), false);
+
+  const postCh4Save = { clearedStages: ['stage_17', 'stage_24', 'stage_42', 'stage_54'] };
+  assert.equal(isChapter5Unlocked(postCh4Save), true);
+  assert.equal(isChapter5Cleared(postCh4Save), false);
+  assert.equal(isStageUnlocked(postCh4Save, 'stage_55'), true);
+  assert.equal(isStageUnlocked(postCh4Save, 'stage_56'), false);
+
+  const progSave = { clearedStages: ['stage_17', 'stage_24', 'stage_42', 'stage_54'] };
+  for (let i = 0; i < expectedIds.length; i++) {
+    const curId = expectedIds[i];
+    assert.equal(isStageUnlocked(progSave, curId), true, `${curId} should be unlocked`);
+    if (i + 1 < expectedIds.length) {
+      assert.equal(isStageUnlocked(progSave, expectedIds[i + 1]), false, `${expectedIds[i + 1]} should still be locked`);
+    }
+    assert.equal(isChapter5Cleared(progSave), false);
+    progSave.clearedStages.push(curId);
+  }
+  assert.equal(isChapter5Cleared(progSave), true);
+
+  // 5. buildChapter5EndingSteps: beats, dynamic hardware stats, interactive choices & lossless glossary round-trip
+  const ch5Ending = buildChapter5EndingSteps({
+    ark8OsNandCount: 6294,
+    ark8OsSwCount: 12588,
+    ark8OsPullCount: 6294,
+  });
+  assert.ok(ch5Ending.length >= 10, `Expected >=10 Chapter 5 ending beats, got ${ch5Ending.length}`);
+  assert.ok(ch5Ending.some((s) => s.text.includes('6294') && s.text.includes('12588')));
+  assert.ok(ch5Ending.some((s) => s.speaker === 'ren'));
+  assert.ok(ch5Ending.some((s) => Array.isArray(s.choices) && s.choices.length === 3));
+  for (const [idx, step] of ch5Ending.entries()) {
+    assert.ok(validSpeakers.has(step.speaker), `Unexpected Ch5 ending speaker '${step.speaker}'`);
+    assert.equal(
+      existsSync(new URL(`../${step.scene.replace(/^\.\//, '')}`, import.meta.url)),
+      true,
+      `Missing Ch5 ending scene image '${step.scene}'`
+    );
+    assertNoRawMarkdown(step.text, `ch5Ending[${idx}].text`);
+    assert.equal(tokenizeGlossaryText(step.text).map((t) => t.text).join(''), step.text);
+    for (const c of step.choices || []) {
+      assert.ok(validSpeakers.has(c.replySpeaker), `Unexpected Ch5 choice speaker '${c.replySpeaker}'`);
+      assertNoRawMarkdown(c.label, `ch5Ending[${idx}].choice.label`);
+      assertNoRawMarkdown(c.replyText, `ch5Ending[${idx}].choice.replyText`);
+      assert.equal(tokenizeGlossaryText(c.replyText).map((t) => t.text).join(''), c.replyText);
+    }
+  }
+
+  // 6. index.html, sw.js (silicon-genesis-v41, scene_storm_core.jpg, chapter5Stages.js) & ZERO leftover v=40 across codebase
+  const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(indexHtml, /styles\/main\.css\?v=41/);
+  assert.match(indexHtml, /src\/main\.js\?v=41/);
+  assert.match(indexHtml, /id="btn-title-chapter5"/);
+  assert.match(indexHtml, /id="btn-title-end5"/);
+
+  const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(swSrc, /silicon-genesis-v41/);
+  assert.match(swSrc, /scene_storm_core\.jpg/);
+  assert.match(swSrc, /chapter5Stages\.js/);
+  assert.match(swSrc, /osHwRunner\.js\?v=41/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=41/);
+
+  const collectFiles = (dirUrl, prefix) => {
+    const out = [];
+    for (const ent of readdirSync(dirUrl, { withFileTypes: true })) {
+      const rel = `${prefix}/${ent.name}`;
+      if (ent.isDirectory()) {
+        out.push(...collectFiles(new URL(`${ent.name}/`, dirUrl), rel));
+      } else if (ent.name.endsWith('.js') || ent.name.endsWith('.css')) {
+        out.push(rel);
+      }
+    }
+    return out;
+  };
+  const checkedPaths = [
+    'index.html',
+    'sw.js',
+    ...collectFiles(new URL('../src/', import.meta.url), 'src'),
+    ...collectFiles(new URL('../styles/', import.meta.url), 'styles'),
+  ];
+  for (const relPath of checkedPaths) {
+    const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
+    assert.equal(
+      /\?v=40\b|silicon-genesis-v40\b/.test(src),
+      false,
+      `Leftover v40 cache string found in ${relPath}`
+    );
   }
 });

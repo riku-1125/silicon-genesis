@@ -2,13 +2,14 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=40';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=41';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
   buildChapter3EndingSteps,
   buildChapter4EndingSteps,
-} from './data/endings.js?v=40';
+  buildChapter5EndingSteps,
+} from './data/endings.js?v=41';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -33,18 +34,19 @@ import {
   isChapter2Unlocked,
   isChapter3Unlocked,
   isChapter4Unlocked,
-} from './state/storage.js?v=40';
-import { sound } from './audio/sound.js?v=40';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=40';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=40';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=40';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=40';
-import { Ark8IdePanel } from './ui/ark8Ide.js?v=40';
-import { Ark8OsIdePanel } from './ui/ark8OsIde.js?v=40';
-import { DialogueController } from './ui/dialogue.js?v=40';
-import { ModalManager } from './ui/modals.js?v=40';
-import { PrologueOverlay } from './ui/prologue.js?v=40';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=40';
+  isChapter5Unlocked,
+} from './state/storage.js?v=41';
+import { sound } from './audio/sound.js?v=41';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=41';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=41';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=41';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=41';
+import { Ark8IdePanel } from './ui/ark8Ide.js?v=41';
+import { Ark8OsIdePanel } from './ui/ark8OsIde.js?v=41';
+import { DialogueController } from './ui/dialogue.js?v=41';
+import { ModalManager } from './ui/modals.js?v=41';
+import { PrologueOverlay } from './ui/prologue.js?v=41';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=41';
 
 class SiliconGenesisApp {
   constructor() {
@@ -93,6 +95,9 @@ class SiliconGenesisApp {
       onStartChapter4: () => {
         this.startChapter4();
       },
+      onStartChapter5: () => {
+        this.startChapter5();
+      },
       onReplayEnding1: () => {
         this._playChapterEnding(1, {
           endBtnLabel: 'タイトルへ戻る ▶',
@@ -113,6 +118,12 @@ class SiliconGenesisApp {
       },
       onReplayEnding4: () => {
         this._playChapterEnding(4, {
+          endBtnLabel: 'タイトルへ戻る ▶',
+          onComplete: () => this.prologue.showTitle(this.save),
+        });
+      },
+      onReplayEnding5: () => {
+        this._playChapterEnding(5, {
           endBtnLabel: 'タイトルへ戻る ▶',
           onComplete: () => this.prologue.showTitle(this.save),
         });
@@ -384,6 +395,12 @@ class SiliconGenesisApp {
         },
         onReplayEnding4: () => {
           this._playChapterEnding(4, {
+            endBtnLabel: '作業台へ戻る ▶',
+            onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
+          });
+        },
+        onReplayEnding5: () => {
+          this._playChapterEnding(5, {
             endBtnLabel: '作業台へ戻る ▶',
             onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
           });
@@ -937,6 +954,7 @@ class SiliconGenesisApp {
 
   _getDefaultRunBtnLabel() {
     if (this.stage?.isSandbox) return '⚡ CLK脈動';
+    if (this.stage?.chapter === 5) return '▶ カーネル実機テスト実行';
     if (this.stage?.chapter === 4) return '▶ OS実機テスト実行';
     if (this.stage?.chapter === 3) return '▶ 実機テスト実行';
     if (this.stage?.chapter === 2) return '▶ 主任決裁・テスト実行';
@@ -1467,13 +1485,25 @@ class SiliconGenesisApp {
 
     const prefix =
       this.stage.kind === 'ark8_os_program'
-        ? 'ARK-8 OS実機実行'
+        ? this.stage.chapter === 5
+          ? 'ARK-OS カーネル実機実行'
+          : 'ARK-8 OS実機実行'
         : this.stage.kind === 'ark8_program'
           ? 'ARK-8実機実行'
           : isAsm
             ? '実機CPU実行'
             : '物理検証';
-    const stepDelay = evalResult.results.length > 16 ? 65 : evalResult.results.length > 5 ? 260 : 500;
+    const stepDelay =
+      evalResult.results.length > 180
+        ? 12
+        : evalResult.results.length > 80
+          ? 24
+          : evalResult.results.length > 16
+            ? 55
+            : evalResult.results.length > 5
+              ? 260
+              : 500;
+    const soundStride = evalResult.results.length > 180 ? 14 : evalResult.results.length > 80 ? 7 : 3;
 
     // On Stage 24 (Grand Finale II), pause right before the final hatch-opening command (3番地: LDI 15)
     // on a first-time clear so the player personally delivers the final clock pulse!
@@ -1498,7 +1528,7 @@ class SiliconGenesisApp {
       const step = evalResult.results[i];
       this.dom.testProgressLabel.textContent = `${prefix} ${i + 1}/${evalResult.results.length}: ${step.label}`;
       showStep(step.input[0]);
-      if (evalResult.results.length <= 16 || i % 3 === 0 || i === preLoopEnd - 1) {
+      if (evalResult.results.length <= 16 || i % soundStride === 0 || i === preLoopEnd - 1) {
         sound.playTestStep(i % 8, step.passed);
       }
       await new Promise((r) => setTimeout(r, stepDelay));
@@ -1618,19 +1648,21 @@ class SiliconGenesisApp {
     this._syncSceneCanvas();
 
     // 4. Play post-clear revelation dialogue (or full-screen Chapter Ending!), then open Chip Forging ceremony!
-    sound.setBgmTrack(
-      this.stage.isFinale ||
-        this.stage.isChapter2Finale ||
-        this.stage.isChapter3Finale ||
-        this.stage.isChapter4Finale
-        ? 'finale'
-        : 'story'
-    );
-    const nextStage = this._getNextStage();
     const isCh1Finale = this.stage.id === 'stage_17';
     const isCh2Finale = this.stage.id === 'stage_24';
     const isCh3Finale = this.stage.id === 'stage_42';
     const isCh4Finale = this.stage.id === 'stage_54';
+    const isCh5Finale = this.stage.id === 'stage_62' || Boolean(this.stage.isChapter5Finale);
+    sound.setBgmTrack(
+      this.stage.isFinale ||
+        this.stage.isChapter2Finale ||
+        this.stage.isChapter3Finale ||
+        this.stage.isChapter4Finale ||
+        isCh5Finale
+        ? 'finale'
+        : 'story'
+    );
+    const nextStage = this._getNextStage();
     const journeyStats = this._collectEndingStats(metrics);
 
     const canExportOnVictory =
@@ -1638,6 +1670,7 @@ class SiliconGenesisApp {
       isCh2Finale ||
       isCh3Finale ||
       isCh4Finale ||
+      isCh5Finale ||
       this.stage.id === 'stage_21' ||
       this.stage.id === 'stage_40' ||
       this.stage.id === 'stage_52' ||
@@ -1658,10 +1691,10 @@ class SiliconGenesisApp {
               })
           : null,
         onReplayEnding:
-          isCh1Finale || isCh2Finale || isCh3Finale || isCh4Finale
+          isCh1Finale || isCh2Finale || isCh3Finale || isCh4Finale || isCh5Finale
             ? () =>
                 this._playChapterEnding(
-                  isCh4Finale ? 4 : isCh3Finale ? 3 : isCh2Finale ? 2 : 1,
+                  isCh5Finale ? 5 : isCh4Finale ? 4 : isCh3Finale ? 3 : isCh2Finale ? 2 : 1,
                   {
                     endBtnLabel: '達成レコードへ戻る ▶',
                     onComplete: () => openCeremony(),
@@ -1712,6 +1745,13 @@ class SiliconGenesisApp {
       this.dialogue.showGoal(`🖥️ 第四章完結：${this.stage.revealedTitle}`, 'hako');
       this._playChapterEnding(4, {
         endBtnLabel: '第四章・達成認定証へ ▶',
+        metrics,
+        onComplete: openCeremony,
+      });
+    } else if (isCh5Finale) {
+      this.dialogue.showGoal(`⚡ 第五章完結：${this.stage.revealedTitle}`, 'hako');
+      this._playChapterEnding(5, {
+        endBtnLabel: '第五章・達成認定証へ ▶',
         metrics,
         onComplete: openCeremony,
       });
@@ -1846,17 +1886,17 @@ class SiliconGenesisApp {
       ark8OsMetrics?.nandCount ??
       chips.ARK8_OS_HW?.nandCount ??
       this.save?.bestNandCounts?.stage_52 ??
-      (this.stage?.id === 'stage_54' ? latestMetrics?.nandCount : null) ??
+      (this.stage?.id === 'stage_54' || this.stage?.id === 'stage_62' ? latestMetrics?.nandCount : null) ??
       6294;
     const ark8OsSwCount =
       ark8OsMetrics?.swCount ??
       chips.ARK8_OS_HW?.swCount ??
-      (this.stage?.id === 'stage_54' ? latestMetrics?.swCount : null) ??
+      (this.stage?.id === 'stage_54' || this.stage?.id === 'stage_62' ? latestMetrics?.swCount : null) ??
       ark8OsNandCount * 2;
     const ark8OsPullCount =
       ark8OsMetrics?.pullCount ??
       chips.ARK8_OS_HW?.pullCount ??
-      (this.stage?.id === 'stage_54' ? latestMetrics?.pullCount : null) ??
+      (this.stage?.id === 'stage_54' || this.stage?.id === 'stage_62' ? latestMetrics?.pullCount : null) ??
       ark8OsNandCount;
     return {
       ark4NandCount,
@@ -1879,13 +1919,15 @@ class SiliconGenesisApp {
   _playChapterEnding(chapterNum, { endBtnLabel = '次へ ▶', metrics = null, onComplete = null } = {}) {
     const stats = this._collectEndingStats(metrics);
     const steps =
-      chapterNum === 4
-        ? buildChapter4EndingSteps(stats)
-        : chapterNum === 3
-          ? buildChapter3EndingSteps(stats)
-          : chapterNum === 2
-            ? buildChapter2EndingSteps(stats)
-            : buildChapter1EndingSteps(stats);
+      chapterNum === 5
+        ? buildChapter5EndingSteps(stats)
+        : chapterNum === 4
+          ? buildChapter4EndingSteps(stats)
+          : chapterNum === 3
+            ? buildChapter3EndingSteps(stats)
+            : chapterNum === 2
+              ? buildChapter2EndingSteps(stats)
+              : buildChapter1EndingSteps(stats);
     this.dialogue.close();
     this.prologue.playEnding(steps, {
       endBtnLabel,
@@ -1894,7 +1936,7 @@ class SiliconGenesisApp {
   }
 
   // ===========================================================================
-  // CHAPTER 2, 3 & 4 LAUNCHERS
+  // CHAPTER 2, 3, 4 & 5 LAUNCHERS
   // ===========================================================================
   startChapter2() {
     if (!isChapter2Unlocked(this.save)) {
@@ -1954,6 +1996,27 @@ class SiliconGenesisApp {
       : firstUnclearedCh4
         ? firstUnclearedCh4.id
         : 'stage_43';
+
+    this.loadStage(targetId, { autoIntro: true });
+    requestAnimationFrame(() => this._fitActiveCanvas());
+  }
+
+  startChapter5() {
+    if (!isChapter5Unlocked(this.save)) {
+      sound.playSwitch(false);
+      this.showToast('第四章（STAGE 54：OS保護トラップ防衛）をクリアすると第五章が解放されます！');
+      return;
+    }
+    this._ensureChipsForChapter5();
+    const ch5Stages = STAGES.filter((s) => s.chapter === 5);
+    const clearedSet = new Set(this.save.clearedStages || []);
+    const curIsCh5 = ch5Stages.some((s) => s.id === this.save.currentStageId);
+    const firstUnclearedCh5 = ch5Stages.find((s) => !clearedSet.has(s.id));
+    const targetId = curIsCh5
+      ? this.save.currentStageId
+      : firstUnclearedCh5
+        ? firstUnclearedCh5.id
+        : 'stage_55';
 
     this.loadStage(targetId, { autoIntro: true });
     requestAnimationFrame(() => this._fitActiveCanvas());
@@ -2025,6 +2088,30 @@ class SiliconGenesisApp {
     persistSaveData(this.save);
   }
 
+  _ensureChipsForChapter5() {
+    this.save.seenPrologue = true;
+    this.save.chapter2Unlocked = true;
+    this.save.chapter3Unlocked = true;
+    this.save.chapter4Unlocked = true;
+    this.save.chapter5Unlocked = true;
+
+    provisionStandardChips(this.save.customChips, {
+      includeChapter4Hardware: true,
+      provisioned: true,
+    });
+
+    const prevStages = STAGES.filter((s) => (s.chapter || 1) <= 4);
+    for (const st of prevStages) {
+      for (const cid of st.codexUnlock || []) {
+        if (!this.save.unlockedCodex.includes(cid)) {
+          this.save.unlockedCodex.push(cid);
+        }
+      }
+    }
+
+    persistSaveData(this.save);
+  }
+
   showToast(message) {
     this.dom.toast.textContent = message;
     this.dom.toast.classList.add('show');
@@ -2045,7 +2132,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=40', { updateViaCache: 'none' })
+        .register('./sw.js?v=41', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

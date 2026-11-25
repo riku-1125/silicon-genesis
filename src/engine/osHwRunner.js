@@ -320,6 +320,8 @@ function fmtAddrHint(imm) {
   if (imm === 0xf5) return '0xF5(LIMIT)';
   if (imm === 0xf6) return '0xF6(SP)';
   if (imm === 0xf7) return '0xF7(EPC)';
+  if (imm === 0xf8) return '0xF8(DPTR)';
+  if (imm === 0xf9) return '0xF9(CAUSE)';
   return String(imm);
 }
 
@@ -474,6 +476,9 @@ function parseNumToken(tok) {
   if (upper === 'BASE' || upper === 'MMU_BASE') return MMIO_PORTS.MMU_BASE;
   if (upper === 'LIMIT' || upper === 'MMU_LIMIT') return MMIO_PORTS.MMU_LIMIT;
   if (upper === 'SP') return MMIO_PORTS.SP_REG;
+  if (upper === 'EPC') return MMIO_PORTS.EPC_REG;
+  if (upper === 'DPTR' || upper === 'DISK_PTR') return MMIO_PORTS.DISK_PTR;
+  if (upper === 'CAUSE' || upper === 'TRAP_CAUSE') return MMIO_PORTS.TRAP_CAUSE;
   return NaN;
 }
 
@@ -778,6 +783,22 @@ export function compileArk8OsHardware(customChips = {}) {
   const regEncSim = compileReq('ASM_ENC');
   const instDec16Sim = compileReq('INST_DEC16');
 
+  // Probe the player's own compiled INST_DEC16 silicon once across opcodes 0..15
+  // for zero-overhead fast stepping while preserving 100% physical decode fidelity!
+  const instDec16Table = Array.from({ length: 16 }, (_, opCode) => {
+    instDec16Sim.reset();
+    instDec16Sim.evaluate(packBusVector(['OP[3:0]'], [opCode]));
+    const outBus = instDec16Sim.getOutputBusValues();
+    const mem = outBus[1] | 0;
+    return {
+      wd1: mem & 1,
+      regWe: (mem >> 1) & 1,
+      memWe: (mem >> 2) & 1,
+      memOp: (mem >> 3) & 1,
+      priv: outBus[8] ? 1 : 0,
+    };
+  });
+
   const cpuMetrics = computeCircuitMetrics(cpuDef.circuit, workingChips);
   const boardParts = ['ARK8_OS_HW', 'MEM_BUS8', 'MMIO_DEC', 'TMR_IRQ', 'MMU_8B'];
   let boardNandCount = 0;
@@ -815,6 +836,7 @@ export function compileArk8OsHardware(customChips = {}) {
     asmEnc8Sim,
     regEncSim,
     instDec16Sim,
+    instDec16Table,
     metrics: cpuMetrics,
     sram16Check,
     siliconStats: {
@@ -1008,20 +1030,68 @@ export function probeArk8OsMachineState(hw, board) {
     trapCauseName: TRAP_CAUSE_NAMES[board?.trapCause ?? 0] || 'NONE',
     crtText: board?.crtText ?? '',
     diskPtr: board?.diskPtr ?? 0,
+    disk: board?.disk ? Array.from(board.disk.slice(0, 48)) : new Array(48).fill(0),
     kbLen: board?.kbQueue?.length ?? 0,
     ram: board?.ram ? Array.from(board.ram) : new Array(256).fill(0),
   };
 }
 
 /**
- * Creates & hardware-resets a Chapter 4 Motherboard instance (Unified 256B RAM,
+ * Helper to encode a list of instructions via player-forged `ASM_ENC8` + `ASM_ENC`
+ * into a Disk image (optionally padded to `padToBytes` with vDSO `POP R0; RET` at `vdsoPc`,
+ * and optionally prefixed with byte 0 = total payload byte length).
+ */
+export function encodeArk8OsDiskProgram(hw, diskProgram) {
+  if (!diskProgram || !Array.isArray(diskProgram.instructions)) return new Uint8Array(0);
+  const rawLen = diskProgram.instructions.length * 2;
+  const payloadLen =
+    typeof diskProgram.padToBytes === 'number'
+      ? Math.max(rawLen, diskProgram.padToBytes)
+      : rawLen;
+  const payload = new Uint8Array(payloadLen);
+  diskProgram.instructions.forEach((spec, idx) => {
+    if (!spec) return;
+    const part = resolveArk8OsSlot(spec);
+    if (!part) return;
+    const enc = encodeArk8OsInstructionPins(part, hw);
+    const ba = idx * 2;
+    if (ba + 1 < payloadLen) {
+      payload[ba] = enc.loByte;
+      payload[ba + 1] = enc.hiByte;
+    }
+  });
+  if (typeof diskProgram.vdsoPc === 'number') {
+    const popEnc = encodeArk8OsInstructionPins(makeArk8OsInstruction('POP', 0, 0, 0), hw);
+    const retEnc = encodeArk8OsInstructionPins(makeArk8OsInstruction('RET', 0, 0, 0), hw);
+    const ba0 = diskProgram.vdsoPc * 2;
+    if (ba0 + 3 < payloadLen) {
+      payload[ba0] = popEnc.loByte;
+      payload[ba0 + 1] = popEnc.hiByte;
+      payload[ba0 + 2] = retEnc.loByte;
+      payload[ba0 + 3] = retEnc.hiByte;
+    }
+  }
+  if (diskProgram.withLenHeader !== false) {
+    const out = new Uint8Array(payloadLen + 1);
+    out[0] = payloadLen & 0xff;
+    out.set(payload, 1);
+    return out;
+  }
+  return payload;
+}
+
+/**
+ * Creates & hardware-resets a Chapter 4/5 Motherboard instance (Unified 256B RAM,
  * Text CRT, Keyboard, Disk, Timer, MMU Base/Limit, IR_LO/IR_HI, ARK8_OS_HW).
  */
 export function resetArk8OsHardware(hw, options = {}) {
   const {
     rowMap = null,
+    kernelLib = null,
     initialRam = null,
     userProgram = null,
+    userPrograms = null,
+    diskProgram = null,
     initialDisk = null,
     initialKeys = null,
     bootRom = null,
@@ -1050,16 +1120,17 @@ export function resetArk8OsHardware(hw, options = {}) {
   evalCpu(hw, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   const ram = new Uint8Array(256);
-  // 1. Seed initial RAM bytes (e.g. strings at 0x60 or data)
+  // 1. Seed initial RAM bytes (e.g. strings, PCBs, allocator bitmap, heap BRK)
   if (initialRam && typeof initialRam === 'object') {
     for (const [addrStr, val] of Object.entries(initialRam)) {
       ram[Number(addrStr) & 0xff] = Number(val) & 0xff;
     }
   }
-  // 2. Encode & load optional pre-loaded User Sandbox binary (e.g. Stage 54 at 0x40..0x4F)
-  if (userProgram && Array.isArray(userProgram.instructions)) {
-    const baseAddr = (userProgram.baseAddr ?? 0x40) & 0xff;
-    userProgram.instructions.forEach((spec, idx) => {
+  const loadUserSandbox = (up) => {
+    if (!up || !Array.isArray(up.instructions)) return;
+    const baseAddr = (up.baseAddr ?? 0x40) & 0xff;
+    up.instructions.forEach((spec, idx) => {
+      if (!spec) return;
       const part = resolveArk8OsSlot(spec);
       if (!part) return;
       const enc = encodeArk8OsInstructionPins(part, hw);
@@ -1067,9 +1138,36 @@ export function resetArk8OsHardware(hw, options = {}) {
       ram[ba] = enc.loByte;
       ram[(ba + 1) & 0xff] = enc.hiByte;
     });
+    if (typeof up.vdsoPc === 'number') {
+      const popEnc = encodeArk8OsInstructionPins(makeArk8OsInstruction('POP', 0, 0, 0), hw);
+      const retEnc = encodeArk8OsInstructionPins(makeArk8OsInstruction('RET', 0, 0, 0), hw);
+      const ba0 = (baseAddr + up.vdsoPc * 2) & 0xff;
+      ram[ba0] = popEnc.loByte;
+      ram[(ba0 + 1) & 0xff] = popEnc.hiByte;
+      ram[(ba0 + 2) & 0xff] = retEnc.loByte;
+      ram[(ba0 + 3) & 0xff] = retEnc.hiByte;
+    }
+  };
+  // 2. Encode & load optional pre-loaded User Sandbox binary / binaries via ASM_ENC8 + ASM_ENC!
+  if (userProgram) loadUserSandbox(userProgram);
+  if (Array.isArray(userPrograms)) {
+    for (const up of userPrograms) loadUserSandbox(up);
   }
-  // 3. Encode & load Kernel / main program rows into Unified 256B RAM via ASM_ENC8 + ASM_ENC!
+  // 3. Encode & load optional pre-built Kernel helper library (real instructions in RAM)
   const instMap = new Map();
+  if (Array.isArray(kernelLib)) {
+    for (const entry of kernelLib) {
+      if (!entry || entry.addr < 0 || entry.addr > 127) continue;
+      const part = resolveArk8OsSlot(entry.part);
+      if (!part) continue;
+      const enc = encodeArk8OsInstructionPins(part, hw);
+      const ba = (entry.addr << 1) & 0xff;
+      ram[ba] = enc.loByte;
+      ram[(ba + 1) & 0xff] = enc.hiByte;
+      instMap.set(ba, part);
+    }
+  }
+  // 4. Encode & load Kernel / main program rows into Unified 256B RAM via ASM_ENC8 + ASM_ENC!
   if (rowMap instanceof Map) {
     for (const [addr, entry] of rowMap.entries()) {
       if (!entry?.part || addr < 0 || addr > 127) continue;
@@ -1082,11 +1180,17 @@ export function resetArk8OsHardware(hw, options = {}) {
   }
 
   const disk = new Uint8Array(256);
-  if (initialDisk) {
-    if (typeof initialDisk === 'string') {
-      for (let i = 0; i < Math.min(256, initialDisk.length); i++) disk[i] = initialDisk.charCodeAt(i) & 0xff;
-    } else if (Array.isArray(initialDisk) || initialDisk instanceof Uint8Array) {
-      for (let i = 0; i < Math.min(256, initialDisk.length); i++) disk[i] = Number(initialDisk[i]) & 0xff;
+  const effectiveDisk =
+    initialDisk !== null && initialDisk !== undefined
+      ? initialDisk
+      : diskProgram
+        ? encodeArk8OsDiskProgram(hw, diskProgram)
+        : null;
+  if (effectiveDisk) {
+    if (typeof effectiveDisk === 'string') {
+      for (let i = 0; i < Math.min(256, effectiveDisk.length); i++) disk[i] = effectiveDisk.charCodeAt(i) & 0xff;
+    } else if (Array.isArray(effectiveDisk) || effectiveDisk instanceof Uint8Array) {
+      for (let i = 0; i < Math.min(256, effectiveDisk.length); i++) disk[i] = Number(effectiveDisk[i]) & 0xff;
     }
   }
 
@@ -1102,6 +1206,12 @@ export function resetArk8OsHardware(hw, options = {}) {
     for (let i = 0; i < Math.min(16, bootRom.length); i++) bootRomBuf[i] = Number(bootRom[i]) & 0xff;
   }
 
+  const firstUserBase = userProgram
+    ? (userProgram.baseAddr ?? 0x40) & 0xff
+    : Array.isArray(userPrograms) && userPrograms.length > 0
+      ? (userPrograms[0].baseAddr ?? 0x80) & 0xff
+      : null;
+
   const board = {
     ram,
     disk,
@@ -1113,7 +1223,7 @@ export function resetArk8OsHardware(hw, options = {}) {
     crtText: '',
     trapCause: TRAP_CAUSE.NONE,
     instMap,
-    userProgramBase: userProgram ? (userProgram.baseAddr ?? 0x40) & 0xff : null,
+    userProgramBase: firstUserBase,
   };
 
   return { board, state: probeArk8OsMachineState(hw, board) };
@@ -1122,9 +1232,10 @@ export function resetArk8OsHardware(hw, options = {}) {
 /**
  * Executes ONE complete 3-phase Von Neumann cycle (`Boundary IRQ -> T0 FETCH_LO -> T1 FETCH_HI -> T2 EXEC`)
  * strictly through the player's compiled MOSFET netlists!
+ * Pass `prevState` (the previous cycle's `after` state) to avoid a redundant pre-cycle JTAG boundary scan.
  */
-export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0) {
-  const before = probeArk8OsMachineState(hw, board);
+export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0, prevState = null) {
+  const before = prevState || probeArk8OsMachineState(hw, board);
   const { pc: pcBefore, kMode: kBefore, base, limit, tmrCnt, irqPin } = before;
   let unstable = false;
 
@@ -1354,26 +1465,274 @@ export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0) {
   };
 }
 
+// Reusable bit-packing buffers for `stepArk8OsHardwareCycleFast` (exact pin-for-pin match with CPU/BUS/MMIO/MMU/REG/TMR!)
+const _fastCpuBuf = new Uint8Array(44);
+const _fastBusBuf = new Uint8Array(19);
+const _fastMmioBuf = new Uint8Array(10);
+const _fastMmuBuf = new Uint8Array(26);
+const _fastRegBuf = new Uint8Array(11);
+
+function _packCpuFast(op, reg, imm, rdata, base, limit, irq, spLd, rst, clk) {
+  for (let i = 0; i < 4; i++) _fastCpuBuf[i] = (op >> i) & 1;
+  for (let i = 0; i < 4; i++) _fastCpuBuf[4 + i] = (reg >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastCpuBuf[8 + i] = (imm >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastCpuBuf[16 + i] = (rdata >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastCpuBuf[24 + i] = (base >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastCpuBuf[32 + i] = (limit >> i) & 1;
+  _fastCpuBuf[40] = irq ? 1 : 0;
+  _fastCpuBuf[41] = spLd ? 1 : 0;
+  _fastCpuBuf[42] = rst ? 1 : 0;
+  _fastCpuBuf[43] = clk ? 1 : 0;
+  return _fastCpuBuf;
+}
+
+function _packBusFast(pc, da, dsel, boot, we) {
+  for (let i = 0; i < 8; i++) _fastBusBuf[i] = (pc >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastBusBuf[8 + i] = (da >> i) & 1;
+  _fastBusBuf[16] = dsel ? 1 : 0;
+  _fastBusBuf[17] = boot ? 1 : 0;
+  _fastBusBuf[18] = we ? 1 : 0;
+  return _fastBusBuf;
+}
+
+function _packMmioFast(addr, en, we) {
+  for (let i = 0; i < 8; i++) _fastMmioBuf[i] = (addr >> i) & 1;
+  _fastMmioBuf[8] = en ? 1 : 0;
+  _fastMmioBuf[9] = we ? 1 : 0;
+  return _fastMmioBuf;
+}
+
+function _packMmuFast(va, base, limit, k, en) {
+  for (let i = 0; i < 8; i++) _fastMmuBuf[i] = (va >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastMmuBuf[8 + i] = (base >> i) & 1;
+  for (let i = 0; i < 8; i++) _fastMmuBuf[16 + i] = (limit >> i) & 1;
+  _fastMmuBuf[24] = k ? 1 : 0;
+  _fastMmuBuf[25] = en ? 1 : 0;
+  return _fastMmuBuf;
+}
+
+function _clockRegFast(regSim, dVal, load, rst) {
+  for (let i = 0; i < 8; i++) _fastRegBuf[i] = (dVal >> i) & 1;
+  _fastRegBuf[8] = load ? 1 : 0;
+  _fastRegBuf[9] = rst ? 1 : 0;
+  _fastRegBuf[10] = 0;
+  const r0 = regSim.evaluate(_fastRegBuf);
+  _fastRegBuf[10] = 1;
+  const r1 = regSim.evaluate(_fastRegBuf);
+  _fastRegBuf[10] = 0;
+  const r2 = regSim.evaluate(_fastRegBuf);
+  return { val: regSim.getOutputBusValues()[0], unstable: Boolean(r0.unstable || r1.unstable || r2.unstable) };
+}
+
+function _clockTmrFast(tmrSim, period, load, rst) {
+  for (let i = 0; i < 8; i++) _fastRegBuf[i] = (period >> i) & 1;
+  _fastRegBuf[8] = load ? 1 : 0;
+  _fastRegBuf[9] = rst ? 1 : 0;
+  _fastRegBuf[10] = 0;
+  const r0 = tmrSim.evaluate(_fastRegBuf);
+  _fastRegBuf[10] = 1;
+  const r1 = tmrSim.evaluate(_fastRegBuf);
+  _fastRegBuf[10] = 0;
+  const r2 = tmrSim.evaluate(_fastRegBuf);
+  const [cnt, irq] = tmrSim.getOutputBusValues();
+  return { cnt, irq, unstable: Boolean(r0.unstable || r1.unstable || r2.unstable) };
+}
+
 /**
- * Runs a full Chapter 4 OS-hardware stage program on live compiled MOSFET silicon.
+ * Executes ONE complete 3-phase Von Neumann cycle strictly through ALL compiled player MOSFET
+ * netlists (identical silicon execution to `stepArk8OsHardwareCycle`), omitting only redundant
+ * per-cycle JTAG register boundary scans & trace object allocations for headless anti-cheat runs!
+ */
+export function stepArk8OsHardwareCycleFast(hw, board) {
+  const outNow = hw.cpuSim.getOutputBusValues();
+  const pcBefore = outNow[3];
+  const kBefore = outNow[7];
+  const base = hw.baseSim.getOutputBusValues()[0];
+  const limit = hw.limitSim.getOutputBusValues()[0];
+  const [tmrCnt, irqPin] = hw.tmrSim.getOutputBusValues();
+  let unstable = false;
+
+  if (irqPin === 1 && kBefore === 0) {
+    const r0 = hw.cpuSim.evaluate(_packCpuFast(0, 0, 0, 0, base, limit, 1, 0, 0, 0));
+    const r1 = hw.cpuSim.evaluate(_packCpuFast(0, 0, 0, 0, base, limit, 1, 0, 0, 1));
+    const r2 = hw.cpuSim.evaluate(_packCpuFast(0, 0, 0, 0, base, limit, 0, 0, 0, 0));
+    const tr = _clockTmrFast(hw.tmrSim, board.tmrPeriod, 0, 0);
+    unstable = Boolean(r0.unstable || r1.unstable || r2.unstable || tr.unstable);
+    board.trapCause = TRAP_CAUSE.IRQ;
+    return { pcBefore, kBefore, base, spAfter: hw.cpuSim.getOutputBusValues()[4], op: -1, trapEvent: 'IRQ', blockedAttack: false, memWrite: null, haltFlag: false, unstable };
+  }
+
+  const vaLo = (pcBefore << 1) & 0xff;
+  const fmLo = hw.fetchMmuSim.evaluate(_packMmuFast(vaLo, base, limit, kBefore, 1));
+  const [paLo, fltLo, mmioFetchLo] = hw.fetchMmuSim.getOutputBusValues();
+  const bsLo = hw.busSim.evaluate(_packBusFast(paLo, 0, 0, board.bootEn ? 1 : 0, 0));
+  const [bAddrLo, romEnLo] = hw.busSim.getOutputBusValues();
+  const rawLo = romEnLo ? board.bootRom[bAddrLo & 0x0f] : board.ram[bAddrLo];
+  const irLoRes = _clockRegFast(hw.irLoSim, rawLo, 1, 0);
+
+  const vaHi = ((pcBefore << 1) | 1) & 0xff;
+  const fmHi = hw.fetchMmuSim.evaluate(_packMmuFast(vaHi, base, limit, kBefore, 1));
+  const [paHi, fltHi, mmioFetchHi] = hw.fetchMmuSim.getOutputBusValues();
+  const bsHi = hw.busSim.evaluate(_packBusFast(paHi, 0, 0, board.bootEn ? 1 : 0, 0));
+  const [bAddrHi, romEnHi] = hw.busSim.getOutputBusValues();
+  const rawHi = romEnHi ? board.bootRom[bAddrHi & 0x0f] : board.ram[bAddrHi];
+  const irHiRes = _clockRegFast(hw.irHiSim, rawHi, 1, 0);
+
+  if (fmLo.unstable || fmHi.unstable || bsLo.unstable || bsHi.unstable || irLoRes.unstable || irHiRes.unstable) {
+    unstable = true;
+  }
+
+  if (kBefore === 0 && (fltLo || fltHi || mmioFetchLo || mmioFetchHi)) {
+    const r0 = hw.cpuSim.evaluate(_packCpuFast(4, 0, 0xff, 0, base, limit, 0, 0, 0, 0));
+    const r1 = hw.cpuSim.evaluate(_packCpuFast(4, 0, 0xff, 0, base, limit, 0, 0, 0, 1));
+    const r2 = hw.cpuSim.evaluate(_packCpuFast(0, 0, 0, 0, base, limit, 0, 0, 0, 0));
+    if (r0.unstable || r1.unstable || r2.unstable) unstable = true;
+    board.trapCause = TRAP_CAUSE.MMU_FAULT;
+    return { pcBefore, kBefore, base, spAfter: hw.cpuSim.getOutputBusValues()[4], op: -2, trapEvent: 'MMU_FAULT', blockedAttack: true, memWrite: null, haltFlag: false, unstable };
+  }
+
+  const loByte = irLoRes.val & 0xff;
+  const hiByte = irHiRes.val & 0xff;
+  const op = (hiByte >> 4) & 0x0f;
+  const reg = hiByte & 0x0f;
+  const imm = loByte;
+
+  const rPre0 = hw.cpuSim.evaluate(_packCpuFast(op, reg, imm, 0, base, limit, 0, 0, 0, 0));
+  if (rPre0.unstable) unstable = true;
+  const pre0Bus = hw.cpuSim.getOutputBusValues();
+
+  const bsExec = hw.busSim.evaluate(_packBusFast(paLo, pre0Bus[1], 1, board.bootEn ? 1 : 0, pre0Bus[6]));
+  const [bAddr, romEn, mmioEn, ramWe] = hw.busSim.getOutputBusValues();
+  const mmExec = hw.mmioSim.evaluate(_packMmioFast(bAddr, mmioEn, pre0Bus[6]));
+  const [crtSel, kbSel, dskSel, tmrSel, devWe] = hw.mmioSim.getOutputBusValues();
+  if (bsExec.unstable || mmExec.unstable) unstable = true;
+
+  const kPre0 = pre0Bus[7];
+  let rdata = romEn ? board.bootRom[bAddr & 0x0f] : board.ram[bAddr];
+  if (mmioEn && kPre0) {
+    if (crtSel) rdata = board.crtText.length & 0xff;
+    else if (kbSel) rdata = board.kbQueue.length > 0 ? board.kbQueue[0] : 0;
+    else if (dskSel) rdata = board.disk[board.diskPtr & 0xff];
+    else if (tmrSel) rdata = tmrCnt;
+    else if (bAddr === MMIO_PORTS.MMU_BASE) rdata = base;
+    else if (bAddr === MMIO_PORTS.MMU_LIMIT) rdata = limit;
+    else if (bAddr === MMIO_PORTS.SP_REG) rdata = pre0Bus[4];
+    else if (bAddr === MMIO_PORTS.EPC_REG) rdata = pre0Bus[5];
+    else if (bAddr === MMIO_PORTS.DISK_PTR) rdata = board.diskPtr & 0xff;
+    else if (bAddr === MMIO_PORTS.TRAP_CAUSE) rdata = board.trapCause & 0xff;
+  }
+
+  const spLd = mmioEn && kPre0 && devWe && bAddr === MMIO_PORTS.SP_REG ? 1 : 0;
+  const rPre = hw.cpuSim.evaluate(_packCpuFast(op, reg, imm, rdata, base, limit, 0, spLd, 0, 0));
+  const [, , wdataPre, , , , memWePre, kPre, trapPre, haltPre] = hw.cpuSim.getOutputBusValues();
+  const rise = hw.cpuSim.evaluate(_packCpuFast(op, reg, imm, rdata, base, limit, 0, spLd, 0, 1));
+  const fall = hw.cpuSim.evaluate(_packCpuFast(op, reg, imm, rdata, base, limit, 0, 0, 0, 0));
+  if (rPre.unstable || rise.unstable || fall.unstable) unstable = true;
+
+  const decEntry = hw.instDec16Table?.[op] || { wd1: 0, memWe: 0, memOp: 0, priv: 0 };
+
+  let trapEvent = null;
+  let blockedAttack = false;
+  if (trapPre) {
+    if (op === 14) {
+      trapEvent = 'SYSCALL';
+      board.trapCause = TRAP_CAUSE.SYSCALL;
+    } else if (kPre === 0 && (decEntry.priv || (mmioEn && decEntry.memOp))) {
+      trapEvent = decEntry.priv ? 'PRIV_FAULT' : 'MMU_FAULT';
+      board.trapCause = decEntry.priv ? TRAP_CAUSE.PRIV_FAULT : TRAP_CAUSE.MMU_FAULT;
+      blockedAttack = Boolean(decEntry.memWe || decEntry.priv);
+    } else {
+      trapEvent = 'MMU_FAULT';
+      board.trapCause = TRAP_CAUSE.MMU_FAULT;
+      blockedAttack = Boolean(decEntry.memWe);
+    }
+  }
+
+  let memWrite = null;
+  let reloadedTimer = false;
+  if (memWePre && !trapPre) {
+    if (ramWe) {
+      board.ram[bAddr] = wdataPre & 0xff;
+      memWrite = { addr: bAddr, val: wdataPre & 0xff, region: 'RAM' };
+    } else if (mmioEn && kPre && devWe) {
+      memWrite = { addr: bAddr, val: wdataPre & 0xff, region: 'MMIO' };
+      if (crtSel) {
+        const ch = wdataPre === 10 ? '\n' : wdataPre >= 32 && wdataPre <= 126 ? String.fromCharCode(wdataPre) : '?';
+        board.crtText += ch;
+      } else if (dskSel) {
+        board.disk[board.diskPtr & 0xff] = wdataPre & 0xff;
+        board.diskPtr = (board.diskPtr + 1) & 0xff;
+      } else if (tmrSel) {
+        board.tmrPeriod = wdataPre & 0xff;
+        const tr = _clockTmrFast(hw.tmrSim, board.tmrPeriod, 1, 0);
+        if (tr.unstable) unstable = true;
+        reloadedTimer = true;
+      } else if (bAddr === MMIO_PORTS.MMU_BASE) {
+        const br = _clockRegFast(hw.baseSim, wdataPre, 1, 0);
+        if (br.unstable) unstable = true;
+      } else if (bAddr === MMIO_PORTS.MMU_LIMIT) {
+        const lr = _clockRegFast(hw.limitSim, wdataPre, 1, 0);
+        if (lr.unstable) unstable = true;
+      } else if (bAddr === MMIO_PORTS.DISK_PTR) {
+        board.diskPtr = wdataPre & 0xff;
+      }
+    }
+  }
+
+  if (!trapPre && decEntry.wd1 && mmioEn && kPre) {
+    if (kbSel && board.kbQueue.length > 0) board.kbQueue.shift();
+    else if (dskSel) board.diskPtr = (board.diskPtr + 1) & 0xff;
+  }
+
+  if (!reloadedTimer) {
+    const tr = _clockTmrFast(hw.tmrSim, board.tmrPeriod, 0, 0);
+    if (tr.unstable) unstable = true;
+  }
+
+  return {
+    pcBefore,
+    kBefore,
+    base,
+    spAfter: hw.cpuSim.getOutputBusValues()[4],
+    op,
+    trapEvent,
+    blockedAttack,
+    memWrite,
+    haltFlag: Boolean(haltPre),
+    unstable,
+  };
+}
+
+/**
+ * Runs a full Chapter 4/5 OS-hardware/kernel stage program on live compiled MOSFET silicon.
  */
 export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides = {}) {
   const spec = stage?.asmProgramSpec || {};
   const maxCycles = overrides.maxCycles ?? spec.maxCycles ?? 120;
-  const hw = compileArk8OsHardware(customChips);
+  const hw = overrides.hw || compileArk8OsHardware(customChips);
   const rowMap = buildArk8OsRowMap(stage, slots);
 
-  const initialRam = overrides.initialRam ?? spec.initialRam ?? null;
-  const userProgram = overrides.userProgram ?? spec.userProgram ?? null;
-  const initialDisk = overrides.initialDisk ?? spec.initialDisk ?? null;
-  const initialKeys = overrides.initialKeys ?? spec.initialKeys ?? null;
+  const kernelLib = overrides.kernelLib !== undefined ? overrides.kernelLib : (spec.kernelLib ?? null);
+  const initialRam = overrides.initialRam !== undefined ? overrides.initialRam : (spec.initialRam ?? null);
+  const userProgram = overrides.userProgram !== undefined ? overrides.userProgram : (spec.userProgram ?? null);
+  const userPrograms = overrides.userPrograms !== undefined ? overrides.userPrograms : (spec.userPrograms ?? null);
+  const diskProgram = overrides.diskProgram !== undefined ? overrides.diskProgram : (spec.diskProgram ?? null);
+  const initialDisk = overrides.initialDisk !== undefined ? overrides.initialDisk : (spec.initialDisk ?? null);
+  const initialKeys = overrides.initialKeys !== undefined ? overrides.initialKeys : (spec.initialKeys ?? null);
+  const bootRom = overrides.bootRom !== undefined ? overrides.bootRom : (spec.bootRom ?? null);
+  const bootEn = overrides.bootEn !== undefined ? overrides.bootEn : Boolean(spec.bootEn);
 
   const { board, state: init } = resetArk8OsHardware(hw, {
     rowMap,
+    kernelLib,
     initialRam,
     userProgram,
+    userPrograms,
+    diskProgram,
     initialDisk,
     initialKeys,
+    bootRom,
+    bootEn,
   });
 
   const trace = [];
@@ -1385,10 +1744,15 @@ export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides 
     cycles: 0,
     irqCount: 0,
     syscallCount: 0,
+    userSyscallCount: 0,
+    contextSwitchCount: 0,
     faultCount: 0,
     blockedAttacks: 0,
     minSp: init.sp,
+    maxPcExecuted: 0,
     enteredUserMode: false,
+    userBaseVisited: new Set(),
+    bitmap0SetHigh: false,
     usedCall: false,
     usedRet: false,
     usedLdr: false,
@@ -1398,33 +1762,87 @@ export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides 
     usedIret: false,
   };
 
-  for (let c = 0; c < maxCycles; c++) {
-    const st = stepArk8OsHardwareCycle(hw, board, c);
-    if (st.unstable) unstable = true;
-    trace.push(st);
-    state = st.after;
-    stats.cycles = c + 1;
-    if (st.after.sp < stats.minSp) stats.minSp = st.after.sp;
-    if (st.after.kMode === 0 || st.before.kMode === 0) stats.enteredUserMode = true;
-    if (st.trapEvent === 'IRQ') stats.irqCount++;
-    else if (st.trapEvent === 'SYSCALL') stats.syscallCount++;
-    else if (st.trapEvent === 'MMU_FAULT' || st.trapEvent === 'PRIV_FAULT') stats.faultCount++;
-    if (st.blockedAttack) stats.blockedAttacks++;
+  const fastMode = Boolean(overrides.fast);
 
-    const op = st.part?.op;
-    if (op === 'CALL') stats.usedCall = true;
-    else if (op === 'RET') stats.usedRet = true;
-    else if (op === 'LDR') stats.usedLdr = true;
-    else if (op === 'STR') stats.usedStr = true;
-    else if (op === 'PUSH') stats.usedPush = true;
-    else if (op === 'POP') stats.usedPop = true;
-    else if (op === 'IRET') stats.usedIret = true;
+  if (fastMode) {
+    for (let c = 0; c < maxCycles; c++) {
+      const st = stepArk8OsHardwareCycleFast(hw, board);
+      if (st.unstable) unstable = true;
+      stats.cycles = c + 1;
+      if (st.spAfter < stats.minSp) stats.minSp = st.spAfter;
+      if (st.kBefore === 0) {
+        stats.enteredUserMode = true;
+        stats.userBaseVisited.add(st.base);
+      }
+      if (st.pcBefore > stats.maxPcExecuted) stats.maxPcExecuted = st.pcBefore;
+      if (st.trapEvent === 'IRQ') stats.irqCount++;
+      else if (st.trapEvent === 'SYSCALL') {
+        stats.syscallCount++;
+        if (st.kBefore === 0) stats.userSyscallCount++;
+        else stats.contextSwitchCount++;
+      } else if (st.trapEvent === 'MMU_FAULT' || st.trapEvent === 'PRIV_FAULT') {
+        stats.faultCount++;
+      }
+      if (st.blockedAttack) stats.blockedAttacks++;
+      if (st.memWrite && st.memWrite.region === 'RAM' && st.memWrite.addr === 230 && st.memWrite.val === 1) {
+        stats.bitmap0SetHigh = true;
+      }
 
-    if (st.haltFlag) {
-      haltedNormally = true;
-      break;
+      if (st.op === 11) stats.usedCall = true;
+      else if (st.op === 9) stats.usedRet = true;
+      else if (st.op === 12) stats.usedLdr = true;
+      else if (st.op === 13) stats.usedStr = true;
+      else if (st.op === 10) stats.usedPush = true;
+      else if (st.op === 8) stats.usedPop = true;
+      else if (st.op === 15) stats.usedIret = true;
+
+      if (st.haltFlag) {
+        haltedNormally = true;
+        break;
+      }
+      if (unstable) break;
     }
-    if (unstable) break;
+    state = probeArk8OsMachineState(hw, board);
+  } else {
+    for (let c = 0; c < maxCycles; c++) {
+      const st = stepArk8OsHardwareCycle(hw, board, c, state);
+      if (st.unstable) unstable = true;
+      trace.push(st);
+      state = st.after;
+      stats.cycles = c + 1;
+      if (st.after.sp < stats.minSp) stats.minSp = st.after.sp;
+      if (st.after.kMode === 0 || st.before.kMode === 0) stats.enteredUserMode = true;
+      if (st.before.kMode === 0) stats.userBaseVisited.add(st.before.base);
+      if (st.pcBefore > stats.maxPcExecuted) stats.maxPcExecuted = st.pcBefore;
+
+      if (st.trapEvent === 'IRQ') stats.irqCount++;
+      else if (st.trapEvent === 'SYSCALL') {
+        stats.syscallCount++;
+        if (st.before.kMode === 0) stats.userSyscallCount++;
+        else stats.contextSwitchCount++;
+      } else if (st.trapEvent === 'MMU_FAULT' || st.trapEvent === 'PRIV_FAULT') {
+        stats.faultCount++;
+      }
+      if (st.blockedAttack) stats.blockedAttacks++;
+      if (st.memWrite && st.memWrite.region === 'RAM' && st.memWrite.addr === 230 && st.memWrite.val === 1) {
+        stats.bitmap0SetHigh = true;
+      }
+
+      const op = st.part?.op;
+      if (op === 'CALL') stats.usedCall = true;
+      else if (op === 'RET') stats.usedRet = true;
+      else if (op === 'LDR') stats.usedLdr = true;
+      else if (op === 'STR') stats.usedStr = true;
+      else if (op === 'PUSH') stats.usedPush = true;
+      else if (op === 'POP') stats.usedPop = true;
+      else if (op === 'IRET') stats.usedIret = true;
+
+      if (st.haltFlag) {
+        haltedNormally = true;
+        break;
+      }
+      if (unstable) break;
+    }
   }
 
   return {
@@ -1448,9 +1866,39 @@ function stringToRamBytes(baseAddr, str) {
   return map;
 }
 
+function checkInterleavedChars(text, c1, exp1, c2, exp2) {
+  let n1 = 0;
+  let n2 = 0;
+  let switches = 0;
+  let prev = null;
+  for (const ch of text) {
+    if (ch === c1) n1++;
+    else if (ch === c2) n2++;
+    else return { ok: false, n1, n2, switches, unexpected: ch };
+    if (prev && prev !== ch) switches++;
+    prev = ch;
+  }
+  return {
+    ok: n1 === exp1 && n2 === exp2 && switches >= 2,
+    n1,
+    n2,
+    switches,
+    unexpected: null,
+  };
+}
+
+function hasSubsequence(text, sub) {
+  let j = 0;
+  for (let i = 0; i < text.length && j < sub.length; i++) {
+    if (text[i] === sub[j]) j++;
+  }
+  return j === sub.length;
+}
+
 /**
- * Evaluates Chapter 4 OS-hardware stages (`stage_53` ARK5_CRT & `stage_54` GUARD_TRAP)
- * including dynamic anti-cheat generalization checks on live compiled MOSFET silicon!
+ * Evaluates Chapter 4 (`stage_53`–`stage_54`) and Chapter 5 (`stage_55`–`stage_62`)
+ * OS-hardware/kernel stages including dynamic anti-cheat generalization checks
+ * strictly on live compiled MOSFET silicon!
  */
 export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
   const spec = stage?.asmProgramSpec;
@@ -1474,6 +1922,8 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
   if (run.unstable) {
     return { passed: false, message: 'ARK8_OS_HW または周辺回路で発振を検出しました。', run, trace: run.trace };
   }
+
+  const sharedHw = run.hw;
 
   // Stage 53: ARK5_CRT — Real CALL/RET + LDR [Rs] + STOR [0xF0] Text CRT decoder
   if (stage.id === 'stage_53') {
@@ -1514,8 +1964,9 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
       };
     }
 
-    // Anti-cheat generalization test with alternate string at 0x60!
     const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
       initialRam: stringToRamBytes(strBase, altText),
     });
     if (run2.unstable || run2.final.crtText !== altText || !run2.haltedNormally) {
@@ -1589,20 +2040,23 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
       };
     }
 
-    // Anti-cheat generalization test with alternate User Sandbox ('O', 'K', rogue 'Z' -> expects "OK!")
     const altUserProgram = spec.altUserProgram || {
       baseAddr: 0x40,
       instructions: [
-        { op: 'LDI', rd: 1, rs: 0, imm: 79 },    // 'O'
+        { op: 'LDI', rd: 1, rs: 0, imm: 79 },
         { op: 'SYSCALL', rd: 0, rs: 0, imm: 1 },
-        { op: 'LDI', rd: 1, rs: 0, imm: 75 },    // 'K'
+        { op: 'LDI', rd: 1, rs: 0, imm: 75 },
         { op: 'SYSCALL', rd: 0, rs: 0, imm: 1 },
-        { op: 'LDI', rd: 0, rs: 0, imm: 90 },    // 'Z' (rogue attack!)
-        { op: 'STOR', rd: 0, rs: 0, imm: 0xf0 }, // ILLEGAL MMIO -> MMU_FAULT!
+        { op: 'LDI', rd: 0, rs: 0, imm: 90 },
+        { op: 'STOR', rd: 0, rs: 0, imm: 0xf0 },
         { op: 'HALT', rd: 0, rs: 0, imm: 0 },
       ],
     };
-    const run2 = runArk8OsProgram(stage, slots, customChips, { userProgram: altUserProgram });
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      userProgram: altUserProgram,
+    });
     if (
       run2.unstable ||
       run2.final.crtText !== altText ||
@@ -1623,6 +2077,421 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
     return {
       passed: true,
       message: `第四章完全制覇！！実機 ARK8_OS_HW（MOSFET ${run.hw.siliconStats.swCount}個＋ボード計 ${run.hw.siliconStats.boardSwCount}個）が SYSCALL(×${run.stats.syscallCount})・タイマーIRQ(×${run.stats.irqCount})・MMU保護遮断(「X」「Z」完全ブロック) を実機上で証明しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 55: BOOT_LOADER (ACT XII) — Disk Bootloader (0xF2 -> RAM 0x40 -> CALL 32)
+  if (stage.id === 'stage_55') {
+    const targetText = spec.targetCrt || 'OS!';
+    const altText = spec.altCrt || 'ARK5';
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」＋HALT停止）。2〜7番地で DISK[242] から R2 バイトを RAM[R1] へ STR で展開し CALL 32 で起動しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (!run.stats.usedStr || !run.stats.usedCall || !run.stats.usedRet || run.stats.maxPcExecuted < 32 || run.final.diskPtr !== 15) {
+      return {
+        passed: false,
+        message: `ディスクからの展開実行が確認できません（DISK_PTR=${run.final.diskPtr}/15, 最大PC=${run.stats.maxPcExecuted}）。STR で RAM[0x40] へ書き込み CALL 32 で実行しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      diskProgram: spec.altDiskProgram,
+    });
+    if (run2.unstable || run2.final.crtText !== altText || !run2.haltedNormally || run2.final.diskPtr !== 19) {
+      return {
+        passed: false,
+        message: `別ディスクバイナリ検証（「${altText}」・18バイト）に失敗しました（出力:「${run2.final.crtText || '(空)'}」, DISK_PTR=${run2.final.diskPtr}/19）。固定文字ではなく先頭バイト長 R2 を使って汎用ループで展開しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `ブート成功！！実機 ARK8_OS_HW が磁気ディスク[0xF2]から「${targetText}」（14B）と別バイナリ「${altText}」（18B）を統一RAM 0x40 へ動的展開し、CALL 32 で完全起動しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 56: KALLOC_MAP (ACT XII) — 4-Slot Physical Memory Allocator (kalloc / kfree)
+  if (stage.id === 'stage_56') {
+    const targetText = spec.targetCrt || '130';
+    const altText = spec.altCrt || '231';
+    const map1 = run.final.ram.slice(96, 100);
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」）。kalloc(14〜20番)で空き(0)を探して 1 を書込み、kfree(24番)で STR R2, [R0] により 0 へ戻そう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (map1[0] !== 1 || map1[1] !== 1 || map1[2] !== 1 || map1[3] !== 1) {
+      return {
+        passed: false,
+        message: `ビットマップ [0x60..0x63] が [${map1.join(',')}] です（目標: 全確保 [1,1,1,1]）。空き区画を見つけたら STR R2, [R1] で使用中(1)を書き込もう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      initialRam: spec.altInitialRam || { 96: 1, 97: 1, 98: 0, 99: 0, 104: 1 },
+    });
+    const map2 = run2.final.ram.slice(96, 100);
+    if (
+      run2.unstable ||
+      run2.final.crtText !== altText ||
+      !run2.haltedNormally ||
+      map2[0] !== 1 || map2[1] !== 1 || map2[2] !== 1 || map2[3] !== 1
+    ) {
+      return {
+        passed: false,
+        message: `別ビットマップ検証（「${altText}」）に失敗しました（出力:「${run2.final.crtText || '(空)'}」）。固定値ではなく LDR/STR でビットマップ [0x60..0x63] を汎用走査・解放しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `物理メモリ管理完成！！kalloc/kfree が実機ビットマップ [0x60..0x63] を正確に確保・解放・再利用し、「${targetText}」と別配置「${altText}」の両方を完全制覇しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 57: HEAP_SBRK (ACT XII) — Dynamic Heap ↑ vs ↓ Stack Guard
+  if (stage.id === 'stage_57') {
+    const targetText = spec.targetCrt || 'H!S';
+    const altText = spec.altCrt || 'M!Z';
+    if (!run.stats.enteredUserMode) {
+      return {
+        passed: false,
+        message: 'ユーザープロセスが起動していません。',
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」）。18〜24番地で SP[246] − BRK の空き容量を計算し、安全なら許可・衝突なら29番地へ拒否しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.ram[96] !== 52 || run.final.ram[0x80 + 46] !== 72) {
+      return {
+        passed: false,
+        message: `ヒープ境界 BRK=${run.final.ram[96]}（目標 52）またはヒープ書込値が不正です。衝突要求では BRK を増やさず拒否しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      userPrograms: spec.altUserPrograms,
+    });
+    if (
+      run2.unstable ||
+      run2.final.crtText !== altText ||
+      !run2.haltedNormally ||
+      run2.final.ram[96] !== 52 ||
+      run2.final.ram[0x80 + 46] !== 77
+    ) {
+      return {
+        passed: false,
+        message: `深いスタック検証（SP=58 で req=8 を衝突拒否 →「${altText}」）に失敗しました（出力:「${run2.final.crtText || '(空)'}」）。固定の上限ではなく実スタック SP[246] を読んで判定しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `動的ヒープ sbrk 保護成功！！ヒープ↑とスタック↓の衝突を SP[0xF6] で完璧に見抜き、「${targetText}」と深スタック検証「${altText}」の両方でスタックを無傷のまま守り切りました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 58: SYSCALL_MUX (ACT XII) — Multi-Syscall Dispatcher (WRITE / READ / EXIT)
+  if (stage.id === 'stage_58') {
+    const targetText = spec.targetCrt || 'ARK8';
+    const altText = spec.altCrt || 'UNIX!';
+    if (run.final.crtText !== targetText || !run.haltedNormally || run.final.kbLen !== 0) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」（目標:「${targetText}」）、またはキーボード未読残 ${run.final.kbLen} 文字です。8〜11番で WRITE(1)、16〜19番で READ(2: KB[241]) と EXIT(3: 20番) を振り分けよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.stats.userSyscallCount < 10) {
+      return {
+        passed: false,
+        message: `ユーザーからのシステムコール回数が不足しています（${run.stats.userSyscallCount}回）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      initialKeys: spec.altKeys || altText,
+    });
+    if (run2.unstable || run2.final.crtText !== altText || !run2.haltedNormally || run2.final.kbLen !== 0) {
+      return {
+        passed: false,
+        message: `別キーボード入力検証（「${altText}」）に失敗しました（出力:「${run2.final.crtText || '(空)'}」）。固定文字ではなく KB[241] の入力を R1 経由で CRT[240] へ中継しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `マルチSYSCALL窓口完成！！SYS_READ(0xF1)・SYS_WRITE(0xF0)・SYS_EXIT を自在に振り分け、「${targetText}」（${run.stats.userSyscallCount}回）と「${altText}」の両方を完全処理しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 59: PCB_CTX_SW (ACT XIII) — PCB & Per-Process Stack Context Switch + vDSO
+  if (stage.id === 'stage_59') {
+    const targetText = spec.targetCrt || 'A1B2';
+    const altText = spec.altCrt || 'W3X4';
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」）。23〜29番地で MMU_BASE[244] を切替え、base+sp の物理スタックへ next.epc と next.r0 を PUSH し、仮想SP(sp−2)を [114] へ保存しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.stats.contextSwitchCount < 4 || run.stats.userBaseVisited.size < 2 || run.final.ram[96] !== 0 || run.final.ram[104] !== 0) {
+      return {
+        passed: false,
+        message: `2つのMMU砂場間でのコンテキスト切替が確認できません（切替=${run.stats.contextSwitchCount}回, 実行砂場数=${run.stats.userBaseVisited.size}）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      userPrograms: spec.altUserPrograms,
+    });
+    if (run2.unstable || run2.final.crtText !== altText || !run2.haltedNormally || run2.stats.contextSwitchCount < 4) {
+      return {
+        passed: false,
+        message: `別プロセス組検証（「${altText}」）に失敗しました（出力:「${run2.final.crtText || '(空)'}」）。両プロセスのレジスタと個別スタックを壊さずに切り替えよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `コンテキスト切替成功！！2つの独立MMU砂場（BASE=128/164）とvDSO復帰枠を無破壊で往復（${run.stats.contextSwitchCount}回切替）し、「${targetText}」と「${altText}」を完全実行しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 60: RR_SCHED (ACT XIII) — Preemptive Timer IRQ Round-Robin Scheduler
+  if (stage.id === 'stage_60') {
+    const iv1 = checkInterleavedChars(run.final.crtText, 'W', 2, 'P', 4);
+    if (!run.haltedNormally || !iv1.ok) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標: W×2・P×4 が交互に混ざる出力例「WPWPPP」＋HALT停止）。16〜23番地で相方PCB(240−R1)を優先切替し、片方終了時は現在PCB継続、両方終了で HALT しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.stats.irqCount < 3 || run.stats.contextSwitchCount < 4 || run.stats.userBaseVisited.size < 2) {
+      return {
+        passed: false,
+        message: `タイマー強制割込によるプリエンプティブ切替が不足しています（IRQ=${run.stats.irqCount}回, 切替=${run.stats.contextSwitchCount}回）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      userPrograms: spec.altUserPrograms,
+    });
+    const iv2 = checkInterleavedChars(run2.final.crtText, 'A', 4, 'B', 2);
+    if (run2.unstable || !run2.haltedNormally || !iv2.ok || run2.stats.irqCount < 3 || run2.stats.contextSwitchCount < 4) {
+      return {
+        passed: false,
+        message: `別タスク負荷検証（A×4・B×2 の交互実行）に失敗しました（出力:「${run2.final.crtText || '(空)'}」）。相方終了後の現在プロセス継続（21〜22番地）まで正確に実装しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `プリエンプティブ・マルチタスク達成！！ハードウェアタイマーIRQ（×${run.stats.irqCount}）が譲らない2タスクを強制交代させ、「${run.final.crtText}」と「${run2.final.crtText}」の並行実行に成功しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 61: FAULT_ISOLATE (ACT XIII) — Faulty Process Isolation (Zero Kernel Panic)
+  if (stage.id === 'stage_61') {
+    if (run.final.crtText.includes('X')) {
+      return {
+        passed: false,
+        message: `危険！暴走プロセスの不正文字「X」がCRTへ漏洩しました（出力:「${run.final.crtText}」）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (
+      !run.haltedNormally ||
+      !run.final.crtText.includes('!') ||
+      !hasSubsequence(run.final.crtText, 'ARK') ||
+      run.stats.faultCount !== 1 ||
+      run.stats.blockedAttacks < 1
+    ) {
+      return {
+        passed: false,
+        message: `暴走隔離または生存タスク完走が未達です（CRT:「${run.final.crtText || '(空)'}」, FAULT=${run.stats.faultCount}）。16〜22番地で暴走PCB[232]を 0 にし、PCB+16 のメモリ区画も kfree(0)、「!」出力後にスケジューラ(24番)へ引き継ごう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.ram[220] !== 0 || run.final.ram[236] !== 0) {
+      return {
+        passed: false,
+        message: `暴走タスクの後始末が不完全です（PCB1状態=${run.final.ram[220]}, ビットマップSlot1=${run.final.ram[236]} — 目標: どちらも 0）。ADDI R1, 16 と STR R2, [R1] でメモリ区画も必ず解放しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    // Anti-cheat swaps Rogue to Proc 0 and Survivor to Proc 1!
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      userPrograms: spec.altUserPrograms,
+    });
+    if (
+      run2.unstable ||
+      !run2.haltedNormally ||
+      run2.final.crtText.includes('Z') ||
+      !run2.final.crtText.includes('!') ||
+      !hasSubsequence(run2.final.crtText, 'RUN') ||
+      run2.stats.faultCount !== 1 ||
+      run2.final.ram[212] !== 0 ||
+      run2.final.ram[228] !== 0
+    ) {
+      return {
+        passed: false,
+        message: `逆配置テスト（P0が暴走・P1「RUN」が生存）に失敗しました（CRT:「${run2.final.crtText || '(空)'}」, P0=${run2.final.ram[212]}, Slot0=${run2.final.ram[228]}）。固定番地ではなく [232](現在PCB) を使って動的に隔離・解放しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `ゼロ・カーネルパニック隔離成功！！暴走プロセスだけを物理遮断＆kfree解放し、生存タスクを「${run.final.crtText}」と逆配置「${run2.final.crtText}」の両方で無傷完走させました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 62: ARK_KERNEL_CORE (ACT XIII / Chapter 5 Finale!)
+  if (stage.id === 'stage_62') {
+    if (run.final.crtText.includes('X')) {
+      return {
+        passed: false,
+        message: `危険！破損センサの不正文字「X」がCRTへ漏洩しました（出力:「${run.final.crtText}」）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.diskPtr !== 29) {
+      return {
+        passed: false,
+        message: `ディスクからの防衛タスク起動が完了していません（DISK_PTR=${run.final.diskPtr}/29）。50番地で LOAD R0, [242] によりディスクから展開しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (!run.stats.bitmap0SetHigh) {
+      return {
+        passed: false,
+        message: 'kalloc によるスロット0確保（RAM[230] ← 1）が検出できません！47番地に STOR R0, [230] を実装しよう！',
+        run,
+        trace: run.trace,
+      };
+    }
+    if (
+      !run.haltedNormally ||
+      !run.final.crtText.includes('!') ||
+      !hasSubsequence(run.final.crtText, 'ARK') ||
+      run.stats.irqCount < 1 ||
+      run.stats.faultCount !== 1 ||
+      run.stats.blockedAttacks < 1 ||
+      run.stats.contextSwitchCount < 2
+    ) {
+      return {
+        passed: false,
+        message: `ARK-OSカーネル中核の統合動作が未達です（CRT:「${run.final.crtText || '(空)'}」, IRQ=${run.stats.irqCount}, FAULT=${run.stats.faultCount}, 切替=${run.stats.contextSwitchCount}）。IRQ・FAULT・SYSCALL・Disk起動の8命令をすべて繋ごう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.ram[214] !== 0 || run.final.ram[222] !== 0 || run.final.ram[230] !== 0 || run.final.ram[238] !== 0) {
+      return {
+        passed: false,
+        message: `終了後の全プロセス・メモリ区画解放が未完了です（PCB=[${run.final.ram[214]},${run.final.ram[222]}], Slot=[${run.final.ram[230]},${run.final.ram[238]}] — 目標: すべて 0）。`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      diskProgram: spec.altDiskProgram,
+      userPrograms: spec.altUserPrograms,
+    });
+    if (
+      run2.unstable ||
+      !run2.haltedNormally ||
+      run2.final.crtText.includes('Z') ||
+      !run2.final.crtText.includes('!') ||
+      !hasSubsequence(run2.final.crtText, 'SOS') ||
+      run2.final.diskPtr !== 29 ||
+      run2.stats.faultCount !== 1 ||
+      !run2.stats.bitmap0SetHigh ||
+      run2.final.ram[214] !== 0 ||
+      run2.final.ram[222] !== 0 ||
+      run2.final.ram[230] !== 0 ||
+      run2.final.ram[238] !== 0
+    ) {
+      return {
+        passed: false,
+        message: `別ストーム防衛バイナリ検証（「SOS」＋暴走「Z」隔離）に失敗しました（CRT:「${run2.final.crtText || '(空)'}」）。全OS機構を汎用的に統合しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    return {
+      passed: true,
+      message: `第五章完全制覇！！実機 ARK8_OS_HW（MOSFET ${run.hw.siliconStats.boardSwCount}個）上で Disk起動＋kalloc＋SYSCALL＋タイマー強制マルチタスク＋FAULT無停止隔離が完全稼働し、「${run.final.crtText}」と「${run2.final.crtText}」の両方を完遂しました！`,
       run,
       trace: run.trace,
     };

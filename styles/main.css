@@ -3913,7 +3913,8 @@ textarea:focus-visible {
   .title-btn-primary,
   .title-btn-chapter2,
   .title-btn-chapter3,
-  .title-btn-chapter4 {
+  .title-btn-chapter4,
+  .title-btn-chapter5 {
     min-height: 36px;
     height: auto;
     padding: 5px 9px;
@@ -6300,7 +6301,8 @@ textarea:focus-visible {
 
 @media (max-height: 500px) {
   .title-btn-chapter3,
-  .title-btn-chapter4 {
+  .title-btn-chapter4,
+  .title-btn-chapter5 {
     min-height: 34px;
     padding: 4px 10px;
     font-size: 11.5px;
@@ -6708,9 +6710,30 @@ textarea:focus-visible {
   color: #9bb1c5;
   background: rgba(16, 22, 30, 0.78);
 }
+.os-vec-divider.vec-edit {
+  border-left-color: #52e3b6;
+  color: #a8ffe2;
+  background: rgba(12, 46, 38, 0.88);
+}
+.os-vec-divider.vec-ctx {
+  border-left-color: #c89bff;
+  color: #e4ccff;
+  background: rgba(38, 22, 58, 0.82);
+}
+.os-vec-divider.vec-boot {
+  border-left-color: #ffd166;
+  color: #ffe9a8;
+  background: rgba(54, 40, 14, 0.85);
+}
 .asm-code-row.os-code-row {
-  grid-template-columns: 40px minmax(114px, auto) auto 1fr;
+  grid-template-columns: 40px minmax(0, auto) auto minmax(0, 1fr);
   gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.os-code-row .ark8-row-code {
+  min-width: 0;
 }
 .asm-code-row.os-code-row.locked {
   opacity: 0.78;
@@ -6782,7 +6805,21 @@ textarea:focus-visible {
     font-size: 14.5px;
   }
   .asm-code-row.os-code-row {
-    grid-template-columns: 36px minmax(106px, auto) auto 1fr;
+    grid-template-columns: 38px minmax(0, auto) auto minmax(0, 1fr);
+    padding: 4px 5px;
+    gap: 3px;
+  }
+  .os-code-row .asm-row-bits {
+    min-width: 44px;
+    font-size: 9px;
+    padding: 1px 3px;
+  }
+  .os-code-row .asm-val-token {
+    font-size: 11px;
+  }
+  .os-code-row .asm-op-token {
+    font-size: 11px;
+    padding: 1px 4px;
   }
 }
 
@@ -6842,8 +6879,583 @@ textarea:focus-visible {
   .title-btn-chapter2:hover:not(.locked),
   .title-btn-chapter3:hover:not(.locked),
   .title-btn-chapter4:hover:not(.locked),
+  .title-btn-chapter5:hover:not(.locked),
   .title-btn-secondary:hover {
     filter: brightness(1.09);
+  }
+}
+
+/* ============================================================================
+   CHAPTER 5 (OS KERNEL CORE) UI, TELEMETRY MONITORS & CERTIFICATES (v41)
+   ============================================================================ */
+.title-btn-chapter5 {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: clamp(12px, 3.3vw, 14px);
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: #f4ecff;
+  background: linear-gradient(180deg, #563294 0%, #2b1854 100%);
+  border: 2px solid #c89bff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 0 #180c33,
+    0 0 24px rgba(200, 155, 255, 0.38);
+  transition: transform 0.1s, filter 0.14s;
+}
+.title-btn-chapter5:active {
+  transform: translateY(2px);
+}
+.title-btn-chapter5.locked {
+  color: #8fa6bc;
+  background: linear-gradient(180deg, #17222d 0%, #101821 100%);
+  border: 1.5px dashed #425a70;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 0 #070b10;
+  font-size: 12.5px;
+}
+.title-btn-chapter5.locked:active {
+  transform: none;
+  border-color: #607d98;
+}
+
+.title-btn-ending.kernel-core {
+  border-color: rgba(200, 155, 255, 0.8) !important;
+  color: #ecd9ff !important;
+  background: linear-gradient(180deg, rgba(84, 44, 140, 0.86) 0%, rgba(40, 20, 74, 0.94) 100%) !important;
+}
+
+.map-chapter-banner.ch5 {
+  background: linear-gradient(90deg, rgba(86, 48, 148, 0.54) 0%, rgba(16, 26, 48, 0.94) 100%);
+  border-color: #c89bff;
+  color: #ead6ff;
+}
+.map-chapter-banner.ch5.locked {
+  background: linear-gradient(90deg, rgba(24, 34, 45, 0.8) 0%, rgba(16, 23, 31, 0.92) 100%);
+  border: 1.5px dashed #435a70;
+  color: #8ea5bc;
+}
+.map-jump-pill.ch5 {
+  color: #e6d1ff;
+  background: rgba(200, 155, 255, 0.16);
+  border-color: rgba(200, 155, 255, 0.54);
+}
+.map-quick-btn.ed5 {
+  border-color: rgba(200, 155, 255, 0.72);
+  color: #ead6ff;
+  background: rgba(74, 36, 128, 0.62);
+}
+
+.codex-chapter-divider {
+  margin: 10px 0 6px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  border-left: 3px solid #7ee8ff;
+  background: rgba(16, 30, 44, 0.88);
+  color: #bfefff;
+}
+.codex-chapter-divider.ch2 {
+  border-left-color: #6fcf97;
+  color: #bff5d6;
+  background: rgba(16, 46, 32, 0.84);
+}
+.codex-chapter-divider.ch3 {
+  border-left-color: #ffd166;
+  color: #ffe8ad;
+  background: rgba(54, 40, 14, 0.84);
+}
+.codex-chapter-divider.ch4 {
+  border-left-color: #7ee8ff;
+  color: #c6f7ff;
+  background: rgba(14, 52, 62, 0.86);
+}
+.codex-chapter-divider.ch5 {
+  border-left-color: #c89bff;
+  color: #ecd8ff;
+  background: rgba(54, 28, 96, 0.84);
+}
+
+.victory-cert-card.kernel-core {
+  background: linear-gradient(145deg, rgba(46, 22, 86, 0.95) 0%, rgba(12, 34, 48, 0.97) 100%);
+  border-color: #c89bff;
+  box-shadow: 0 0 28px rgba(200, 155, 255, 0.34), inset 0 0 18px rgba(82, 227, 182, 0.12);
+}
+.victory-cert-card.kernel-core .vcert-eyebrow {
+  color: #d6b6ff;
+}
+.victory-cert-card.kernel-core .vcert-chain {
+  color: #c7fff0;
+  border-color: rgba(200, 155, 255, 0.48);
+}
+
+/* --- KERNEL LIB BADGE (IN EDITOR PANEL) --- */
+.os-klib-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(42, 26, 76, 0.82) 0%, rgba(16, 36, 52, 0.88) 100%);
+  border: 1px solid rgba(200, 155, 255, 0.42);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #e4d0ff;
+  max-width: 100%;
+  min-width: 0;
+}
+.os-klib-count b {
+  color: #8fffdc;
+}
+.os-klib-mods {
+  font-size: 9px;
+  font-weight: 800;
+  color: #9be7ff;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* --- LIVE CHAPTER 5 KERNEL TELEMETRY MONITOR (100% REAL RAM/DISK/KB) --- */
+.os-kt-panel {
+  border-radius: 8px;
+  padding: 6px 7px;
+  background: linear-gradient(180deg, rgba(13, 22, 36, 0.94) 0%, rgba(8, 15, 24, 0.96) 100%);
+  border: 1px solid rgba(136, 176, 220, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.os-kt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #c2e7ff;
+  min-width: 0;
+}
+.os-kt-head > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.os-kt-pill {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(20, 38, 56, 0.9);
+  border: 1px solid rgba(112, 168, 212, 0.45);
+  color: #cbeaff;
+  white-space: nowrap;
+}
+.os-kt-pill.ok {
+  background: rgba(16, 86, 62, 0.85);
+  border-color: #52e3b6;
+  color: #d6fff0;
+}
+.os-kt-pill.danger {
+  background: rgba(138, 26, 36, 0.9);
+  border-color: #ff7b82;
+  color: #ffe2e4;
+}
+
+/* Disk Bootloader Monitor */
+.os-kt-bar-track {
+  height: 5px;
+  border-radius: 999px;
+  background: #101c28;
+  border: 1px solid rgba(86, 130, 168, 0.35);
+  overflow: hidden;
+}
+.os-kt-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd166 0%, #52e3b6 100%);
+  transition: width 0.14s ease;
+}
+.os-kt-row-lbl {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #88abc6;
+}
+.os-kt-byte-strip {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 2px;
+}
+.os-kt-byte {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  padding: 2px 1px;
+  border-radius: 3px;
+  background: #0d1722;
+  border: 1px solid rgba(64, 92, 118, 0.4);
+  color: #7994ae;
+  min-width: 0;
+}
+.os-kt-byte.len-hdr {
+  border-color: rgba(255, 209, 102, 0.55);
+  color: #ffe39b;
+}
+.os-kt-byte.done {
+  background: rgba(26, 76, 98, 0.72);
+  border-color: rgba(126, 232, 255, 0.52);
+  color: #cef8ff;
+}
+.os-kt-byte.cur {
+  background: rgba(136, 92, 16, 0.85);
+  border-color: #ffd166;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 209, 102, 0.45);
+}
+.os-kt-byte.loaded {
+  background: rgba(18, 66, 78, 0.78);
+  border-color: rgba(82, 227, 182, 0.45);
+  color: #b7ffea;
+}
+.os-kt-byte.written {
+  background: rgba(20, 116, 82, 0.9);
+  border-color: #7effcf;
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(82, 227, 182, 0.5);
+}
+
+/* 4-Slot Physical Bitmap (kalloc / kfree) */
+.os-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.os-slot-pill {
+  border-radius: 6px;
+  padding: 4px 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-family: var(--font-mono);
+  min-width: 0;
+  border: 1.5px solid transparent;
+}
+.os-slot-pill.free {
+  background: rgba(14, 72, 54, 0.78);
+  border-color: #52e3b6;
+  color: #c8ffea;
+  box-shadow: 0 0 8px rgba(82, 227, 182, 0.22);
+}
+.os-slot-pill.used {
+  background: rgba(98, 62, 16, 0.78);
+  border-color: #ffd166;
+  color: #ffe8ad;
+}
+.os-slot-pill.flash {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+  border-color: #ffffff;
+}
+.os-slot-id {
+  font-size: 8px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+.os-slot-state {
+  font-size: 10.5px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.os-slot-addr {
+  font-size: 8px;
+  opacity: 0.82;
+}
+
+/* Visual Heap ↑ vs ↓ Stack Collision Gauge */
+.os-hs-gauge {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #0a131d;
+  border: 1px solid rgba(98, 142, 182, 0.45);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 900;
+}
+.os-hs-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+.os-hs-seg.code {
+  background: rgba(44, 74, 108, 0.85);
+  color: #cfe6ff;
+}
+.os-hs-seg.heap {
+  background: rgba(24, 134, 94, 0.9);
+  color: #eafff6;
+  border-left: 1px solid #7effcf;
+}
+.os-hs-seg.free {
+  background: rgba(10, 20, 30, 0.92);
+  color: #82a4c2;
+}
+.os-hs-seg.stack {
+  background: rgba(168, 108, 22, 0.9);
+  color: #fff3cb;
+  border-left: 1px solid #ffd166;
+}
+.os-hs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.os-hs-tag {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(18, 30, 44, 0.9);
+  border: 1px solid rgba(82, 114, 146, 0.42);
+  color: #bcd4e8;
+}
+.os-hs-tag.heap {
+  border-color: rgba(82, 227, 182, 0.5);
+  color: #93f7d4;
+}
+.os-hs-tag.stack {
+  border-color: rgba(255, 209, 102, 0.5);
+  color: #ffe39b;
+}
+.os-hs-tag.oom {
+  border-color: #ff7b82;
+  color: #ffb8bd;
+  background: rgba(112, 22, 32, 0.82);
+}
+
+/* Keyboard Queue + Syscall Dispatch Monitor */
+.os-syscall-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.os-kb-strip,
+.os-sys-strip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+}
+.os-kb-key {
+  min-width: 19px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 900;
+  border: 1px solid #35506a;
+  background: #132231;
+  color: #cce6ff;
+}
+.os-kb-key.done {
+  opacity: 0.45;
+  text-decoration: line-through;
+  background: #0c151f;
+  color: #6d88a2;
+}
+.os-kb-key.next {
+  background: rgba(132, 86, 16, 0.86);
+  border-color: #ffd166;
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 209, 102, 0.42);
+}
+.os-sys-chip {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #121e2b;
+  border: 1px solid #344c63;
+  color: #8eabc5;
+}
+.os-sys-chip.active {
+  background: rgba(94, 44, 146, 0.9);
+  border-color: #d8adff;
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(200, 155, 255, 0.48);
+}
+
+/* Live PCB Process Cards (P0 / P1) */
+.os-pcb-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+.os-pcb-card {
+  border-radius: 6px;
+  padding: 5px 6px;
+  background: rgba(13, 24, 36, 0.94);
+  border: 1.5px solid rgba(82, 120, 154, 0.48);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-mono);
+  min-width: 0;
+}
+.os-pcb-card.run {
+  background: rgba(12, 54, 46, 0.84);
+  border-color: #52e3b6;
+  box-shadow: 0 0 10px rgba(82, 227, 182, 0.28);
+}
+.os-pcb-card.ready {
+  border-color: rgba(126, 232, 255, 0.52);
+}
+.os-pcb-card.dead {
+  background: rgba(54, 16, 24, 0.72);
+  border-color: rgba(255, 123, 130, 0.55);
+  opacity: 0.82;
+}
+.os-pcb-card.flash {
+  border-color: #ffd166;
+}
+.os-pcb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+.os-pcb-name {
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #e4f3ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.os-pcb-state {
+  flex: 0 0 auto;
+  font-size: 8.5px;
+  font-weight: 900;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.os-pcb-state.run {
+  background: #1d8a64;
+  color: #ffffff;
+}
+.os-pcb-state.ready {
+  background: rgba(24, 82, 108, 0.85);
+  color: #c2f4ff;
+}
+.os-pcb-state.dead {
+  background: rgba(146, 28, 42, 0.9);
+  color: #ffd6da;
+}
+.os-pcb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  font-size: 8.5px;
+  color: #9bb8d2;
+}
+.os-pcb-meta b {
+  color: #eef7ff;
+}
+.os-pcb-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-family: var(--font-mono);
+}
+.os-mini-slot {
+  font-size: 8.5px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.os-mini-slot.free {
+  background: rgba(16, 78, 58, 0.82);
+  border-color: #52e3b6;
+  color: #c6ffea;
+}
+.os-mini-slot.used {
+  background: rgba(102, 66, 16, 0.82);
+  border-color: #ffd166;
+  color: #ffe8ad;
+}
+.os-mini-slot.disk {
+  margin-left: auto;
+}
+.os-mini-slot.flash {
+  border-color: #ffffff;
+}
+
+/* Composer Quick MMIO Preset Chips */
+.os-mmio-presets {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+.os-mmio-presets::-webkit-scrollbar {
+  display: none;
+}
+.os-mmio-chip {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #122130;
+  border: 1px solid #35526c;
+  color: #9ed7f5;
+  white-space: nowrap;
+}
+.os-mmio-chip.active {
+  background: rgba(20, 102, 84, 0.9);
+  border-color: #52e3b6;
+  color: #ffffff;
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .os-kt-panel {
+    padding: 4px 6px;
+    gap: 3px;
+  }
+  .os-slot-pill {
+    padding: 2px 2px;
+  }
+  .os-pcb-card {
+    padding: 3px 5px;
   }
 }
 

@@ -71,4 +71,9 @@ export const SCENES = {
     image: './assets/scene_ark5_station.jpg',
     label: 'ホライズン電算司令室',
   },
+  storm_core: {
+    id: 'storm_core',
+    image: './assets/scene_storm_core.jpg',
+    label: 'ホライズン電算司令室・磁気嵐警戒',
+  },
 };
