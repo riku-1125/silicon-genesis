@@ -30,9 +30,10 @@ import {
   compileArk8OsHardware,
   probeArk8OsInstructionDecode,
   resetArk8OsHardware,
+  getRamWriterAtStep,
   runArk8OsProgram,
   evaluateArk8OsStage,
-} from '../engine/osHwRunner.js?v=41';
+} from '../engine/osHwRunner.js?v=42';
 
 const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと編集可能な命令をクリアします';
 
@@ -149,6 +150,10 @@ export class Ark8OsIdePanel {
     this._hw = null;
     this._initState = null;
     this.asmTrace = [];
+    this.ramWriteLog = [];
+    this.selectedBlameAddr = null;
+    this._blamePlacement = 'ram';
+    this.fetchDetailsOpen = false;
     this.asmState = this._makeIdleState();
     this.statusMsg = '';
     this.statusTone = 'info';
@@ -187,6 +192,11 @@ export class Ark8OsIdePanel {
       halt: 0,
       regs: [0, 0, 0, 0],
       regsBefore: [0, 0, 0, 0],
+      changedRegs: [],
+      changedSp: false,
+      changedPc: false,
+      crtAppended: '',
+      physFetchAddr: 0,
       crtText: '',
       diskPtr: 0,
       disk: new Array(48).fill(0),
@@ -210,6 +220,8 @@ export class Ark8OsIdePanel {
   _getDefaultMemTab(stage) {
     const preset = stage?.asmProgramSpec?.memInspectorPreset;
     if (preset === 'disk_boot') return 'sandbox';
+    if (preset === 'stack_abi') return 'stack';
+    if (preset === 'malloc_strdup') return 'data';
     if (preset === 'kalloc') return 'data';
     if (preset === 'heap_stack') return 'sandbox';
     if (preset === 'syscall') return 'sandbox';
@@ -222,6 +234,9 @@ export class Ark8OsIdePanel {
     if (customChips) this.customChips = customChips;
     this.editorMode = 'visual';
     this.memTab = this._getDefaultMemTab(stage);
+    this.selectedBlameAddr = null;
+    this._blamePlacement = 'ram';
+    this.ramWriteLog = [];
     this.textErrors = [];
     this.statusMsg = '';
     this.statusTone = 'info';
@@ -283,6 +298,7 @@ export class Ark8OsIdePanel {
 
   _resetExecution() {
     this.asmTrace = [];
+    this.ramWriteLog = [];
     this.asmState = this._makeIdleState();
     if (this._initState) {
       const init = this._initState;
@@ -383,6 +399,9 @@ export class Ark8OsIdePanel {
       if (te?.trapEvent === 'MMU_FAULT' || te?.trapEvent === 'PRIV_FAULT') faultCount++;
     }
 
+    const changedRegs = Array.isArray(entry.changedRegs)
+      ? [...entry.changedRegs]
+      : [0, 1, 2, 3].filter((r) => (after.regs?.[r] ?? 0) !== (before.regs?.[r] ?? 0));
     const label = `[${modeTag}] ${entry.pcBefore}番: ${p.name} → PC=${pcAfter}${extraTags.length ? ` (${extraTags.join(' / ')})` : ''}`;
     return {
       pc: entry.pcBefore ?? 0,
@@ -408,6 +427,11 @@ export class Ark8OsIdePanel {
       halt: entry.haltFlag ? 1 : after.halt ?? 0,
       regs: [...(after.regs || [0, 0, 0, 0])],
       regsBefore: [...(before.regs || [0, 0, 0, 0])],
+      changedRegs,
+      changedSp: entry.changedSp !== undefined ? Boolean(entry.changedSp) : (after.sp ?? 0xf0) !== (before.sp ?? 0xf0),
+      changedPc: entry.changedPc !== undefined ? Boolean(entry.changedPc) : pcAfter !== (entry.pcBefore ?? 0),
+      crtAppended: entry.crtAppended || '',
+      physFetchAddr: entry.physFetchAddr ?? (((entry.pcBefore ?? 0) << 1) & 0xff),
       crtText: after.crtText ?? '',
       diskPtr: after.diskPtr ?? 0,
       disk: Array.isArray(after.disk) ? [...after.disk] : (this._initState?.disk ? [...this._initState.disk] : new Array(48).fill(0)),
@@ -476,6 +500,7 @@ export class Ark8OsIdePanel {
     }
 
     this.asmTrace = res.trace || [];
+    this.ramWriteLog = res.run?.ramWriteLog || [];
     if (this.asmTrace.length > 0) {
       this.asmState = this._traceEntryToState(this.asmTrace[0], 0);
     } else {
@@ -565,6 +590,7 @@ export class Ark8OsIdePanel {
         return;
       }
       this.asmTrace = run.trace;
+      this.ramWriteLog = run.ramWriteLog || [];
       this.asmState = this._traceEntryToState(this.asmTrace[0], 0);
       this.statusMsg = `⚡ 1/${this.asmTrace.length}拍目：${this.asmState.label}`;
       this.statusTone = this.asmState.unstable ? 'err' : this.asmState.blockedAttack ? 'warn' : 'ok';
@@ -670,6 +696,17 @@ export class Ark8OsIdePanel {
       const exp = meta.diskLenExpected || (st.disk?.[0] ? st.disk[0] + 1 : 15);
       return `DSK:${st.diskPtr ?? 0}/${exp}`;
     }
+    if (preset === 'stack_abi') {
+      return `SP:${st.sp ?? 240}`;
+    }
+    if (preset === 'malloc_strdup') {
+      const chunks = meta.chunks || [
+        { headerAddr: 0x70 },
+        { headerAddr: 0x80 },
+      ];
+      const used = chunks.filter((c) => (st.ram?.[c.headerAddr] ?? 0) !== 0).length;
+      return `HEAP:${used}/${chunks.length}`;
+    }
     if (preset === 'kalloc') {
       const start = meta.bitmapStartAddr ?? 96;
       const cnt = meta.bitmapCount ?? 4;
@@ -751,6 +788,24 @@ export class Ark8OsIdePanel {
         { id: 'data', label: '📜Boot 00..1F', start: 0x00, length: 32 },
       ];
     }
+    if (preset === 'stack_abi') {
+      const bufAddr = (st?.ram?.[meta.outBufPtrAddr ?? 81] || meta.safeBufAddr || meta.outBufAddr || 0x60) & 0xff;
+      return [
+        { id: 'stack', label: '📦スタック E0..EF', start: 0xe0, length: 16 },
+        { id: 'data', label: `🛡安全領域 ${fmtHex2(bufAddr).slice(2)}..${fmtHex2((bufAddr + 15) & 0xff).slice(2)}`, start: bufAddr, length: 16 },
+        { id: 'sandbox', label: '📥引数 50..5F', start: 0x50, length: 16 },
+      ];
+    }
+    if (preset === 'malloc_strdup') {
+      const hStart = meta.heapPoolStart ?? 0x70;
+      const hLen = meta.heapPoolLength ?? 32;
+      const sStart = meta.staticStrAddr ?? 0x50;
+      return [
+        { id: 'data', label: `🧬ヒープ ${fmtHex2(hStart).slice(2)}..${fmtHex2((hStart + hLen - 1) & 0xff).slice(2)}`, start: hStart, length: hLen },
+        { id: 'sandbox', label: `📌静的 ${fmtHex2(sStart).slice(2)}..${fmtHex2((sStart + 15) & 0xff).slice(2)}`, start: sStart, length: 16 },
+        { id: 'stack', label: '📦スタック E0..EF', start: 0xe0, length: 16 },
+      ];
+    }
     if (preset === 'kalloc') {
       const bStart = meta.bitmapStartAddr ?? 0x60;
       return [
@@ -794,6 +849,174 @@ export class Ark8OsIdePanel {
     ];
   }
 
+  _isRamWrittenNow(st, isStepping, addr) {
+    if (!isStepping) return false;
+    const a = addr & 0xff;
+    return (
+      (st.ram?.[a] ?? 0) !== (st.ramBefore?.[a] ?? 0) ||
+      (st.memWrite?.region === 'RAM' && st.memWrite?.addr === a)
+    );
+  }
+
+  _extractRamAsciiPreview(ram, startAddr, maxLen = 10) {
+    let out = '';
+    for (let i = 0; i < maxLen; i++) {
+      const v = ram?.[(startAddr + i) & 0xff] ?? 0;
+      if (v === 0) break;
+      out += v >= 32 && v <= 126 ? String.fromCharCode(v) : '.';
+    }
+    return out;
+  }
+
+  _renderWriteBlameBar(st, isStepping, showEmptyHint = false) {
+    if (this.selectedBlameAddr === null || this.selectedBlameAddr === undefined) {
+      if (!showEmptyHint) return '';
+      return `<div class="os-blame-hint">📍 セルをタップすると「最終書込命令（Write Blame）」と該当拍ジャンプを表示</div>`;
+    }
+
+    const addr = this.selectedBlameAddr & 0xff;
+    const curVal = st.ram?.[addr] ?? 0;
+    const curAscii = curVal >= 32 && curVal <= 126 ? ` '${String.fromCharCode(curVal)}'` : '';
+    const currentStepIdx = isStepping ? st.stepIdx : -1;
+    const writer = currentStepIdx >= 0 ? getRamWriterAtStep(this.ramWriteLog, addr, currentStepIdx) : null;
+
+    if (writer) {
+      const byteOff = (writer.pc << 1) & 0xff;
+      const wAscii = writer.val >= 32 && writer.val <= 126 ? ` ('${String.fromCharCode(writer.val)}')` : '';
+      const isHere = isStepping && st.stepIdx === writer.stepIdx;
+      const instLabel = writer.name || writer.op || 'STOR';
+      return `
+        <div class="os-blame-bar written" role="status" aria-live="polite">
+          <div class="os-blame-text">
+            📍 <b>[${fmtHex2(addr)}]</b> (${addr}) 最終書込: <b>#${writer.stepIdx + 1}拍</b> PC ${writer.pc} (${fmtHex2(byteOff)}) <code>${escapeHtml(instLabel)}</code> → <b>${fmtHex2(writer.val)}</b>${escapeHtml(wAscii)}
+          </div>
+          <div class="os-blame-actions">
+            <button type="button" class="os-blame-jump-btn ${isHere ? 'here' : ''}" data-blame-jump="${writer.stepIdx}">
+              ${isHere ? '✔ この拍を表示中' : '▶ その拍へジャンプ'}
+            </button>
+            <button type="button" class="os-blame-close" data-blame-close="1" aria-label="書込追跡を閉じる">✕</button>
+          </div>
+        </div>
+      `;
+    }
+
+    const nextWrite =
+      Array.isArray(this.ramWriteLog) && this.ramWriteLog.length > 0
+        ? this.ramWriteLog.find((e) => e.addr === addr && e.stepIdx > currentStepIdx) || null
+        : null;
+
+    return `
+      <div class="os-blame-bar virgin" role="status" aria-live="polite">
+        <div class="os-blame-text">
+          📍 <b>[${fmtHex2(addr)}]</b> (${addr}) 初期データ / 未書込（現在値 <b>${fmtHex2(curVal)}</b>${escapeHtml(curAscii)}）
+        </div>
+        <div class="os-blame-actions">
+          ${
+            nextWrite
+              ? `<button type="button" class="os-blame-jump-btn future" data-blame-jump="${nextWrite.stepIdx}">▶ 書込(#${nextWrite.stepIdx + 1}拍)へ</button>`
+              : ''
+          }
+          <button type="button" class="os-blame-close" data-blame-close="1" aria-label="書込追跡を閉じる">✕</button>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderCycleDeltaBar(st, isStepping) {
+    if (!isStepping) return '';
+    const chips = [];
+    if (st.blockedAttack) {
+      chips.push(`<span class="os-delta-chip fault">🛡 ${escapeHtml(st.trapEvent || 'FAULT')}遮断</span>`);
+    } else if (st.trapEvent) {
+      chips.push(`<span class="os-delta-chip trap">⚡ ${escapeHtml(st.trapEvent)}</span>`);
+    }
+    if (st.kMode !== st.kModeBefore) {
+      chips.push(`<span class="os-delta-chip ring">RING ${st.kModeBefore ? 'K' : 'U'}→${st.kMode ? 'K' : 'U'}</span>`);
+    }
+    const chRegs = Array.isArray(st.changedRegs) ? st.changedRegs : [];
+    for (const r of chRegs) {
+      const prev = st.regsBefore?.[r] ?? 0;
+      const cur = st.regs?.[r] ?? 0;
+      chips.push(`<span class="os-delta-chip reg">R${r} ${prev}→${cur}</span>`);
+    }
+    if (st.changedSp || st.sp !== st.spBefore) {
+      chips.push(`<span class="os-delta-chip sp">SP ${st.spBefore}→${st.sp}</span>`);
+    }
+    if (st.memWrite) {
+      if (st.memWrite.region === 'RAM') {
+        const wVal = st.memWrite.val & 0xff;
+        const wCh = wVal >= 32 && wVal <= 126 ? ` '${escapeHtml(String.fromCharCode(wVal))}'` : '';
+        chips.push(
+          `<button type="button" class="os-delta-chip mem os-ram-tap" data-ram-addr="${st.memWrite.addr}" data-blame-src="ram" title="タップして Write Blame を表示">RAM[${fmtHex2(st.memWrite.addr)}]←${fmtHex2(wVal)}${wCh}</button>`
+        );
+      } else {
+        chips.push(`<span class="os-delta-chip mmio">MMIO[${fmtHex2(st.memWrite.addr)}]←${fmtHex2(st.memWrite.val)}</span>`);
+      }
+    }
+    if (st.crtAppended) {
+      chips.push(`<span class="os-delta-chip crt">CRT+"${escapeHtml(st.crtAppended)}"</span>`);
+    }
+    if (st.halt) {
+      chips.push(`<span class="os-delta-chip halt">✔ HALT</span>`);
+    }
+    if (chips.length === 0) {
+      chips.push(`<span class="os-delta-chip pc">PC ${st.pc}→${st.pcNext}</span>`);
+    }
+    return `
+      <div class="os-delta-bar" aria-label="1拍の変化サマリー">
+        <span class="os-delta-lbl">今回変化</span>
+        <div class="os-delta-chips">${chips.join('<span class="os-delta-dot" aria-hidden="true">·</span>')}</div>
+      </div>
+    `;
+  }
+
+  _renderFetchBoundaryStrip(st, isStepping, activeAddr, activePart, swCount) {
+    const loAddr = isStepping ? (st.physFetchAddr ?? ((activeAddr << 1) & 0xff)) : ((activeAddr << 1) & 0xff);
+    const hiAddr = (loAddr + 1) & 0xff;
+    const loVal = st.ram?.[loAddr] ?? (activePart?.loByte ?? 0);
+    const hiVal = st.ram?.[hiAddr] ?? (activePart?.hiByte ?? 0);
+    const execOp = activePart ? activePart.op : 'WAIT';
+    return `
+      <details class="os-fetch-boundary" ${this.fetchDetailsOpen ? 'open' : ''}>
+        <summary class="os-fetch-summary">
+          <span class="os-fetch-sum-left">⚡ 3拍フェッチ・実機境界</span>
+          <span class="os-fetch-sum-right">PC ${activeAddr} → ${fmtHex2(loAddr)}/${fmtHex2(hiAddr)}</span>
+        </summary>
+        <div class="os-fetch-body">
+          <div class="os-fetch-pipeline" aria-label="3拍マイクロサイクルパイプライン">
+            <div class="os-fetch-phase t0">
+              <strong>T0 FETCH_LO</strong>
+              <span>MMU+BUS→IR_LO</span>
+              <code>${fmtHex2(loAddr)}=${fmtHex2(loVal)}</code>
+            </div>
+            <span class="os-fetch-arrow" aria-hidden="true">▸</span>
+            <div class="os-fetch-phase t1">
+              <strong>T1 FETCH_HI</strong>
+              <span>MMU+BUS→IR_HI</span>
+              <code>${fmtHex2(hiAddr)}=${fmtHex2(hiVal)}</code>
+            </div>
+            <span class="os-fetch-arrow" aria-hidden="true">▸</span>
+            <div class="os-fetch-phase t2">
+              <strong>T2 EXEC</strong>
+              <span>ARK8_OS_HW</span>
+              <code>${escapeHtml(execOp)}</code>
+            </div>
+          </div>
+          <div class="os-boundary-grid">
+            <div class="os-boundary-row">
+              <span class="os-bnd-tag hw">自作MOSFET実動</span>
+              <span class="os-bnd-desc">ARK8_OS_HW (${swCount.toLocaleString()}FET) / MMU / TMR / BUS / MMIO / REG×4 / SRAM_16B (9,156FET等価検証)</span>
+            </div>
+            <div class="os-boundary-row">
+              <span class="os-bnd-tag brd">ボード制御</span>
+              <span class="os-bnd-desc">3拍フェッチ拍回し・16バンクRAM配列・CRT/KB/Disk端末</span>
+            </div>
+          </div>
+        </div>
+      </details>
+    `;
+  }
+
   _renderKernelTelemetryPanel(st, isStepping) {
     const spec = this.stage?.asmProgramSpec;
     const preset = spec?.memInspectorPreset;
@@ -801,6 +1024,10 @@ export class Ark8OsIdePanel {
     const meta = spec.kernelMeta || {};
     const ram = st.ram || [];
     const ramBefore = st.ramBefore || [];
+    const ktBlameHtml =
+      this.selectedBlameAddr !== null && this._blamePlacement === 'kt'
+        ? this._renderWriteBlameBar(st, isStepping, false)
+        : '';
 
     if (preset === 'disk_boot') {
       const targetAddr = meta.diskBootTargetAddr ?? 0x40;
@@ -824,9 +1051,10 @@ export class Ark8OsIdePanel {
       for (let i = 0; i < showRamN; i++) {
         const addr = (targetAddr + i) & 0xff;
         const val = ram[addr] ?? 0;
-        const written = isStepping && val !== (ramBefore[addr] ?? 0);
+        const written = this._isRamWrittenNow(st, isStepping, addr);
+        const sel = this.selectedBlameAddr === addr;
         ramCells.push(
-          `<span class="os-kt-byte ${written ? 'written' : val !== 0 ? 'loaded' : ''}" title="RAM[${fmtHex2(addr)}] = ${fmtHex2(val)}">${val.toString(16).toUpperCase().padStart(2, '0')}</span>`
+          `<button type="button" class="os-kt-byte os-ram-tap ${written ? 'written' : val !== 0 ? 'loaded' : ''} ${sel ? 'blame-selected' : ''}" data-ram-addr="${addr}" data-blame-src="kt" title="RAM[${fmtHex2(addr)}] = ${fmtHex2(val)}（タップで書込追跡）">${val.toString(16).toUpperCase().padStart(2, '0')}</button>`
         );
       }
       return `
@@ -838,8 +1066,189 @@ export class Ark8OsIdePanel {
           <div class="os-kt-bar-track"><div class="os-kt-bar-fill" style="width:${pct}%"></div></div>
           <div class="os-kt-row-lbl">DISK [0xF2]（先頭=サイズ${payloadLen}B / ▶DPTR=${dPtr}）</div>
           <div class="os-kt-byte-strip">${diskCells.join('')}</div>
-          <div class="os-kt-row-lbl">展開先 RAM [${fmtHex2(targetAddr)}..${fmtHex2(targetAddr + showRamN - 1)}]（PC ${meta.diskBootTargetPc ?? 32}〜）</div>
+          <div class="os-kt-row-lbl">展開先 RAM [${fmtHex2(targetAddr)}..${fmtHex2(targetAddr + showRamN - 1)}]（PC ${meta.diskBootTargetPc ?? 32}〜・タップで書込追跡）</div>
           <div class="os-kt-byte-strip">${ramCells.join('')}</div>
+          ${ktBlameHtml}
+        </div>
+      `;
+    }
+
+    if (preset === 'stack_abi') {
+      const bufAddr = (ram[meta.outBufPtrAddr ?? 81] || meta.safeBufAddr || meta.outBufAddr || 0x60) & 0xff;
+      const savedSlotAddr = meta.savedSlotAddr ?? 238;
+      const clobberChar = ram[meta.clobberCharAddr ?? 83] ?? 33;
+      const savedVal = ram[savedSlotAddr] ?? 0;
+      const isClobbered = clobberChar !== 0 && savedVal === clobberChar;
+      const stackRoles = {
+        0xef: 'main戻',
+        0xee: isClobbered ? '⚠上書!' : 'R1退避',
+        0xed: 'out戻',
+        0xec: 'inner枠',
+        0xeb: '予備',
+        0xea: '予備',
+      };
+      const stackCells = [];
+      for (let addr = 0xea; addr <= 0xef; addr++) {
+        const val = ram[addr] ?? 0;
+        const ascii = val >= 32 && val <= 126 ? `'${String.fromCharCode(val)}'` : '';
+        const isSp = st.sp === addr;
+        const written = this._isRamWrittenNow(st, isStepping, addr);
+        const sel = this.selectedBlameAddr === addr;
+        const clobCell = addr === savedSlotAddr && isClobbered;
+        const role = stackRoles[addr] || '';
+        stackCells.push(`
+          <button type="button"
+            class="os-abi-cell os-ram-tap ${val !== 0 ? 'nonzero' : ''} ${isSp ? 'is-sp' : ''} ${clobCell ? 'clobbered' : ''} ${written ? 'written' : ''} ${sel ? 'blame-selected' : ''}"
+            data-ram-addr="${addr}"
+            data-blame-src="kt"
+            title="RAM[${fmtHex2(addr)}] (${addr}) = ${fmtHex2(val)}${ascii ? ` ${ascii}` : ''} · ${role}（タップで書込追跡）">
+            <span class="os-abi-addr">${isSp ? '▶SP' : fmtHex2(addr).slice(2)}</span>
+            <strong class="os-abi-val">${val.toString(16).toUpperCase().padStart(2, '0')}${ascii ? `<em class="os-abi-ch">${escapeHtml(ascii.slice(1, -1))}</em>` : ''}</strong>
+            <span class="os-abi-role">${escapeHtml(role)}</span>
+          </button>
+        `);
+      }
+
+      const bufRoles = ['[R2] inner', '[R2+1] R1', '[R2+2]', '[R2+3]'];
+      const bufCells = [];
+      for (let i = 0; i < 4; i++) {
+        const addr = (bufAddr + i) & 0xff;
+        const val = ram[addr] ?? 0;
+        const ascii = val >= 32 && val <= 126 ? String.fromCharCode(val) : '';
+        const written = this._isRamWrittenNow(st, isStepping, addr);
+        const sel = this.selectedBlameAddr === addr;
+        bufCells.push(`
+          <button type="button"
+            class="os-abi-cell safe os-ram-tap ${val !== 0 ? 'nonzero' : ''} ${written ? 'written' : ''} ${sel ? 'blame-selected' : ''}"
+            data-ram-addr="${addr}"
+            data-blame-src="kt"
+            title="安全バッファ RAM[${fmtHex2(addr)}] (${addr}) = ${fmtHex2(val)}${ascii ? ` '${ascii}'` : ''}（タップで書込追跡）">
+            <span class="os-abi-addr">${fmtHex2(addr)}</span>
+            <strong class="os-abi-val">${val.toString(16).toUpperCase().padStart(2, '0')}${ascii ? `<em class="os-abi-ch">${escapeHtml(ascii)}</em>` : ''}</strong>
+            <span class="os-abi-role">${escapeHtml(bufRoles[i])}</span>
+          </button>
+        `);
+      }
+
+      return `
+        <div class="os-kt-panel" aria-label="呼出規約スタックと安全バッファモニタ">
+          <div class="os-kt-head">
+            <span>📚 スタック ABI ＆ 呼出元安全バッファ</span>
+            <span class="os-kt-pill ${isClobbered ? 'danger' : 'ok'}">${isClobbered ? `⚠ 0xEE上書('${escapeHtml(String.fromCharCode(clobberChar))}')` : `SP:${st.sp} (${fmtHex2(st.sp)})`}</span>
+          </div>
+          <div class="os-region-roles" aria-label="メモリ領域の役割">
+            <span class="os-role-tag code">📜 コード 00..33</span>
+            <span class="os-role-tag safe">🛡 呼出元バッファ ${fmtHex2(bufAddr)}..</span>
+            <span class="os-role-tag stk">📦 ↓スタック EF→E0</span>
+          </div>
+          <div class="os-kt-row-lbl">ハードウェアスタック [0xEA..0xEF]（${st.sp === 240 ? 'SP=0xF0 空' : `▶SP=${fmtHex2(st.sp)}`}・0xEEタップで上書犯人を追跡！）</div>
+          <div class="os-abi-stack-grid">${stackCells.join('')}</div>
+          <div class="os-kt-row-lbl">呼出元 安全バッファ [${fmtHex2(bufAddr)}..${fmtHex2((bufAddr + 3) & 0xff)}]（上書されずに生き残る領域）</div>
+          <div class="os-abi-buf-grid">${bufCells.join('')}</div>
+          ${ktBlameHtml}
+        </div>
+      `;
+    }
+
+    if (preset === 'malloc_strdup') {
+      const staticAddr = meta.staticStrAddr ?? 0x50;
+      const savedPtr = ram[meta.savedPtrAddr ?? 89] ?? 0;
+      const chunks = Array.isArray(meta.chunks)
+        ? meta.chunks
+        : [
+            { id: 0, headerAddr: 0x70, payloadAddr: 0x71, size: 15, label: 'CHUNK 0 (0x70)' },
+            { id: 1, headerAddr: 0x80, payloadAddr: 0x81, size: 15, label: 'CHUNK 1 (0x80)' },
+          ];
+      const staticStr = this._extractRamAsciiPreview(ram, staticAddr, 6);
+      const usedChunks = chunks.filter((c) => (ram[c.headerAddr] ?? 0) !== 0).length;
+
+      const staticCells = [];
+      for (let i = 0; i < 6; i++) {
+        const addr = (staticAddr + i) & 0xff;
+        const val = ram[addr] ?? 0;
+        const disp = val === 0 ? '\\0' : val >= 32 && val <= 126 ? String.fromCharCode(val) : '.';
+        const written = this._isRamWrittenNow(st, isStepping, addr);
+        const sel = this.selectedBlameAddr === addr;
+        staticCells.push(`
+          <button type="button"
+            class="os-heap-cell static os-ram-tap ${val !== 0 ? 'nonzero' : ''} ${written ? 'written' : ''} ${sel ? 'blame-selected' : ''}"
+            data-ram-addr="${addr}"
+            data-blame-src="kt"
+            title="静的ソース RAM[${fmtHex2(addr)}] (${addr}) = ${fmtHex2(val)} (${disp})（タップで書込追跡）">
+            <span class="os-heap-c-addr">${fmtHex2(addr).slice(2)}</span>
+            <strong class="os-heap-c-val">${val.toString(16).toUpperCase().padStart(2, '0')}</strong>
+            <span class="os-heap-c-ch">${escapeHtml(disp)}</span>
+          </button>
+        `);
+      }
+
+      const chunkCards = chunks
+        .map((c) => {
+          const hdrAddr = c.headerAddr & 0xff;
+          const payAddr = c.payloadAddr & 0xff;
+          const endAddr = (hdrAddr + (c.size ?? 15)) & 0xff;
+          const hdrVal = ram[hdrAddr] ?? 0;
+          const used = hdrVal !== 0;
+          const hdrWritten = this._isRamWrittenNow(st, isStepping, hdrAddr);
+          const hdrSel = this.selectedBlameAddr === hdrAddr;
+          const payloadStr = this._extractRamAsciiPreview(ram, payAddr, 8);
+          const isP1 = savedPtr === payAddr;
+
+          const byteBtns = [];
+          for (let i = 0; i < 8; i++) {
+            const addr = (hdrAddr + i) & 0xff;
+            const val = ram[addr] ?? 0;
+            const isHdr = i === 0;
+            const disp = isHdr
+              ? used
+                ? 'USE'
+                : 'FRE'
+              : val === 0
+                ? '\\0'
+                : val >= 32 && val <= 126
+                  ? String.fromCharCode(val)
+                  : '.';
+            const written = this._isRamWrittenNow(st, isStepping, addr);
+            const sel = this.selectedBlameAddr === addr;
+            byteBtns.push(`
+              <button type="button"
+                class="os-heap-cell ${isHdr ? (used ? 'hdr-used' : 'hdr-free') : ''} os-ram-tap ${val !== 0 ? 'nonzero' : ''} ${written ? 'written' : ''} ${sel ? 'blame-selected' : ''}"
+                data-ram-addr="${addr}"
+                data-blame-src="kt"
+                title="${isHdr ? 'チャンクヘッダ' : 'ペイロード'} RAM[${fmtHex2(addr)}] (${addr}) = ${fmtHex2(val)}（タップで書込追跡）">
+                <span class="os-heap-c-addr">${isHdr ? 'HDR' : fmtHex2(addr).slice(2)}</span>
+                <strong class="os-heap-c-val">${val.toString(16).toUpperCase().padStart(2, '0')}</strong>
+                <span class="os-heap-c-ch">${escapeHtml(disp)}</span>
+              </button>
+            `);
+          }
+
+          return `
+            <div class="os-heap-chunk ${used ? 'used' : 'free'} ${hdrWritten ? 'flash' : ''}">
+              <div class="os-heap-chunk-head">
+                <span class="os-heap-chunk-title">CHUNK ${c.id} (${fmtHex2(hdrAddr)}..${fmtHex2(endAddr)})${isP1 ? ' <em class="os-p1-tag">◀p1</em>' : ''}</span>
+                <div class="os-heap-chunk-meta">
+                  <span class="os-heap-ascii">"${escapeHtml(payloadStr || '(空)')}"</span>
+                  <button type="button" class="os-heap-hdr-badge ${used ? 'used' : 'free'} ${hdrSel ? 'blame-selected' : ''} os-ram-tap" data-ram-addr="${hdrAddr}" data-blame-src="kt" title="ヘッダ ${fmtHex2(hdrAddr)} の書込追跡">${used ? 'USED' : 'FREE'}</button>
+                </div>
+              </div>
+              <div class="os-heap-chunk-bytes">${byteBtns.join('')}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      return `
+        <div class="os-kt-panel" aria-label="静的文字列とヒープチャンク実機モニタ">
+          <div class="os-kt-head">
+            <span>🧬 静的ソース vs ヒープ (malloc / free / strdup)</span>
+            <span class="os-kt-pill ${usedChunks === chunks.length ? 'danger' : 'ok'}">p1:${savedPtr ? fmtHex2(savedPtr) : '---'} · ${usedChunks}/${chunks.length}使用</span>
+          </div>
+          <div class="os-kt-row-lbl">📌 静的ソース [${fmtHex2(staticAddr)}..${fmtHex2(staticAddr + 5)}] ＝ "${escapeHtml(staticStr)}"（複製元・無傷保持）</div>
+          <div class="os-heap-static-grid">${staticCells.join('')}</div>
+          <div class="os-kt-row-lbl">🧬 ヒーププール（[0x70]/[0x71]タップで malloc→strdup→改変→free→再利用を追跡！）</div>
+          <div class="os-heap-chunks">${chunkCards}</div>
+          ${ktBlameHtml}
         </div>
       `;
     }
@@ -854,16 +1263,16 @@ export class Ark8OsIdePanel {
       for (let i = 0; i < count; i++) {
         const addr = (start + i) & 0xff;
         const val = ram[addr] ?? 0;
-        const prev = ramBefore[addr] ?? 0;
-        const changed = isStepping && val !== prev;
+        const changed = this._isRamWrittenNow(st, isStepping, addr);
+        const sel = this.selectedBlameAddr === addr;
         if (val !== 0) usedCount++;
         const shortName = String(names[i] || `SLOT ${i}`).split(' ')[0] + ' ' + i;
         slotCards.push(`
-          <div class="os-slot-pill ${val ? 'used' : 'free'} ${changed ? 'flash' : ''}" title="${escapeHtml(names[i] || `SLOT ${i}`)} · RAM[${fmtHex2(addr)}]=${val}">
+          <button type="button" class="os-slot-pill os-ram-tap ${val ? 'used' : 'free'} ${changed ? 'flash' : ''} ${sel ? 'blame-selected' : ''}" data-ram-addr="${addr}" data-blame-src="kt" title="${escapeHtml(names[i] || `SLOT ${i}`)} · RAM[${fmtHex2(addr)}]=${val}（タップで書込追跡）">
             <span class="os-slot-id">${escapeHtml(shortName)}</span>
             <strong class="os-slot-state">${val ? 'USED' : 'FREE'}</strong>
             <span class="os-slot-addr">${fmtHex2(addr)}=${val}</span>
-          </div>
+          </button>
         `);
       }
       return `
@@ -873,6 +1282,7 @@ export class Ark8OsIdePanel {
             <span class="os-kt-pill">使用 ${usedCount}/${count} · 解放引数: SLOT ${freeArg}</span>
           </div>
           <div class="os-slot-grid">${slotCards.join('')}</div>
+          ${ktBlameHtml}
         </div>
       `;
     }
@@ -889,6 +1299,7 @@ export class Ark8OsIdePanel {
       const stackPct = Math.max(0, Math.round(((limit - effSp) / limit) * 100));
       const freePct = Math.max(0, 100 - codePct - heapPct - stackPct);
       const oomNow = Boolean(st.crtText?.includes('!') || (isStepping && st.kMode !== 0 && st.pc >= 29 && st.pc <= 32));
+      const brkSel = this.selectedBlameAddr === brkAddr;
       return `
         <div class="os-kt-panel" aria-label="ヒープ対スタック衝突ガードゲージ">
           <div class="os-kt-head">
@@ -902,10 +1313,11 @@ export class Ark8OsIdePanel {
             ${stackPct > 0 ? `<div class="os-hs-seg stack" style="width:${stackPct}%">↓SP</div>` : ''}
           </div>
           <div class="os-hs-legend">
-            <span class="os-hs-tag heap">BRK[${brkAddr}]: <b>${brk}</b></span>
+            <button type="button" class="os-hs-tag heap os-ram-tap ${brkSel ? 'blame-selected' : ''}" data-ram-addr="${brkAddr}" data-blame-src="kt" title="BRK保存先 RAM[${fmtHex2(brkAddr)}] の書込追跡">BRK[${brkAddr}]: <b>${brk}</b></button>
             <span class="os-hs-tag stack">SP[0xF6]: <b>${effSp}</b></span>
             <span class="os-hs-tag ${oomNow ? 'oom' : ''}">余裕: <b>${freeBytes}B</b></span>
           </div>
+          ${ktBlameHtml}
         </div>
       `;
     }
@@ -949,6 +1361,7 @@ export class Ark8OsIdePanel {
             <div class="os-kb-strip" title="キーボード入力キュー (0xF1)">${keyPills || '<span class="dim">空</span>'}</div>
             <div class="os-sys-strip" title="SYSCALL番号 R0">${sysChips}</div>
           </div>
+          ${ktBlameHtml}
         </div>
       `;
     }
@@ -972,8 +1385,9 @@ export class Ark8OsIdePanel {
           const stateText = stateVal === 0 ? 'DEAD' : isCur ? '▶ RUN' : 'READY';
           const stateCls = stateVal === 0 ? 'dead' : isCur ? 'run' : 'ready';
           const changed = isStepping && (ram[addr] !== ramBefore[addr] || ram[addr + 2] !== ramBefore[addr + 2]);
+          const sel = this.selectedBlameAddr === addr;
           return `
-            <div class="os-pcb-card ${stateCls} ${changed ? 'flash' : ''}" title="PCB${idx} @ RAM[${addr}..${addr + 7}]">
+            <button type="button" class="os-pcb-card os-ram-tap ${stateCls} ${changed ? 'flash' : ''} ${sel ? 'blame-selected' : ''}" data-ram-addr="${addr}" data-blame-src="kt" title="PCB${idx} 状態 @ RAM[${addr}]（タップで書込追跡）">
               <div class="os-pcb-top">
                 <span class="os-pcb-name">${escapeHtml(name)}</span>
                 <span class="os-pcb-state ${stateCls}">${stateText}</span>
@@ -983,7 +1397,7 @@ export class Ark8OsIdePanel {
                 <span>EPC:<b>${epcVal}</b></span>
                 <span>SP:<b>${spVal}</b></span>
               </div>
-            </div>
+            </button>
           `;
         })
         .join('');
@@ -992,9 +1406,10 @@ export class Ark8OsIdePanel {
       if (Array.isArray(meta.bitmapAddrs)) {
         meta.bitmapAddrs.forEach((bAddr, idx) => {
           const used = (ram[bAddr] ?? 0) !== 0;
-          const chg = isStepping && ram[bAddr] !== ramBefore[bAddr];
+          const chg = this._isRamWrittenNow(st, isStepping, bAddr);
+          const sel = this.selectedBlameAddr === bAddr;
           extraPills.push(
-            `<span class="os-mini-slot ${used ? 'used' : 'free'} ${chg ? 'flash' : ''}" title="物理スロット${idx} ビットマップ RAM[${bAddr}]=${ram[bAddr] ?? 0}">SLOT${idx}:${used ? 'USED' : 'FREE'}</span>`
+            `<button type="button" class="os-mini-slot os-ram-tap ${used ? 'used' : 'free'} ${chg ? 'flash' : ''} ${sel ? 'blame-selected' : ''}" data-ram-addr="${bAddr}" data-blame-src="kt" title="物理スロット${idx} ビットマップ RAM[${bAddr}]=${ram[bAddr] ?? 0}（タップで書込追跡）">SLOT${idx}:${used ? 'USED' : 'FREE'}</button>`
           );
         });
       }
@@ -1013,6 +1428,7 @@ export class Ark8OsIdePanel {
           </div>
           <div class="os-pcb-grid">${pcbCardsHtml}</div>
           ${extraPills.length > 0 ? `<div class="os-pcb-extra">${extraPills.join('')}</div>` : ''}
+          ${ktBlameHtml}
         </div>
       `;
     }
@@ -1030,19 +1446,23 @@ export class Ark8OsIdePanel {
     for (let i = 0; i < length; i++) {
       const addr = (start + i) & 0xff;
       const val = st.ram?.[addr] ?? 0;
-      const prev = st.ramBefore?.[addr] ?? 0;
-      const written = isStepping && (val !== prev || (st.memWrite?.region === 'RAM' && st.memWrite?.addr === addr));
+      const written = this._isRamWrittenNow(st, isStepping, addr);
       const isSp = this.memTab === 'stack' && addr === st.sp;
+      const isSelected = this.selectedBlameAddr === addr;
       const ascii = val >= 32 && val <= 126 ? String.fromCharCode(val) : '';
       const addrHex = addr.toString(16).toUpperCase().padStart(2, '0');
       const valHex = val.toString(16).toUpperCase().padStart(2, '0');
       cells.push(`
-        <div class="os-mem-cell ${val !== 0 ? 'nonzero' : ''} ${isSp ? 'is-sp' : ''} ${written ? 'written' : ''}"
-          title="RAM[0x${addrHex}] (${addr}) = ${val} (0x${valHex})${ascii ? ` '${ascii}'` : ''}${isSp ? ' ← SP' : ''}">
+        <button type="button"
+          class="os-mem-cell os-ram-tap ${val !== 0 ? 'nonzero' : ''} ${isSp ? 'is-sp' : ''} ${written ? 'written' : ''} ${isSelected ? 'blame-selected' : ''}"
+          data-ram-addr="${addr}"
+          data-blame-src="ram"
+          aria-pressed="${isSelected ? 'true' : 'false'}"
+          title="RAM[0x${addrHex}] (${addr}) = ${val} (0x${valHex})${ascii ? ` '${ascii}'` : ''}${isSp ? ' ← SP' : ''}（タップで書込追跡）">
           <span class="os-mem-addr">${isSp ? 'SP' : addrHex}</span>
           <strong class="os-mem-val">${valHex}</strong>
           ${ascii ? `<span class="os-mem-ascii">${escapeHtml(ascii)}</span>` : ''}
-        </div>
+        </button>
       `);
     }
     return cells.join('');
@@ -1176,6 +1596,12 @@ export class Ark8OsIdePanel {
         <span class="os-trap-badge ${trapDisp.tone}" title="最新ハードウェアトラップ原因">TRAP:${trapDisp.label}</span>
       </div>
 
+      <!-- 1-CYCLE DELTA FOCUS BAR (ONLY WHAT CHANGED ON THIS STEP!) -->
+      ${this._renderCycleDeltaBar(st, isStepping)}
+
+      <!-- 3-PHASE FETCH (T0 FETCH_LO -> T1 FETCH_HI -> T2 EXEC) & ABSTRACTION BOUNDARY -->
+      ${this._renderFetchBoundaryStrip(st, isStepping, activeAddr, activePart, swCount)}
+
       <!-- LIVE CHAPTER 5 KERNEL TELEMETRY PANEL (100% REAL RAM/DISK/KB STATE) -->
       ${this._renderKernelTelemetryPanel(st, isStepping)}
 
@@ -1227,6 +1653,7 @@ export class Ark8OsIdePanel {
           </div>
         </div>
         <div class="os-mem-grid">${this._renderMemoryProbeCells(st, isStepping)}</div>
+        ${this._blamePlacement === 'kt' && this.selectedBlameAddr !== null ? '' : this._renderWriteBlameBar(st, isStepping, true)}
       </div>
     `;
   }
@@ -1252,6 +1679,37 @@ export class Ark8OsIdePanel {
         this._syncHardwarePanelInPlace();
       });
     });
+    panelEl.querySelectorAll('[data-ram-addr]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const addr = Number(el.dataset.ramAddr);
+        if (!Number.isInteger(addr) || addr < 0 || addr > 255) return;
+        this.selectedBlameAddr = addr;
+        this._blamePlacement = el.dataset.blameSrc === 'kt' ? 'kt' : 'ram';
+        this.cb.onSound?.('switch');
+        this._syncHardwarePanelInPlace();
+      });
+    });
+    panelEl.querySelectorAll('[data-blame-jump]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetIdx = Number(btn.dataset.blameJump);
+        if (!Number.isInteger(targetIdx) || !this.asmTrace?.[targetIdx]) return;
+        this.cb.onSound?.('clock');
+        this.setTraceStep(targetIdx);
+      });
+    });
+    panelEl.querySelectorAll('[data-blame-close]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selectedBlameAddr = null;
+        this.cb.onSound?.('switch');
+        this._syncHardwarePanelInPlace();
+      });
+    });
+    const fetchDetails = panelEl.querySelector('.os-fetch-boundary');
+    if (fetchDetails) {
+      fetchDetails.addEventListener('toggle', () => {
+        this.fetchDetailsOpen = Boolean(fetchDetails.open);
+      });
+    }
     panelEl.querySelectorAll('[data-inspect-chip]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const chipId = btn.dataset.inspectChip || 'ARK8_OS_HW';
@@ -1300,6 +1758,9 @@ export class Ark8OsIdePanel {
           const hex = part ? part.hex16 : '------';
           const commentText = r.label || (part ? part.comment : 'タップして16命令を書く');
           const operandText = part ? part.name.slice(part.op.length).trim() : '';
+          const byteLo = (r.addr << 1) & 0xff;
+          const byteHex = fmtHex2(byteLo);
+          const byteHiHex = fmtHex2((byteLo + 1) & 0xff);
           const divider = getVectorSectionMeta(this.stage, r.addr);
           const dividerHtml = divider
             ? `<div class="os-vec-divider ${divider.cls}">${escapeHtml(divider.title)}</div>`
@@ -1313,9 +1774,10 @@ export class Ark8OsIdePanel {
               class="asm-code-row ark8-code-row os-code-row ${isSelected ? 'selected' : ''} ${isPcNow ? 'pc-active' : ''} ${r.locked ? 'locked' : ''} ${!part ? 'is-empty' : ''}"
               data-addr="${r.addr}"
               data-locked="${r.locked ? '1' : '0'}">
-              <span class="asm-row-gutter">
+              <span class="asm-row-gutter os-dual-gutter" title="命令番号 PC ${r.addr} ／ 物理バイト番地 ${byteHex}..${byteHiHex}（1命令=2バイト）">
                 ${r.locked ? '<span class="os-lock-icon" aria-label="固定行">🔒</span>' : `<span class="asm-pc-arrow">${isPcNow ? '▶' : isSelected ? '▸' : ''}</span>`}
-                <span class="asm-addr-num">${r.addr}:</span>
+                <span class="asm-addr-num">${r.addr}</span>
+                <span class="os-byte-addr">${byteHex}</span>
               </span>
               <span class="asm-row-code ark8-row-code">
                 ${
@@ -1382,7 +1844,7 @@ export class Ark8OsIdePanel {
             <div class="asm-editor-file">
               <span class="asm-file-dot"></span>
               <span class="asm-file-name">ark8_os.asm</span>
-              <span class="asm-file-range">PC ${addrMin}〜${addrMax}</span>
+              <span class="asm-file-range" title="1命令=2バイト（PC×2 が物理RAM番地）">PC ${addrMin}〜${addrMax} · ${fmtHex2((addrMin << 1) & 0xff)}〜${fmtHex2(((addrMax << 1) + 1) & 0xff)}</span>
             </div>
             <div class="asm-editor-actions">
               <button type="button" class="asm-mode-btn ${this.editorMode === 'visual' ? 'active' : ''}" data-editor-mode="visual" aria-pressed="${this.editorMode === 'visual' ? 'true' : 'false'}">🧩 行入力</button>

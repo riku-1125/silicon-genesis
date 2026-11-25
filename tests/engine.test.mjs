@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { STAGES, ACTS, getStageById } from '../src/data/stages.js';
 import { CODEX_ENTRIES } from '../src/data/codex.js';
+import { SYMBOL_CATALOG } from '../src/data/symbolReference.js';
 import { PROLOGUE_STEPS } from '../src/data/prologue.js';
 import {
   buildChapter1EndingSteps,
@@ -78,6 +79,7 @@ import {
   compileArk8OsHardware,
   runArk8OsProgram,
   evaluateArk8OsStage,
+  getRamWriterAtStep,
 } from '../src/engine/osHwRunner.js';
 import { exportSiliconBlueprint } from '../src/engine/siliconExport.js';
 
@@ -112,8 +114,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 65-stage campaign (Ch.1 + Ch.2 + Ch.3 + Ch.4 + Ch.5): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 65);
+test('Full 67-stage campaign (Ch.1 + Ch.2 + Ch.3 + Ch.4 + Ch.5): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 67);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -897,7 +899,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 60);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 62);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
@@ -1969,7 +1971,7 @@ test('v39 Chapter 3 6-Chapter Continuity: zero stale 16-bit CPU/RAM rebuild text
   for (const relPath of ['index.html', 'sw.js', 'src/main.js', 'src/ui/modals.js', 'src/ui/ark8Ide.js']) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=38|silicon-genesis-v38/.test(src), false, `Leftover v38 cache string in ${relPath}`);
-    assert.equal(/\?v=(?:39|40|41)|silicon-genesis-v(?:39|40|41)/.test(src), true, `Missing v39+ cache string in ${relPath}`);
+    assert.equal(/\?v=(?:39|40|41|42)|silicon-genesis-v(?:39|40|41|42)/.test(src), true, `Missing v39+ cache string in ${relPath}`);
   }
 });
 
@@ -2267,12 +2269,12 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
     );
   }
 
-  // Cache consistency: ?v=40/41 across index.html, sw.js & UI modules, zero v=39 leftovers, Ren & ARK-5 assets in sw.js
+  // Cache consistency: ?v=40..42 across index.html, sw.js & UI modules, zero v=39 leftovers, Ren & ARK-5 assets in sw.js
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.match(swSrc, /portrait_ren\.jpg/);
   assert.match(swSrc, /scene_ark5_station\.jpg/);
-  assert.match(swSrc, /osHwRunner\.js\?v=(?:40|41)/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=(?:40|41)/);
+  assert.match(swSrc, /osHwRunner\.js\?v=(?:40|41|42)/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=(?:40|41|42)/);
   for (const relPath of [
     'index.html',
     'sw.js',
@@ -2286,12 +2288,12 @@ test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT,
   ]) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=39|silicon-genesis-v39/.test(src), false, `Leftover v39 cache string in ${relPath}`);
-    assert.equal(/\?v=(?:40|41)|silicon-genesis-v(?:40|41)/.test(src), true, `Missing v40/v41 cache string in ${relPath}`);
+    assert.equal(/\?v=(?:40|41|42)|silicon-genesis-v(?:40|41|42)/.test(src), true, `Missing v40+ cache string in ${relPath}`);
   }
 });
 
-test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Execution, Silicon Fault Propagation, Progression, Ending & v41 Cache', () => {
-  // 1. ACT XII & ACT XIII + all 8 Chapter 5 stages (stage_55..stage_62) metadata, scenes, and anim keys
+test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Execution, Silicon Fault Propagation, Progression, Ending & Cache', () => {
+  // 1. ACT XII & ACT XIII + all 10 Chapter 5 stages (stage_55, stage_55b, stage_55c, stage_56..stage_62) metadata, scenes, and anim keys
   const act12 = ACTS.find((a) => a.id === 12);
   const act13 = ACTS.find((a) => a.id === 13);
   assert.ok(act12 && act12.chapter === 5 && act12.roman === 'ACT XII', 'ACT XII must exist for Chapter 5');
@@ -2299,7 +2301,7 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
 
   const ch5Stages = STAGES.filter((s) => s.chapter === 5);
   const expectedIds = [
-    'stage_55', 'stage_56', 'stage_57', 'stage_58',
+    'stage_55', 'stage_55b', 'stage_55c', 'stage_56', 'stage_57', 'stage_58',
     'stage_59', 'stage_60', 'stage_61', 'stage_62',
   ];
   assert.deepEqual(ch5Stages.map((s) => s.id), expectedIds);
@@ -2368,8 +2370,15 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
     }
   }
 
-  // Zero raw Markdown in Chapter 5 Codex & Glossary entries + valid anim keys for Ch.5 modules (52..59)
-  for (const cid of ['disk_bootloader', 'memory_allocator_heap', 'syscall_abi_dispatch', 'preemptive_microkernel']) {
+  // Zero raw Markdown in Chapter 5 Codex & Glossary entries + valid anim keys for Ch.5 modules (52..61)
+  for (const cid of [
+    'disk_bootloader',
+    'calling_convention_stack',
+    'user_heap_malloc_strdup',
+    'memory_allocator_heap',
+    'syscall_abi_dispatch',
+    'preemptive_microkernel',
+  ]) {
     const entry = CODEX_ENTRIES[cid];
     assert.ok(entry, `Missing Chapter 5 codex entry '${cid}'`);
     assertNoRawMarkdown(entry.term, `codex.${cid}.term`);
@@ -2381,6 +2390,8 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
   const ch5ModIds = MODULE_ENCYCLOPEDIA_IDS.slice(52);
   assert.deepEqual(ch5ModIds, [
     'boot_loader',
+    'stack_abi',
+    'malloc_strdup',
     'kalloc_map',
     'heap_sbrk',
     'syscall_mux',
@@ -2401,7 +2412,7 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
     assertNoRawMarkdown(entry.analogy, `glossary.${modId}.analogy`);
   }
   for (const termId of [
-    'bootloader', 'bitmap_alloc', 'heap_memory', 'pcb_concept',
+    'bootloader', 'calling_convention', 'user_heap', 'bitmap_alloc', 'heap_memory', 'pcb_concept',
     'vdso_trampoline', 'round_robin', 'fault_isolation', 'microkernel',
   ]) {
     const entry = getGlossaryTerm(termId);
@@ -2411,7 +2422,7 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
     assertNoRawMarkdown(entry.analogy, `glossary.${termId}.analogy`);
   }
 
-  // 2. Live 18,880-MOSFET execution of ALL 8 Chapter 5 stages (Primary + Anti-cheat)
+  // 2. Live 18,880-MOSFET execution of ALL 10 Chapter 5 stages (Primary + Anti-cheat)
   //    PLUS formatArk8OsProgramText -> assembleArk8OsProgramText round-trip!
   const customChips = {};
   provisionStandardChips(customChips, { includeChapter4Hardware: true, provisioned: false });
@@ -2445,6 +2456,20 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
       assert.equal(evalRes.run.stats.usedCall, true);
       assert.equal(evalRes.run.stats.usedRet, true);
       assert.ok(evalRes.run.stats.maxPcExecuted >= 32);
+    } else if (st.id === 'stage_55b') {
+      assert.equal(evalRes.run.final.crtText, 'BA');
+      assert.ok(evalRes.run.stats.minSp <= 237);
+      assert.equal(evalRes.run.final.sp, 240);
+      assert.equal(evalRes.run.stats.usedPush, true);
+      assert.equal(evalRes.run.stats.usedPop, true);
+      assert.equal(evalRes.run.stats.usedCall, true);
+      assert.equal(evalRes.run.stats.usedRet, true);
+    } else if (st.id === 'stage_55c') {
+      assert.equal(evalRes.run.final.crtText, 'OK:MK:!R');
+      assert.equal(evalRes.run.final.sp, 240);
+      assert.deepEqual(evalRes.run.final.ram.slice(80, 83), [79, 75, 0]);
+      assert.equal(evalRes.run.final.ram[112], 1);
+      assert.equal(evalRes.run.final.ram[128], 1);
     } else if (st.id === 'stage_56') {
       assert.equal(evalRes.run.final.crtText, '130');
       assert.deepEqual(evalRes.run.final.ram.slice(96, 100), [1, 1, 1, 1]);
@@ -2523,6 +2548,8 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
   assert.equal(isChapter5Unlocked(postCh4Save), true);
   assert.equal(isChapter5Cleared(postCh4Save), false);
   assert.equal(isStageUnlocked(postCh4Save, 'stage_55'), true);
+  assert.equal(isStageUnlocked(postCh4Save, 'stage_55b'), false);
+  assert.equal(isStageUnlocked(postCh4Save, 'stage_55c'), false);
   assert.equal(isStageUnlocked(postCh4Save, 'stage_56'), false);
 
   const progSave = { clearedStages: ['stage_17', 'stage_24', 'stage_42', 'stage_54'] };
@@ -2564,19 +2591,19 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
     }
   }
 
-  // 6. index.html, sw.js (silicon-genesis-v41, scene_storm_core.jpg, chapter5Stages.js) & ZERO leftover v=40 across codebase
+  // 6. index.html, sw.js (silicon-genesis-v41/42, scene_storm_core.jpg, chapter5Stages.js) & ZERO leftover v=40 across codebase
   const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /styles\/main\.css\?v=41/);
-  assert.match(indexHtml, /src\/main\.js\?v=41/);
+  assert.match(indexHtml, /styles\/main\.css\?v=(?:41|42)/);
+  assert.match(indexHtml, /src\/main\.js\?v=(?:41|42)/);
   assert.match(indexHtml, /id="btn-title-chapter5"/);
   assert.match(indexHtml, /id="btn-title-end5"/);
 
   const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.match(swSrc, /silicon-genesis-v41/);
+  assert.match(swSrc, /silicon-genesis-v(?:41|42)/);
   assert.match(swSrc, /scene_storm_core\.jpg/);
   assert.match(swSrc, /chapter5Stages\.js/);
-  assert.match(swSrc, /osHwRunner\.js\?v=41/);
-  assert.match(swSrc, /ark8OsIde\.js\?v=41/);
+  assert.match(swSrc, /osHwRunner\.js\?v=(?:41|42)/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=(?:41|42)/);
 
   const collectFiles = (dirUrl, prefix) => {
     const out = [];
@@ -2602,6 +2629,217 @@ test('v41 Chapter 5: OS Kernel Core (Stages 55–62) — Live 18,880-MOSFET Exec
       /\?v=40\b|silicon-genesis-v40\b/.test(src),
       false,
       `Leftover v40 cache string found in ${relPath}`
+    );
+  }
+});
+
+test('v42 Chapter 5 Complete: STACK_ABI, MALLOC_STRDUP & RAM Write-Blame Observability', () => {
+  // 1. Sequential ACT XII placement (stage_55 -> stage_55b -> stage_55c -> stage_56), metadata & progression
+  const st55 = getStageById('stage_55');
+  const st55b = getStageById('stage_55b');
+  const st55c = getStageById('stage_55c');
+  const st56 = getStageById('stage_56');
+  assert.ok(st55 && st55b && st55c && st56);
+
+  const idx55 = STAGES.findIndex((s) => s.id === 'stage_55');
+  assert.deepEqual(
+    STAGES.slice(idx55, idx55 + 4).map((s) => s.id),
+    ['stage_55', 'stage_55b', 'stage_55c', 'stage_56']
+  );
+  for (const st of [st55, st55b, st55c, st56]) {
+    assert.equal(st.chapter, 5);
+    assert.equal(st.act, 12);
+  }
+  assert.equal(st55b.code, '55-B');
+  assert.equal(st55b.rewardChip.id, 'STACK_ABI');
+  assert.equal(st55b.asmProgramSpec.memInspectorPreset, 'stack_abi');
+  assert.equal(getGlossaryTerm('stack_abi')?.anim, 'ch5_stack_abi');
+  assert.ok(st55b.introDialogue.some((d) => d.visualCard?.anim === 'ch5_stack_abi'));
+
+  assert.equal(st55c.code, '55-C');
+  assert.equal(st55c.rewardChip.id, 'MALLOC_STRDUP');
+  assert.equal(st55c.asmProgramSpec.memInspectorPreset, 'malloc_strdup');
+  assert.equal(getGlossaryTerm('malloc_strdup')?.anim, 'ch5_malloc_strdup');
+  assert.ok(st55c.introDialogue.some((d) => d.visualCard?.anim === 'ch5_malloc_strdup'));
+
+  // Exact sequential isStageUnlocked gate: stage_55 -> stage_55b -> stage_55c -> stage_56
+  const baseCleared = ['stage_17', 'stage_24', 'stage_42', 'stage_54'];
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared] }, 'stage_55'), true);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared] }, 'stage_55b'), false);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared, 'stage_55'] }, 'stage_55b'), true);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared, 'stage_55'] }, 'stage_55c'), false);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared, 'stage_55', 'stage_55b'] }, 'stage_55c'), true);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared, 'stage_55', 'stage_55b'] }, 'stage_56'), false);
+  assert.equal(isStageUnlocked({ clearedStages: [...baseCleared, 'stage_55', 'stage_55b', 'stage_55c'] }, 'stage_56'), true);
+
+  // 2. Zero raw Markdown (`**` or backticks) across ALL 10 Chapter 5 stages, CODEX_ENTRIES, GLOSSARY_TERMS & SYMBOL_CATALOG
+  const assertNoRawMarkdownDeep = (val, label) => {
+    if (typeof val === 'string') {
+      assert.equal(
+        val.includes('**') || val.includes('`'),
+        false,
+        `Raw Markdown found in ${label}: ${val.slice(0, 120)}`
+      );
+    } else if (Array.isArray(val)) {
+      val.forEach((item, i) => assertNoRawMarkdownDeep(item, `${label}[${i}]`));
+    } else if (val && typeof val === 'object') {
+      for (const [k, v] of Object.entries(val)) {
+        assertNoRawMarkdownDeep(v, `${label}.${k}`);
+      }
+    }
+  };
+  for (const st of STAGES.filter((s) => s.chapter === 5)) {
+    assertNoRawMarkdownDeep(st, st.id);
+  }
+  assertNoRawMarkdownDeep(CODEX_ENTRIES, 'CODEX_ENTRIES');
+  assertNoRawMarkdownDeep(GLOSSARY_TERMS, 'GLOSSARY_TERMS');
+  assertNoRawMarkdownDeep(SYMBOL_CATALOG, 'SYMBOL_CATALOG');
+
+  // 3. Live 18,880-MOSFET execution, text round-trip, secondary anti-cheat runs & RAM Write-Blame!
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter4Hardware: true, provisioned: false });
+
+  const extractIdealSlots = (st) => {
+    const slots = {};
+    for (const r of st.asmProgramSpec.rows) {
+      if (!r.locked) slots[r.slotId] = r.ideal;
+    }
+    const text = formatArk8OsProgramText(st, slots);
+    const parsed = assembleArk8OsProgramText(text, st);
+    assert.equal(parsed.ok, true, `${st.id} round-trip failed: ${JSON.stringify(parsed.errors)}`);
+    assert.deepEqual(parsed.slots, slots);
+    return parsed.slots;
+  };
+
+  // Stage 55-B (STACK_ABI): "BA" & secondary "YX", minSp <= 237, Write-Blame stack clobber detection on 0xEE!
+  const slots55b = extractIdealSlots(st55b);
+  const eval55b = evaluateArk8OsStage(st55b, slots55b, customChips);
+  assert.equal(eval55b.passed, true, `stage_55b failed: ${eval55b.message}`);
+  assert.equal(eval55b.run.hw.siliconStats.isPhysicalSilicon, true);
+  assert.equal(eval55b.run.hw.siliconStats.boardSwCount, 18880);
+  assert.equal(eval55b.run.final.crtText, 'BA');
+  assert.ok(eval55b.run.stats.minSp <= 237, `Expected minSp <= 237, got ${eval55b.run.stats.minSp}`);
+  assert.equal(eval55b.run.final.sp, 240);
+
+  const alt55b = runArk8OsProgram(st55b, slots55b, customChips, {
+    hw: eval55b.run.hw,
+    fast: true,
+    initialRam: st55b.asmProgramSpec.altInitialRam,
+  });
+  assert.equal(alt55b.haltedNormally, true);
+  assert.equal(alt55b.final.crtText, 'YX');
+  assert.ok(alt55b.stats.minSp <= 237);
+  assert.equal(alt55b.final.sp, 240);
+
+  // Temporal RAM Write-Blame on 0xEE (238): step 10 => PC 19 PUSH R1 ('A'=65), step 99 => PC 16 PUSH R0 ('!'=33)
+  const blame55bEarly = getRamWriterAtStep(eval55b.run.ramWriteLog, 0xee, 10);
+  assert.ok(blame55bEarly, 'Expected write record on 0xEE by step 10');
+  assert.equal(blame55bEarly.pc, 19);
+  assert.equal(blame55bEarly.op, 'PUSH');
+  assert.equal(blame55bEarly.name, 'PUSH R1');
+  assert.equal(blame55bEarly.val, 65); // 'A'
+
+  const blame55bLate = getRamWriterAtStep(eval55b.run.ramWriteLog, 0xee, 99);
+  assert.ok(blame55bLate, 'Expected overwrite record on 0xEE by step 99');
+  assert.equal(blame55bLate.pc, 16);
+  assert.equal(blame55bLate.op, 'PUSH');
+  assert.equal(blame55bLate.name, 'PUSH R0');
+  assert.equal(blame55bLate.val, 33); // '!'
+  assert.ok(blame55bLate.stepIdx > blame55bEarly.stepIdx, 'Clobber write must occur after original PUSH R1');
+
+  // Stage 55-C (MALLOC_STRDUP): "OK:MK:!R" & secondary "HI:WI:!R", virgin static 0x50, alloc->free->reuse on 0x70!
+  const slots55c = extractIdealSlots(st55c);
+  const eval55c = evaluateArk8OsStage(st55c, slots55c, customChips, { hw: eval55b.run.hw });
+  assert.equal(eval55c.passed, true, `stage_55c failed: ${eval55c.message}`);
+  assert.equal(eval55c.run.final.crtText, 'OK:MK:!R');
+  assert.equal(eval55c.run.final.sp, 240);
+
+  const alt55c = runArk8OsProgram(st55c, slots55c, customChips, {
+    hw: eval55c.run.hw,
+    fast: true,
+    initialRam: st55c.asmProgramSpec.altInitialRam,
+  });
+  assert.equal(alt55c.haltedNormally, true);
+  assert.equal(alt55c.final.crtText, 'HI:WI:!R');
+  assert.equal(alt55c.final.sp, 240);
+
+  // Temporal RAM Write-Blame on stage_55c:
+  //   - 0x50 (static source "OK") is NEVER written -> getRamWriterAtStep(..., 0x50, 999) === null!
+  //   - 0x70 (Chunk 0 header) records full alloc(1) -> free(0) -> reuse(1) lifecycle!
+  assert.equal(getRamWriterAtStep(eval55c.run.ramWriteLog, 0x50, 999), null);
+  const chunk0Writes = eval55c.run.ramWriteLog.filter((e) => e.addr === 0x70);
+  assert.deepEqual(
+    chunk0Writes.map((e) => e.val),
+    [1, 0, 1],
+    'Chunk 0 header [0x70] must record alloc(1) -> free(0) -> reuse(1)'
+  );
+  assert.equal(getRamWriterAtStep(eval55c.run.ramWriteLog, 0x70, chunk0Writes[0].stepIdx)?.val, 1);
+  assert.equal(getRamWriterAtStep(eval55c.run.ramWriteLog, 0x70, chunk0Writes[1].stepIdx)?.val, 0);
+  assert.equal(getRamWriterAtStep(eval55c.run.ramWriteLog, 0x70, chunk0Writes[2].stepIdx)?.val, 1);
+
+  // 4. Physical silicon sabotage: breaking NAND or SRAM_16B fails BOTH stage_55b & stage_55c!
+  for (const chipId of ['NAND', 'SRAM_16B']) {
+    const brokenChips = { ...customChips };
+    const brokenCircuit = cloneCircuit(customChips[chipId].circuit);
+    brokenCircuit.wires = brokenCircuit.wires.filter((w) => w.to.kind !== 'output');
+    brokenChips[chipId] = { ...customChips[chipId], circuit: brokenCircuit };
+    assert.equal(
+      evaluateArk8OsStage(st55b, slots55b, brokenChips).passed,
+      false,
+      `Breaking physical ${chipId} must fail stage_55b`
+    );
+    assert.equal(
+      evaluateArk8OsStage(st55c, slots55c, brokenChips).passed,
+      false,
+      `Breaking physical ${chipId} must fail stage_55c`
+    );
+  }
+
+  // 5. storyDiagram.js, ark8OsIde.js Write-Blame UI hooks & ZERO leftover v=41 / silicon-genesis-v41 across codebase
+  const storyDiagramSrc = readFileSync(new URL('../src/ui/storyDiagram.js', import.meta.url), 'utf8');
+  assert.match(storyDiagramSrc, /case 'ch5_stack_abi':/);
+  assert.match(storyDiagramSrc, /case 'ch5_malloc_strdup':/);
+
+  const ideSrc = readFileSync(new URL('../src/ui/ark8OsIde.js', import.meta.url), 'utf8');
+  assert.match(ideSrc, /\bgetRamWriterAtStep\b/);
+  assert.match(ideSrc, /stack_abi/);
+  assert.match(ideSrc, /malloc_strdup/);
+  assert.match(ideSrc, /os-fetch-boundary/);
+  assert.match(ideSrc, /os-dual-gutter/);
+
+  const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(indexHtml, /styles\/main\.css\?v=42/);
+  assert.match(indexHtml, /src\/main\.js\?v=42/);
+
+  const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(swSrc, /silicon-genesis-v42/);
+  assert.match(swSrc, /osHwRunner\.js\?v=42/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=42/);
+
+  const collectFiles = (dirUrl, prefix) => {
+    const out = [];
+    for (const ent of readdirSync(dirUrl, { withFileTypes: true })) {
+      const rel = `${prefix}/${ent.name}`;
+      if (ent.isDirectory()) {
+        out.push(...collectFiles(new URL(`${ent.name}/`, dirUrl), rel));
+      } else if (ent.name.endsWith('.js') || ent.name.endsWith('.css')) {
+        out.push(rel);
+      }
+    }
+    return out;
+  };
+  const checkedPaths = [
+    'index.html',
+    'sw.js',
+    ...collectFiles(new URL('../src/', import.meta.url), 'src'),
+    ...collectFiles(new URL('../styles/', import.meta.url), 'styles'),
+  ];
+  for (const relPath of checkedPaths) {
+    const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
+    assert.equal(
+      /\?v=41\b|silicon-genesis-v41\b/.test(src),
+      false,
+      `Leftover v41 cache string found in ${relPath}`
     );
   }
 });

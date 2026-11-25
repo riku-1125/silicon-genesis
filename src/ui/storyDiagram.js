@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=41';
+import { sound } from '../audio/sound.js?v=42';
 
 const W = 340;
 const H = 126;
@@ -832,6 +832,12 @@ export class StoryDiagramPlayer {
         break;
       case 'ch5_boot_loader':
         this._drawCh5BootLoader(ctx);
+        break;
+      case 'ch5_stack_abi':
+        this._drawCh5StackAbi(ctx);
+        break;
+      case 'ch5_malloc_strdup':
+        this._drawCh5MallocStrdup(ctx);
         break;
       case 'ch5_kalloc_map':
         this._drawCh5KallocMap(ctx);
@@ -2136,6 +2142,311 @@ export class StoryDiagramPlayer {
     this._pill(ctx, 262, 22, 70, 50, p.jumped ? `CALL 32!\nCRT "${p.crt}"` : 'WAIT\n展開中', p.jumped, '#52e3b6');
 
     this._caption(ctx, p.msg, this.stepIdx, 4, p.jumped ? '#52e3b6' : '#ffd166');
+  }
+
+  // 55b: STACK_ABI — Nested CALL, Calling Convention (PUSH/POP R1) & Safe Buffer Survival
+  _drawCh5StackAbi(ctx) {
+    const phases = [
+      {
+        stage: 0,
+        fnTitle: 'outer()',
+        fnSub: 'PUSH R1 → CALL',
+        fnAccent: '#ffd166',
+        spSlot: 2,
+        slots: [
+          { addr: 'EF', val: 'retM', role: 'main戻', cls: 'normal' },
+          { addr: 'EE', val: "'A'", role: 'R1退避', cls: 'save' },
+          { addr: 'ED', val: 'retO', role: 'out戻', cls: 'sp' },
+          { addr: 'EC', val: '--', role: '空き', cls: 'dim' },
+        ],
+        buf: ['--', '--'],
+        bufOk: false,
+        msg: '① outer: PUSH R1 で \'A\' を 0xEE へ退避し、CALL inner でネスト呼出！',
+      },
+      {
+        stage: 1,
+        fnTitle: 'inner()',
+        fnSub: 'R1←\'B\' 破壊!',
+        fnAccent: '#ff7b82',
+        spSlot: 3,
+        slots: [
+          { addr: 'EF', val: 'retM', role: 'main戻', cls: 'normal' },
+          { addr: 'EE', val: "'A'", role: '保護中', cls: 'save' },
+          { addr: 'ED', val: 'retO', role: 'out戻', cls: 'normal' },
+          { addr: 'EC', val: "'B'", role: '一時枠', cls: 'clobber' },
+        ],
+        buf: ['--', '--'],
+        bufOk: false,
+        msg: '② inner が R1 を \'B\' で上書き破壊！ だが 0xEE に元の \'A\' が生き残る！',
+      },
+      {
+        stage: 2,
+        fnTitle: 'outer()',
+        fnSub: 'POP R1 → STR',
+        fnAccent: '#52e3b6',
+        spSlot: 0,
+        slots: [
+          { addr: 'EF', val: 'retM', role: 'main戻', cls: 'sp' },
+          { addr: 'EE', val: "'A'", role: '復元済', cls: 'dim' },
+          { addr: 'ED', val: 'retO', role: '解放済', cls: 'dim' },
+          { addr: 'EC', val: "'B'", role: '解放済', cls: 'dim' },
+        ],
+        buf: ["'B'", "'A'"],
+        bufOk: true,
+        msg: '③ POP R1 で \'A\' を復元し、呼出元の安全バッファ [0x60..0x61] へ "BA" 保存！',
+      },
+      {
+        stage: 3,
+        fnTitle: 'clobber()',
+        fnSub: '0xEE ← \'!\'',
+        fnAccent: '#ff7b82',
+        spSlot: 0,
+        slots: [
+          { addr: 'EF', val: 'retC', role: 'main戻', cls: 'normal' },
+          { addr: 'EE', val: "'!'", role: '上書!!', cls: 'clobber' },
+          { addr: 'ED', val: 'retO', role: '旧枠', cls: 'dim' },
+          { addr: 'EC', val: "'B'", role: '旧枠', cls: 'dim' },
+        ],
+        buf: ["'B'", "'A'"],
+        bufOk: true,
+        msg: '④ 後続関数が旧スタック 0xEE を \'!\' で上書きしても安全領域 "BA" は無傷！',
+      },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    // Left: Active Function Box
+    this._chip(ctx, 8, 22, 74, 52, p.fnTitle, p.fnSub, p.fnAccent, true);
+    this._wire(ctx, [[82, 48], [104, 48]], true, p.fnAccent);
+
+    // Center: Hardware Stack (0xEF down to 0xEC)
+    ctx.save();
+    ctx.fillStyle = '#0d1924';
+    this._roundRect(ctx, 104, 8, 126, 86, 6);
+    ctx.fill();
+    ctx.strokeStyle = p.stage === 3 ? '#ff7b82' : '#ffd166';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffe39b';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('↓STACK (0xEF→0xEC)', 167, 18);
+
+    p.slots.forEach((s, i) => {
+      const y = 24 + i * 16.5;
+      const isSp = p.spSlot === i;
+      ctx.fillStyle =
+        s.cls === 'clobber'
+          ? 'rgba(156, 34, 46, 0.85)'
+          : s.cls === 'save'
+            ? 'rgba(20, 108, 78, 0.82)'
+            : s.cls === 'sp'
+              ? 'rgba(130, 88, 18, 0.82)'
+              : '#142230';
+      this._roundRect(ctx, 110, y, 114, 14, 3);
+      ctx.fill();
+      ctx.strokeStyle =
+        s.cls === 'clobber'
+          ? '#ff7b82'
+          : s.cls === 'save'
+            ? '#52e3b6'
+            : isSp
+              ? '#ffd166'
+              : '#304559';
+      ctx.lineWidth = isSp || s.cls === 'clobber' ? 1.3 : 0.9;
+      ctx.stroke();
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isSp ? '#ffd166' : '#8fb3cf';
+      ctx.font = 'bold 7.5px monospace';
+      ctx.fillText(`${isSp ? '▶' : ' '}0x${s.addr}`, 113, y + 7.2);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = s.cls === 'dim' ? '#6b8399' : '#ffffff';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.fillText(s.val, 168, y + 7.2);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = s.cls === 'clobber' ? '#ffb8bd' : s.cls === 'save' ? '#9cffdc' : '#85a6c2';
+      ctx.font = 'bold 7.5px monospace';
+      ctx.fillText(s.role, 221, y + 7.2);
+    });
+    ctx.restore();
+
+    // Right: Safe Caller Buffer [0x60..0x61]
+    this._wire(ctx, [[230, 48], [250, 48]], p.bufOk, '#52e3b6');
+    ctx.save();
+    ctx.fillStyle = p.bufOk ? 'rgba(12, 54, 42, 0.92)' : '#0f1b27';
+    this._roundRect(ctx, 250, 14, 82, 70, 6);
+    ctx.fill();
+    ctx.strokeStyle = p.bufOk ? '#52e3b6' : '#3a536b';
+    ctx.lineWidth = p.bufOk ? 1.8 : 1.2;
+    if (p.bufOk) {
+      ctx.shadowColor = '#52e3b6';
+      ctx.shadowBlur = 7;
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = p.bufOk ? '#9effdd' : '#89a8c4';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText('安全領域 [R2]', 291, 25);
+
+    for (let i = 0; i < 2; i++) {
+      const bx = 257 + i * 36;
+      ctx.fillStyle = p.bufOk ? 'rgba(22, 118, 84, 0.88)' : '#172534';
+      this._roundRect(ctx, bx, 33, 32, 26, 4);
+      ctx.fill();
+      ctx.strokeStyle = p.bufOk ? '#7effcf' : '#334b61';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#9ac0db';
+      ctx.font = 'bold 7px monospace';
+      ctx.fillText(`0x6${i}`, bx + 16, 41);
+      ctx.fillStyle = p.bufOk ? '#ffffff' : '#658099';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(p.buf[i], bx + 16, 52);
+    }
+
+    ctx.fillStyle = p.bufOk ? '#7effcf' : '#718da6';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText(p.bufOk ? '✔ CRT "BA"' : '待機中', 291, 73);
+    ctx.restore();
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.stage === 3 ? '#52e3b6' : p.fnAccent);
+  }
+
+  // 55c: MALLOC_STRDUP — Static Source vs User-Space Heap (malloc / strdup / OOM / free + reuse)
+  _drawCh5MallocStrdup(ctx) {
+    const phases = [
+      {
+        stage: 0,
+        c0Used: true,
+        c0Txt: 'OK\\0',
+        c1Used: false,
+        c1Txt: '????',
+        badge: 'p1 = 0x71',
+        accent: '#52e3b6',
+        msg: '① strdup(0x50) ▶ malloc が CHUNK 0 [0x70]=1 を確保し "OK\\0" を複製！',
+      },
+      {
+        stage: 1,
+        c0Used: true,
+        c0Txt: 'MK\\0',
+        c1Used: false,
+        c1Txt: '????',
+        badge: '*p1 ← \'M\'',
+        accent: '#ffd166',
+        msg: '② ヒープ複製側 *p1 だけ \'M\' に改変 ▶ 静的 "OK" は無傷、独立保持！',
+      },
+      {
+        stage: 2,
+        c0Used: true,
+        c0Txt: 'MK\\0',
+        c1Used: true,
+        c1Txt: 'USED',
+        badge: 'OOM → 0 (!)',
+        accent: '#ff7b82',
+        msg: '③ 2区画とも満杯で3回目の malloc ▶ 0 (OOM "!") を返して安全拒否！',
+      },
+      {
+        stage: 3,
+        c0Used: true,
+        c0Txt: 'REUSE!',
+        c1Used: true,
+        c1Txt: 'USED',
+        badge: 'free→p4==p1',
+        accent: '#52e3b6',
+        msg: '④ free(p1) で [0x70]←0 解放 ▶ 次の malloc が 0x71 を再利用 ("R")！',
+      },
+    ];
+    const p = phases[this.stepIdx % 4];
+
+    // Left: Static source string [0x50..0x52]
+    ctx.save();
+    ctx.fillStyle = '#0f1f2e';
+    this._roundRect(ctx, 8, 16, 82, 64, 6);
+    ctx.fill();
+    ctx.strokeStyle = '#7ee8ff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9be8ff';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText('静的 0x50..52', 49, 28);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText('"OK\\0"', 49, 49);
+    ctx.fillStyle = '#7effcf';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText('常に無傷!', 49, 68);
+    ctx.restore();
+
+    // Wire from Static to Heap
+    this._wire(ctx, [[90, 48], [116, 48]], p.stage === 0 || p.stage === 1, p.accent);
+
+    // Center-Right: Heap Pool (Chunk 0 @ 0x70 & Chunk 1 @ 0x80)
+    const drawChunk = (y, title, hdrHex, used, payload, highlight, isReuse) => {
+      ctx.save();
+      ctx.fillStyle = used ? 'rgba(20, 68, 56, 0.82)' : '#121d28';
+      if (highlight && p.stage === 1) ctx.fillStyle = 'rgba(104, 70, 18, 0.85)';
+      if (p.stage === 2 && !highlight) ctx.fillStyle = 'rgba(104, 66, 18, 0.82)';
+      this._roundRect(ctx, 116, y, 134, 38, 6);
+      ctx.fill();
+      ctx.strokeStyle = highlight ? p.accent : used ? '#ffd166' : '#3a5066';
+      ctx.lineWidth = highlight ? 1.8 : 1.2;
+      if (highlight) {
+        ctx.shadowColor = p.accent;
+        ctx.shadowBlur = 7;
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Header byte badge
+      ctx.fillStyle = used ? (isReuse ? '#1f8a65' : '#9c6318') : '#1c3b36';
+      this._roundRect(ctx, 122, y + 6, 42, 26, 4);
+      ctx.fill();
+      ctx.strokeStyle = used ? (isReuse ? '#7effcf' : '#ffd166') : '#52e3b6';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#dceeff';
+      ctx.font = 'bold 7.5px monospace';
+      ctx.fillText(hdrHex, 143, y + 15);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.fillText(used ? (isReuse ? '0→1' : 'USED') : 'FREE', 143, y + 26);
+
+      // Payload preview
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#9ec0da';
+      ctx.font = 'bold 7.5px monospace';
+      ctx.fillText(title, 170, y + 14);
+      ctx.fillStyle = used ? '#ffffff' : '#657e96';
+      ctx.font = 'bold 10.5px monospace';
+      ctx.fillText(payload, 170, y + 28);
+      ctx.restore();
+    };
+
+    drawChunk(10, 'CHUNK 0 (0x71~)', '0x70', p.c0Used, p.c0Txt, p.stage !== 2, p.stage === 3);
+    drawChunk(54, 'CHUNK 1 (0x81~)', '0x80', p.c1Used, p.c1Txt, p.stage === 2, false);
+
+    // Right: Result / OOM / Reuse pill
+    this._wire(ctx, [[250, 48], [268, 48]], true, p.accent);
+    this._pill(
+      ctx,
+      268,
+      20,
+      64,
+      56,
+      `${p.badge}\nCRT\n${p.stage === 0 ? '"OK"' : p.stage === 1 ? 'OK:MK' : p.stage === 2 ? 'OK:MK:!' : 'OK:MK:!R'}`,
+      true,
+      p.accent
+    );
+
+    this._caption(ctx, p.msg, this.stepIdx, 4, p.accent);
   }
 
   // 56: KALLOC_MAP — 4-Slot Physical Bitmap Allocator ([0x60..0x63])

@@ -1,5 +1,5 @@
 /**
- * SILICON GENESIS — Chapter 5: OS Kernel Core (STAGE 55–62 / ACT XII & XIII)
+ * SILICON GENESIS — Chapter 5: OS Kernel Core (STAGE 55-A–62 / ACT XII & XIII)
  *
  * Continues directly from Chapter 4 Ending (2094.12.04 20:23) when northern shelter
  * ARK-5 (Ren) warns Horizon Camp's 328 survivors of an approaching stratospheric
@@ -7,8 +7,8 @@
  *
  * Runs 100% natively on UNMODIFIED Chapter 4 `ARK8_OS_HW` physical silicon
  * (6,294 NAND / 12,588 CPU MOSFETs / 18,880 Board MOSFETs + verified SRAM_16B):
- *   ACT XII  (55–58): BOOT_LOADER -> KALLOC_MAP -> HEAP_SBRK -> SYSCALL_MUX
- *   ACT XIII (59–62): PCB_CTX_SW -> RR_SCHED -> FAULT_ISOLATE -> ARK_KERNEL_CORE
+ *   ACT XII  (55-A–58): BOOT_LOADER -> STACK_ABI -> MALLOC_STRDUP -> KALLOC_MAP -> HEAP_SBRK -> SYSCALL_MUX
+ *   ACT XIII (59–62):   PCB_CTX_SW -> RR_SCHED -> FAULT_ISOLATE -> ARK_KERNEL_CORE
  */
 
 function inst(op, rd = 0, rs = 0, imm = 0) {
@@ -86,14 +86,14 @@ function makeRogueProc(attackChar, printBefore = null) {
 
 export const CHAPTER5_STAGES = [
   // =========================================================================
-  // ACT XII — BOOT & MEMORY MANAGEMENT (STAGE 55–58)
+  // ACT XII — BOOT, ABI & MEMORY MANAGEMENT (STAGE 55-A–58)
   // =========================================================================
   {
     id: 'stage_55',
     number: 55,
     act: 12,
     chapter: 5,
-    code: '55',
+    code: '55-A',
     kind: 'ark8_os_program',
     title: '停電から蘇れ・ディスク起動ブートローダ',
     revealedTitle: 'ディスク・ブートローダ（BOOT_LOADER）',
@@ -207,10 +207,10 @@ export const CHAPTER5_STAGES = [
           tag: 'モジュール図鑑へ登録：ディスク・ブートローダ',
           title: '💾 BOOT_LOADER 完成！ 電源復帰から全自動でOSが蘇る！',
           anim: 'ch5_boot_loader',
-          rule: '次は複数アプリを衝突させずに配置する物理メモリ割当器【KALLOC_MAP】へ進もう！',
+          rule: '次はネスト関数でレジスタとスタック枠を守り抜く呼出規約【STACK_ABI】へ進もう！',
           accent: '#45d4a8',
         },
-        text: '見事だ！ これこそ「自分の靴ひもを引っ張って立ち上がる（Bootstrap）」──ブートローダの本質だ。さあ、次はディスクからいくつものプログラムを読み込むときに起きる「メモリ衝突」を解決する番だよ！',
+        text: '見事だ！ これこそ「自分の靴ひもを引っ張って立ち上がる（Bootstrap）」──ブートローダの本質だ。さあ、ディスクから大きなプログラムを自在に起動できるようになった今、処理を複数の関数へ分けて呼び出すときに襲いかかる「レジスタ破壊とスタック上書き」の罠を突破しよう！',
       },
     ],
     hints: [
@@ -228,6 +228,365 @@ export const CHAPTER5_STAGES = [
       isLabReward: true,
     },
     codexUnlock: ['disk_bootloader'],
+  },
+
+  {
+    id: 'stage_55b',
+    number: 55.1,
+    act: 12,
+    chapter: 5,
+    code: '55-B',
+    kind: 'ark8_os_program',
+    title: 'ネスト関数の罠・呼出規約とスタック保全',
+    revealedTitle: '呼出規約＆スタック保全（STACK_ABI）',
+    scene: 'ark5_station',
+    storyBgm: 'story',
+    widget: 'ark8_finale',
+    mode: 'physics',
+    incidentBrief: {
+      where: 'ホライズン電算司令室・ハードウェアスタック（0xEA..0xEF）＆安全バッファ',
+      trouble: 'ディスク起動できた気象モジュールをカイとレンがネスト関数（outer が inner を呼ぶ構造）へ分割したところ、2つの大惨事が発生！ inner が R1 を上書き破壊したうえ、旧スタック枠 [0xEE] の作業データも直後の関数呼出 clobber_stack で「!」に踏み潰されてしまった！',
+      condition: 'outer(R1, R2)（19〜25番地）に ARK-8 呼出規約を実装せよ！ inner(11番地) を呼ぶ前に PUSH R1 で R1 を退避し、復帰後に POP R1 で復元して、inner の戻り値 R0 と守り抜いた R1 を呼出元の安全バッファ [R2]・[R2+1] へ書き込んで RET で戻れ！（主検証 "BA" ＋ 別バッファ検証 "YX"）',
+      shortRule: '19..25: PUSH R1 → CALL 11 → POP R1 → STR R0,[R2] → ADDI R2,1 → STR R1,[R2] → RET！',
+      stakes: 'ネスト関数でレジスタを守り抜く呼出規約（PUSH/POP）と、RET 後に消えるスタックの寿命を越えて結果を残す安全バッファ受渡しを体得する',
+    },
+    inputs: ['CLK'],
+    outputs: ['CRT'],
+    allowedPrimitives: ['NAND', 'CONST_0', 'CONST_1'],
+    allowedCustomChips: null,
+    asmProgramSpec: {
+      arch: 'ark8_os',
+      goalTitle: '目標：ネストCALLで破壊される R1 を PUSH/POP で守り、安全バッファ [R2] へ保存せよ！（BA ＆ YX）',
+      targetCrt: 'BA',
+      altCrt: 'YX',
+      maxCycles: 120,
+      memInspectorPreset: 'stack_abi',
+      kernelMeta: {
+        paramsAddr: 80,
+        outerCharAddr: 80,
+        outBufPtrAddr: 81,
+        innerCharAddr: 82,
+        clobberCharAddr: 83,
+        outBufAddr: 0x60,
+        altOutBufAddr: 0x68,
+        stackStart: 0xe0,
+        savedSlotAddr: 238,
+        innerScratchAddr: 236,
+        minSpExpected: 236,
+      },
+      sectionHeaders: {
+        0: { title: '🔒 0x00 main（呼出元：outer → clobber_stack → 安全バッファ出力・固定）', cls: 'vec-locked' },
+        11: { title: '🔒 inner()（ネスト先：R1 を B/Y で上書き＆スタック一時使用・固定）', cls: 'vec-locked' },
+        15: { title: '🔒 clobber_stack()（後続関数：旧スタック枠 0xEE を !/? で上書き・固定）', cls: 'vec-locked' },
+        19: { title: '✏️ outer(R1, R2)（呼出規約 PUSH/POP ＋ 安全バッファ保存：7命令を実装！）', cls: 'vec-edit' },
+      },
+      initialRam: {
+        80: 65, // 'A' — caller's critical char in R1
+        81: 96, // 0x60 — caller's safe output buffer address in R2
+        82: 66, // 'B' — inner's char (clobbers R1!)
+        83: 33, // '!' — clobber_stack overwrites old stack frame RAM[238]
+      },
+      altInitialRam: {
+        80: 88,  // 'X'
+        81: 104, // 0x68
+        82: 89,  // 'Y'
+        83: 63,  // '?'
+      },
+      rows: [
+        // main (0..10)
+        { addr: 0, slotId: 'line_0', locked: true, fixedPart: inst('LOAD', 1, 0, 80), label: '[main] 呼出元の重要文字 R1 ← [0x50] ("A"/"X")' },
+        { addr: 1, slotId: 'line_1', locked: true, fixedPart: inst('LOAD', 2, 0, 81), label: '[main] 安全出力バッファ R2 ← [0x51] (0x60/0x68)' },
+        { addr: 2, slotId: 'line_2', locked: true, fixedPart: inst('CALL', 0, 0, 19), label: '[main] outer(R1, R2) を呼出 (SP: 240→239)' },
+        { addr: 3, slotId: 'line_3', locked: true, fixedPart: inst('CALL', 0, 0, 15), label: '[main] clobber_stack() で旧スタック枠を再利用上書き！' },
+        { addr: 4, slotId: 'line_4', locked: true, fixedPart: inst('LOAD', 3, 0, 81), label: '[main] 安全バッファ先頭 R3 ← [0x51]' },
+        { addr: 5, slotId: 'line_5', locked: true, fixedPart: inst('LDR', 0, 3, 0), label: '[main] 1文字目 R0 ← [R3] (innerの結果)' },
+        { addr: 6, slotId: 'line_6', locked: true, fixedPart: inst('STOR', 0, 0, 240), label: '[main] CRT[0xF0] へ1文字目を出力' },
+        { addr: 7, slotId: 'line_7', locked: true, fixedPart: inst('ADDI', 3, 0, 1), label: '[main] バッファポインタ R3++' },
+        { addr: 8, slotId: 'line_8', locked: true, fixedPart: inst('LDR', 0, 3, 0), label: '[main] 2文字目 R0 ← [R3+1] (守り抜いたR1)' },
+        { addr: 9, slotId: 'line_9', locked: true, fixedPart: inst('STOR', 0, 0, 240), label: '[main] CRT[0xF0] へ2文字目を出力' },
+        { addr: 10, slotId: 'line_10', locked: true, fixedPart: inst('HALT', 0, 0, 0), label: '[main] 検証完了 HALT (SP=240)' },
+        // inner (11..14)
+        { addr: 11, slotId: 'line_11', locked: true, fixedPart: inst('LOAD', 1, 0, 82), label: '[inner] R1 ← [0x52] ("B"/"Y") ※R1を破壊！' },
+        { addr: 12, slotId: 'line_12', locked: true, fixedPart: inst('PUSH', 0, 1, 0), label: '[inner] スタック一時領域 [SP=236] へ書込' },
+        { addr: 13, slotId: 'line_13', locked: true, fixedPart: inst('POP', 0, 0, 0), label: '[inner] 戻り値 R0 ← "B"/"Y" (SP=237)' },
+        { addr: 14, slotId: 'line_14', locked: true, fixedPart: inst('RET', 0, 0, 0), label: '[inner] outer へ復帰 (R1は破壊されたまま！)' },
+        // clobber_stack (15..18)
+        { addr: 15, slotId: 'line_15', locked: true, fixedPart: inst('LOAD', 0, 0, 83), label: '[clobber] 上書き文字 R0 ← [0x53] ("!"/"?")' },
+        { addr: 16, slotId: 'line_16', locked: true, fixedPart: inst('PUSH', 0, 0, 0), label: '[clobber] 旧スタック枠 [0xEE=238] を上書き！' },
+        { addr: 17, slotId: 'line_17', locked: true, fixedPart: inst('POP', 1, 0, 0), label: '[clobber] SP=239 へ戻す (0xEE には "!" が残る)' },
+        { addr: 18, slotId: 'line_18', locked: true, fixedPart: inst('RET', 0, 0, 0), label: '[clobber] main へ復帰 (SP=240)' },
+        // outer (19..25 — 7 editable instructions!)
+        { addr: 19, slotId: 'line_19', ideal: idOf('PUSH', 0, 1, 0), label: '① ネスト呼出前に重要文字 R1 をスタック退避', placeholder: 'PUSH R1' },
+        { addr: 20, slotId: 'line_20', ideal: idOf('CALL', 0, 0, 11), label: '② inner(11番地) をネスト呼出 (R0="B", R1破壊!)', placeholder: 'CALL 11' },
+        { addr: 21, slotId: 'line_21', ideal: idOf('POP', 1, 0, 0), label: '③ スタックから元の R1 ("A") を復元', placeholder: 'POP R1' },
+        { addr: 22, slotId: 'line_22', ideal: idOf('STR', 0, 2, 0), label: '④ innerの結果 R0 を安全バッファ [R2] へ書込', placeholder: 'STR R0, [R2]' },
+        { addr: 23, slotId: 'line_23', ideal: idOf('ADDI', 2, 0, 1), label: '⑤ 安全バッファ番地を進める (R2++)', placeholder: 'ADDI R2, 1' },
+        { addr: 24, slotId: 'line_24', ideal: idOf('STR', 1, 2, 0), label: '⑥ 守り抜いた R1 を安全バッファ [R2+1] へ書込', placeholder: 'STR R1, [R2]' },
+        { addr: 25, slotId: 'line_25', ideal: idOf('RET', 0, 0, 0), label: '⑦ main へ正規復帰 (SP: 239→240)', placeholder: 'RET' },
+      ],
+    },
+    plainGoal: 'ネスト呼出 inner(11番地) に R1 を壊されないよう PUSH R1 / POP R1 で守り、さらに後続関数に旧スタックを上書きされても消えない呼出元バッファ [R2]・[R2+1] へ2文字を保存しよう！',
+    beginnerNote:
+      '呼出元 main は R1 に重要文字（"A"／"X"）、R2 に安全出力バッファ番地（0x60／0x68）を入れて outer(19番地) を呼びます。inner(11番地) は中で R1 を "B" や "Y" で上書きするため、呼ぶ直前に PUSH R1、戻った直後に POP R1 で守るのが ARK-8 呼出規約です！ さらに main は直後に clobber_stack() で旧スタック枠 [0xEE] を "!" や "?" で踏み潰します──実行後に RAM インスペクタの [0xEE] をタップすると「どの命令がいつ上書きしたか」も一目で追跡できます！',
+    introDialogue: [
+      {
+        speaker: 'kai',
+        showIncident: true,
+        text: 'ディスク起動が通ったんで、さっそく俺とレンで大きな気象解析プログラムを機能ごとの関数（main → outer → inner）へ分割したんだ──そしたら2つも大事故が起きたぜ！！ まず1つ目、inner を呼んだ瞬間に outer が R1 に持ってた大事な文字 "A" が "B" で上書きされて跡形もなく消えちまった！',
+      },
+      {
+        speaker: 'ren',
+        text: '『しかも2つ目がもっと怖いんだ！！ 「それなら計算結果をスタックの 0xEE 番地に残しておけばいいや」って試したら、outer が RET で戻った直後に別の関数 clobber_stack() を1回呼んだだけで、さっきまで "A" が入ってた 0xEE 番地が "!" で丸ごと上書きされちゃったんだよ！！ なんで！？』',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: 'ネスト関数の鉄則：ARK-8 呼出規約 ＆ スタック寿命（動く図解）',
+          title: '📚 PUSH R1 → CALL inner → POP R1 ＆ 結果は安全バッファ [R2] へ！',
+          anim: 'ch5_stack_abi',
+          rule: 'ネスト前に退避・復帰後に復元！ 旧スタック枠 [0xEE] は RET 後に即再利用されるため、残したい結果は呼出元バッファ [R2] へ書け！',
+          accent: '#45d4a8',
+        },
+        text: '2人とも、ソフトウェア工学で誰もが一度は踏む最高の教訓を引き当てたな！ CPU のレジスタはたった4本しかないから、ネスト関数を安全に繋ぐには【呼び出し規約（ABI）】──「壊されたくない R1 は CALL の前に PUSH R1 でスタックへ退避し、戻ったら POP R1 で取り戻す」約束事が必要だ。そしてスタック枠は関数が RET した瞬間に寿命が尽き、次の関数呼出の PUSH で即座に上書きされる。だから関数を越えて残す結果は、呼出元が用意した安全バッファ [R2]・[R2+1] へ書き込んで返そう！',
+      },
+      {
+        speaker: 'hako',
+        text: '『実行が終わったら、メモリ監視パネルで旧スタック枠 [0xEE] をタップしてみるといい！ 「PUSH R1 で退避された "A" の席を、あとから clobber_stack の PUSH R0（"!"）が上書きした瞬間」まで拍番号つきで突き止められるぞ！』',
+      },
+    ],
+    outroDialogue: [
+      {
+        speaker: 'kai',
+        text: 'すげえ！！ outer の中で PUSH R1 → CALL 11 → POP R1 を挟んで安全バッファ [R2] へ書き込んだら、clobber_stack が旧スタック [0xEE] を "!" で踏み潰してもびくともせず【BA】が出た！！ 別バッファ 0x68 検証【YX】も SP=240 ぴったりの完全合格だ！！ しかも [0xEE] をタップしたら、犯人の PUSH R0（"!"）の拍へ一発ジャンプできて鳥肌立ったぜ！',
+      },
+      {
+        speaker: 'ren',
+        visualCard: {
+          tag: 'モジュール図鑑へ登録：呼出規約＆スタック保全',
+          title: '📚 STACK_ABI 完成！ ネスト関数とスタック寿命の正体を完全制覇！',
+          anim: 'ch5_stack_abi',
+          rule: '次は関数の外まで生きる動的領域──ユーザーヒープ【MALLOC_STRDUP】へ進もう！',
+          accent: '#45d4a8',
+        },
+        text: '『ありがとう！ 呼出元が「2バイトぶんの安全バッファ R2」を事前に用意できるときはこれで完璧だね！ ……でもさ、気象ログの文字列を関数の中で新しく丸ごと複製して返したいとき（strdup）みたいに、呼出元がサイズや置き場所を決め打ちできないデータはどうやって RET の向こうへ生き残らせればいいんだろう？』',
+      },
+    ],
+    hints: [
+      '【ネスト呼出の前後（19〜21番地）】outer が呼ばれた時点で R1 に重要文字（"A"／"X"）、R2 に安全バッファ番地が入っています！ まず 19: PUSH R1 で退避 → 20: CALL 11 で inner を呼出 → 21: POP R1 で元の R1 を復元しよう！',
+      '【安全バッファへ保存＆復帰（22〜25番地）】inner の戻り値 R0（"B"／"Y"）を 22: STR R0, [R2] で1文字目に書き込み、23: ADDI R2, 1 で番地を進めて、24: STR R1, [R2] で守り抜いた R1 を2文字目へ！ 最後は 25: RET で main へ戻ります！',
+      '【全7行の答え】19: PUSH R1 ／ 20: CALL 11 ／ 21: POP R1 ／ 22: STR R0, [R2] ／ 23: ADDI R2, 1 ／ 24: STR R1, [R2] ／ 25: RET（終了時に SP=240 へ戻れば完璧です！）',
+    ],
+    tests: [],
+    rewardChip: {
+      id: 'STACK_ABI',
+      name: '呼出規約＆スタック保全',
+      color: '#1b6d5b',
+      accent: '#45d4a8',
+      description: 'ネストCALL時のレジスタ退避規約（PUSH/POP）とスタック寿命を越える安全バッファ受渡し',
+      isLabReward: true,
+    },
+    codexUnlock: ['calling_convention_stack'],
+  },
+
+  {
+    id: 'stage_55c',
+    number: 55.2,
+    act: 12,
+    chapter: 5,
+    code: '55-C',
+    kind: 'ark8_os_program',
+    title: '関数を越えて生きろ・ユーザーヒープ malloc と strdup',
+    revealedTitle: 'ヒープ malloc/free & strdup（MALLOC_STRDUP）',
+    scene: 'ark5_station',
+    storyBgm: 'story',
+    widget: 'ark8_finale',
+    mode: 'physics',
+    incidentBrief: {
+      where: 'ホライズン電算司令室・ユーザー空間ヒーププール（0x70..0x8F：2チャンク）',
+      trouble: '気象テンプレート文字列 [0x50]（"OK"）を関数内で新しく複製して書き換えたい（strdup）が、静的原本を直接いじると元データが壊れ、スタック上へ置けば RET の瞬間に消えてしまう！',
+      condition: 'ユーザーヒープ [0x70..0x8F]（各先頭1バイトが 0=FREE / 1=USED のチャンクヘッダ）の解放関数 free(11・13番地) と、malloc() で得た新領域へ終端 0 まで複製する strdup(18〜23番地) を実装し、原本保持・独立改変・満杯OOM拒否("!")・解放再利用("R")を証明せよ！（"OK:MK:!R" ＆ "HI:WI:!R"）',
+      shortRule: 'free(11,13): ADDI R0,255 → STR R1,[R0] ／ strdup(18..23): LDR R3,[R1] → STR R3,[R2] → ADDI R1,1 → ADDI R2,1 → JNZ R3,18 → RET！',
+      stakes: '関数の寿命を越えて生き続けるユーザー空間ヒープ（malloc / free / strdup）を実装し、独立複製と再利用の循環を確立する',
+    },
+    inputs: ['CLK'],
+    outputs: ['CRT'],
+    allowedPrimitives: ['NAND', 'CONST_0', 'CONST_1'],
+    allowedCustomChips: null,
+    asmProgramSpec: {
+      arch: 'ark8_os',
+      goalTitle: '目標：ヒープへ動的複製する strdup とチャンク解放 free を実装し、独立改変・OOM拒否・再利用を証明せよ！（OK:MK:!R ＆ HI:WI:!R）',
+      targetCrt: 'OK:MK:!R',
+      altCrt: 'HI:WI:!R',
+      maxCycles: 260,
+      memInspectorPreset: 'malloc_strdup',
+      kernelMeta: {
+        staticStrAddr: 0x50,
+        mutCharAddr: 88,
+        savedPtrAddr: 89,
+        heapPoolStart: 0x70,
+        heapPoolLength: 32,
+        chunks: [
+          { id: 0, headerAddr: 0x70, payloadAddr: 0x71, size: 15, label: 'CHUNK 0 (0x70)' },
+          { id: 1, headerAddr: 0x80, payloadAddr: 0x81, size: 15, label: 'CHUNK 1 (0x80)' },
+        ],
+      },
+      sectionHeaders: {
+        0: { title: '🔒 0x00 main（strdup → 独立改変 → OOM検査 → free → malloc再利用・固定）', cls: 'vec-locked' },
+        11: { title: '✏️ free(R0)（ヘッダ ptr−1 を 0 へ戻して解放：2命令を実装！）', cls: 'vec-edit' },
+        15: { title: '✏️ strdup(R1)（malloc取得＋終端0までヒープ複製：6命令を実装！）', cls: 'vec-edit' },
+      },
+      initialRam: {
+        80: 79, 81: 75, 82: 0, // Static "OK\0" at 0x50..0x52
+        88: 77,                // Mutation char 'M'
+        112: 0, 113: 63, 114: 63, 115: 63, 116: 63, // Chunk 0 FREE + dirty payload "????"
+        128: 0, 129: 63, 130: 63, 131: 63, 132: 63, // Chunk 1 FREE + dirty payload "????"
+      },
+      altInitialRam: {
+        80: 72, 81: 73, 82: 0, // Static "HI\0" at 0x50..0x52
+        88: 87,                // Mutation char 'W'
+        112: 1, 113: 63, 114: 63, 115: 63, 116: 63, // Chunk 0 PRE-OCCUPIED (forces Chunk 1!)
+        128: 0, 129: 63, 130: 63, 131: 63, 132: 63, // Chunk 1 FREE + dirty payload "????"
+      },
+      kernelLib: [
+        // Fallthrough guard at PC 24: halts immediately if strdup misses RET
+        { addr: 24, part: inst('HALT', 0, 0, 0) },
+
+        // print_str(R1 = ptr): PC 26..31 (RAM 0x34..0x3F)
+        { addr: 26, part: inst('LDR', 0, 1, 0) },
+        { addr: 27, part: inst('JNZ', 0, 0, 29) },
+        { addr: 28, part: inst('RET', 0, 0, 0) },
+        { addr: 29, part: inst('STOR', 0, 0, 240) },
+        { addr: 30, part: inst('ADDI', 1, 0, 1) },
+        { addr: 31, part: inst('JNZ', 0, 0, 26) },
+
+        // malloc(): PC 72..85 (RAM 0x90..0xAB) — scans [0x70] & [0x80], preserves R1..R3!
+        { addr: 72, part: inst('LOAD', 0, 0, 112) },
+        { addr: 73, part: inst('JNZ', 0, 0, 78) },
+        { addr: 74, part: inst('LDI', 0, 0, 1) },
+        { addr: 75, part: inst('STOR', 0, 0, 112) },
+        { addr: 76, part: inst('LDI', 0, 0, 113) },
+        { addr: 77, part: inst('RET', 0, 0, 0) },
+        { addr: 78, part: inst('LOAD', 0, 0, 128) },
+        { addr: 79, part: inst('JNZ', 0, 0, 84) },
+        { addr: 80, part: inst('LDI', 0, 0, 1) },
+        { addr: 81, part: inst('STOR', 0, 0, 128) },
+        { addr: 82, part: inst('LDI', 0, 0, 129) },
+        { addr: 83, part: inst('RET', 0, 0, 0) },
+        { addr: 84, part: inst('LDI', 0, 0, 0) },
+        { addr: 85, part: inst('RET', 0, 0, 0) },
+
+        // report_and_oom(): PC 86..98 (RAM 0xAC..0xC5) — prints "OK:MK:!" and leaves R3='!' (non-zero!)
+        { addr: 86, part: inst('LDI', 1, 0, 80) },
+        { addr: 87, part: inst('CALL', 0, 0, 26) },
+        { addr: 88, part: inst('LDI', 3, 0, 58) },    // ':'
+        { addr: 89, part: inst('STOR', 0, 3, 240) },
+        { addr: 90, part: inst('LOAD', 1, 0, 89) },   // p1
+        { addr: 91, part: inst('CALL', 0, 0, 26) },
+        { addr: 92, part: inst('STOR', 0, 3, 240) },  // ':'
+        { addr: 93, part: inst('CALL', 0, 0, 72) },   // p2 = malloc() -> fills remaining chunk
+        { addr: 94, part: inst('CALL', 0, 0, 72) },   // p3 = malloc() -> pool full -> MUST return 0!
+        { addr: 95, part: inst('JNZ', 0, 0, 98) },    // if OOM failed, skip '!'
+        { addr: 96, part: inst('LDI', 3, 0, 33) },    // '!' (keeps R3=33 != 0 for free()!)
+        { addr: 97, part: inst('STOR', 0, 3, 240) },
+        { addr: 98, part: inst('RET', 0, 0, 0) },
+
+        // verify_reuse(R0 = p4): PC 99..106 (RAM 0xC6..0xD5) — prints 'R' iff p4 != 0 && p4 == p1
+        { addr: 99, part: inst('JNZ', 0, 0, 101) },
+        { addr: 100, part: inst('RET', 0, 0, 0) },
+        { addr: 101, part: inst('LOAD', 1, 0, 89) },  // R1 ← p1
+        { addr: 102, part: inst('SUB', 0, 1, 0) },    // R0 ← p4 - p1
+        { addr: 103, part: inst('JNZ', 0, 0, 100) },  // if p4 != p1, return without 'R'
+        { addr: 104, part: inst('LDI', 0, 0, 82) },   // 'R'
+        { addr: 105, part: inst('STOR', 0, 0, 240) },
+        { addr: 106, part: inst('RET', 0, 0, 0) },
+      ],
+      rows: [
+        // main (0..10)
+        { addr: 0, slotId: 'line_0', locked: true, fixedPart: inst('LDI', 1, 0, 80), label: '[main] 静的文字列先頭 R1 ← 0x50 ("OK"/"HI")' },
+        { addr: 1, slotId: 'line_1', locked: true, fixedPart: inst('CALL', 0, 0, 15), label: '[main] p1 = strdup(0x50) でヒープへ動的複製！' },
+        { addr: 2, slotId: 'line_2', locked: true, fixedPart: inst('STOR', 0, 0, 89), label: '[main] 取得ポインタ p1 を [0x59] へ保存' },
+        { addr: 3, slotId: 'line_3', locked: true, fixedPart: inst('LOAD', 2, 0, 88), label: '[main] 書換文字 R2 ← [0x58] ("M"/"W")' },
+        { addr: 4, slotId: 'line_4', locked: true, fixedPart: inst('STR', 2, 0, 0), label: '[main] ヒープ複製側 *p1 だけを改変 (静的は無傷!)' },
+        { addr: 5, slotId: 'line_5', locked: true, fixedPart: inst('CALL', 0, 0, 86), label: '[main] 静的:ヒープ表示 ＆ 満杯OOM拒否("!")検査' },
+        { addr: 6, slotId: 'line_6', locked: true, fixedPart: inst('LOAD', 0, 0, 89), label: '[main] 解放するヒープポインタ R0 ← p1' },
+        { addr: 7, slotId: 'line_7', locked: true, fixedPart: inst('CALL', 0, 0, 11), label: '[main] free(p1) でチャンクを解放！' },
+        { addr: 8, slotId: 'line_8', locked: true, fixedPart: inst('CALL', 0, 0, 72), label: '[main] p4 = malloc() で解放区画を再取得！' },
+        { addr: 9, slotId: 'line_9', locked: true, fixedPart: inst('CALL', 0, 0, 99), label: '[main] p4 == p1（完全再利用）なら "R" を出力' },
+        { addr: 10, slotId: 'line_10', locked: true, fixedPart: inst('HALT', 0, 0, 0), label: '[main] 検証完了 HALT (SP=240)' },
+        // free (11..14 — 2 editable + 2 locked!)
+        { addr: 11, slotId: 'line_11', ideal: idOf('ADDI', 0, 0, 255), label: '① ヘッダ番地へ1バイト戻る (R0 ← ptr−1 = +255)', placeholder: 'ADDI R0, 255' },
+        { addr: 12, slotId: 'line_12', locked: true, fixedPart: inst('LDI', 1, 0, 0), label: '[free] 空きフラグ R1 ← 0 を準備' },
+        { addr: 13, slotId: 'line_13', ideal: idOf('STR', 1, 0, 0), label: '② チャンクヘッダ [R0] ← 0 で区画解放！', placeholder: 'STR R1, [R0]' },
+        { addr: 14, slotId: 'line_14', locked: true, fixedPart: inst('RET', 0, 0, 0), label: '[free] 解放完了 RET' },
+        // strdup (15..23 — 3 locked + 6 editable!)
+        { addr: 15, slotId: 'line_15', locked: true, fixedPart: inst('CALL', 0, 0, 72), label: '[strdup] malloc() 呼出 → R0=新ヒープ先頭 (R1保持)' },
+        { addr: 16, slotId: 'line_16', locked: true, fixedPart: inst('LDI', 2, 0, 0), label: '[strdup] 書込カーソル R2 を 0 初期化' },
+        { addr: 17, slotId: 'line_17', locked: true, fixedPart: inst('ADD', 2, 0, 0), label: '[strdup] R2 ← R0（R0は返却用に保持！）' },
+        { addr: 18, slotId: 'line_18', ideal: idOf('LDR', 3, 1, 0), label: '③ 静的コピー元 [R1] から1バイト読込 (R3←[R1])', placeholder: 'LDR R3, [R1]' },
+        { addr: 19, slotId: 'line_19', ideal: idOf('STR', 3, 2, 0), label: '④ ヒープコピー先 [R2] へ書込 (終端0もコピー!)', placeholder: 'STR R3, [R2]' },
+        { addr: 20, slotId: 'line_20', ideal: idOf('ADDI', 1, 0, 1), label: '⑤ コピー元ポインタを進める (R1++)', placeholder: 'ADDI R1, 1' },
+        { addr: 21, slotId: 'line_21', ideal: idOf('ADDI', 2, 0, 1), label: '⑥ コピー先ポインタを進める (R2++)', placeholder: 'ADDI R2, 1' },
+        { addr: 22, slotId: 'line_22', ideal: idOf('JNZ', 3, 0, 18), label: '⑦ 終端0でなければ18番地へループ (JNZ R3, 18)', placeholder: 'JNZ R3, 18' },
+        { addr: 23, slotId: 'line_23', ideal: idOf('RET', 0, 0, 0), label: '⑧ ヒープ先頭ポインタ R0 を返却 RET', placeholder: 'RET' },
+      ],
+    },
+    plainGoal: 'ユーザー空間ヒープ [0x70..0x8F] のチャンクヘッダ（ptr−1）を 0 へ戻す free と、malloc() が返した新領域へ終端 0 まで1バイトずつ複製する strdup を8命令で実装しよう！',
+    beginnerNote:
+      'ヒープ領域 0x70..0x8F には2つのチャンク（Chunk 0：ヘッダ 0x70＋本体 0x71〜 ／ Chunk 1：ヘッダ 0x80＋本体 0x81〜）が用意され、malloc()（72番地）が空きチャンクを探してヘッダを 1 にし本体先頭 ptr を R0 へ返します！ free(R0) は ptr から1バイト手前のヘッダ（R0 − 1 ＝ ADDI R0, 255）を 0 へ戻すだけ！ strdup(R1) は返却用の R0 を動かさず、R2（R0のコピー）を使って終端 0 まで書き込み、JNZ R3, 18 で回してから RET で R0 を返します。',
+    introDialogue: [
+      {
+        speaker: 'ren',
+        showIncident: true,
+        text: '『さっきの疑問がさっそく現実になったよ！！ 気象ログのテンプレート文字列 "OK"（静的領域 0x50）を関数 strdup に渡して、新しい独立コピーを作って先頭だけ "M" に書き換え（"MK"）たいんだ！ でも 0x50 の原本を直接いじったら "OK" が壊れちゃうし、スタックに置いたら RET した瞬間に消えちゃうよ！！』',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: '関数の寿命を越える第3の領域：ユーザーヒープ（動く図解）',
+          title: '📦 [0x70] ヘッダ(0/1) ＋ [0x71..] 本体 → malloc → strdup → free → 再利用！',
+          anim: 'ch5_malloc_strdup',
+          rule: 'free(R0) は1バイト手前のチャンクヘッダ [ptr−1] を 0 へ戻し、strdup(R1) は終端 0 まで丸ごと複製して新ポインタ R0 を返す！',
+          accent: '#45d4a8',
+        },
+        text: 'そこで登場するのが、静的領域でもスタックでもない第3の領域──関数が終わっても free で返すまで生き続ける【ユーザー空間ヒープ】だ！ RAM 0x70..0x8F に2つのチャンクを用意し、各本体の1バイト手前（0x70・0x80）に「0＝空き／1＝使用中」の【チャンクヘッダ】を置いてある。malloc() はもう組んであるから、君の手でチャンク解放【free】と動的複製【strdup】の8命令を仕上げよう！',
+      },
+      {
+        speaker: 'mina',
+        text: '画面の合格テストは4拍子そろってるよ！ ①静的原本 "OK" は無傷のまま、②ヒープ複製側だけ "MK" に独立書換、③残りも借りて満杯になったら OOM 拒否の "!"、④free した区画を次の malloc がぴったり再利用できたら "R"──合計【OK:MK:!R】！ Chunk 0 が最初から埋まった別検証【HI:WI:!R】も通る汎用コードを書こうね！',
+      },
+    ],
+    outroDialogue: [
+      {
+        speaker: 'ren',
+        text: '『やったあああ！！ 静的の "OK" は一文字も汚れず、ヒープの複製側だけ "MK" に変わって、満杯では "!" で安全に止まり、free した直後に同じ番地を再利用できて【OK:MK:!R】！！ Chunk 1 へ回る【HI:WI:!R】も一発合格だよ！！ RAM の [0x70] と [0x71] をタップすると、確保→複製→改変→解放→再利用の全履歴が追えて最高にわかりやすい！』',
+      },
+      {
+        speaker: 'kagari',
+        visualCard: {
+          tag: 'モジュール図鑑へ登録：ユーザーヒープ malloc/free & strdup',
+          title: '📦 MALLOC_STRDUP 完成！ スタックを越えて生きる動的メモリの循環が誕生！',
+          anim: 'ch5_malloc_strdup',
+          rule: '1つのアプリ内ヒープは整った──次は複数アプリ同士の衝突を防ぐOS物理割当【KALLOC_MAP】だ！',
+          accent: '#45d4a8',
+        },
+        text: '見事だ！ これで「静的領域」「スタック」「ユーザーヒープ」というメモリ3大領域の役割が、実機 RAM の1バイト単位まで完全に繋がったぞ！ さあ次は視点がアプリの内側からOSカーネル全体へ広がる──複数の別々のアプリを同時に読み込んだときに起きる物理メモリ衝突を解決しに行こう！',
+      },
+    ],
+    hints: [
+      '【free(R0) の2命令（11・13番地）】malloc() が返す R0 は本体先頭（0x71 または 0x81）なので、チャンクヘッダはちょうど1バイト手前（ptr − 1）です！ 8ビットでは −1 = +255 なので 11: ADDI R0, 255、12番地で R1=0 が用意済みなので 13: STR R1, [R0] でヘッダを 0（FREE）へ戻します！',
+      '【strdup(R1) の6命令（18〜23番地）】15〜17番地で R0 に新ヒープ先頭、R2 にそのコピー（書込カーソル）が入っています！ 18: LDR R3, [R1] → 19: STR R3, [R2]（終端 0 も先に書くのがコツ！）→ 20: ADDI R1, 1 → 21: ADDI R2, 1 → 22: JNZ R3, 18 → 23: RET！',
+      '【全8行の答え】11: ADDI R0, 255 ／ 13: STR R1, [R0] ／ 18: LDR R3, [R1] ／ 19: STR R3, [R2] ／ 20: ADDI R1, 1 ／ 21: ADDI R2, 1 ／ 22: JNZ R3, 18 ／ 23: RET！',
+    ],
+    tests: [],
+    rewardChip: {
+      id: 'MALLOC_STRDUP',
+      name: 'ヒープ malloc/free & strdup',
+      color: '#1b6d5b',
+      accent: '#45d4a8',
+      description: 'ユーザー空間ヒープのチャンク解放（free）と動的文字列複製（strdup）・OOM拒否・再利用',
+      isLabReward: true,
+    },
+    codexUnlock: ['user_heap_malloc_strdup'],
   },
 
   {
@@ -322,7 +681,7 @@ export const CHAPTER5_STAGES = [
       {
         speaker: 'mina',
         showIncident: true,
-        text: 'ディスクから自動起動できるようになって大助かりだよ！ ──でもね、さっき暖房監視アプリと気象レーダー受信アプリを続けて読み込んだら、どっちも「0x40番地から置く」って決め打ちだったせいで、後から来たほうが先のを上書きして壊しちゃったの！',
+        text: 'ブート起動も呼出規約も、1つのアプリの中で使うヒープ malloc/free と strdup までバッチリ動くようになったね！ ──でもね、今度は暖房監視アプリと気象レーダー受信アプリみたいに「別々のアプリを複数」同時に読み込もうとしたら、どっちも「0x40番地から置く」って決め打ちだったせいで、後から来たほうが先のを丸ごと上書きして壊しちゃったの！',
       },
       {
         speaker: 'kagari',
@@ -330,10 +689,10 @@ export const CHAPTER5_STAGES = [
           tag: '動的メモリ管理：4スロット物理ビットマップ（動く図解）',
           title: '🧩 [0x60..0x63] = [USED, FREE, USED, FREE] → kalloc で空き発見＆確保！',
           anim: 'ch5_kalloc_map',
-          rule: '空き（0）を探して 1 に書き換えて返すのが kalloc、使い終わったら 0 へ戻すのが kfree だ！',
+          rule: 'アプリ内の malloc/free に続き、OSカーネルが複数プロセスへ物理区画を貸し出す kalloc と回収する kfree を組め！',
           accent: '#45d4a8',
         },
-        text: '固定番地の決め打ちはここまでだ！ OSが物理メモリを4つの区画（スロット 0〜3）に分け、RAM[96..99] に「0＝空き／1＝使用中」の【ビットマップ台帳】を持つんだ。空いている番号を探して貸し出す【kalloc】と、終わった区画を空きに戻す【kfree】を8命令で実装しよう！',
+        text: 'よく気づいた！ さっきの malloc/free は「1つのユーザーアプリの中」で小さな領域をやりくりする仕組みだったが、今度は「複数のプロセス同士」が衝突しないよう、OSカーネル自身が物理メモリ全体を4つの区画（スロット 0〜3）へ分けて管理する番だ！ RAM[96..99] に「0＝空き／1＝使用中」の【ビットマップ台帳】を持ち、空き区画を貸し出す【kalloc】と回収する【kfree】を8命令で実装しよう！',
       },
     ],
     outroDialogue: [
@@ -848,7 +1207,7 @@ export const CHAPTER5_STAGES = [
     },
     plainGoal: '次プロセスの PCB（base・epc・sp・r0）から MMU とユーザースタック上の vDSO 復帰枠を組み立て、気象P0と電力P1を無破壊交代させよう！',
     beginnerNote:
-      '19〜22番地で R3=next.base、R1=next.epc、R2=next.sp、R0=next.r0 が取り出されています！ カーネルは K=1（物理番地直通）なので、物理スタック頂点 PA = base + sp を SP[246] へセットして next.epc → next.r0 の順に PUSH し、仮想SP（next.sp − 2）を [114] へ保存すると、後半の vDSO（ユーザー空間の POP R0; RET）が R0 と PC と SP を完璧に元へ戻してくれます！',
+      '19〜22番地で R3=next.base、R1=next.epc、R2=next.sp、R0=next.r0 が取り出されています！ カーネルは K=1（物理番地直通）なので、物理スタック頂点 PA = base + sp を SP[246] へセットして next.epc → next.r0 の順に PUSH し、仮想SP（next.sp − 2）を [114] へ保存すると、後半の vDSO（ユーザー空間の POP R0; RET）が R0 と PC と SP を完璧に元へ戻してくれます！ なおこの段階は各プロセスが自分から SYS_YIELD で譲り合う「協調型」であり、もしプロセスAが一度も SYS_YIELD を呼ばなければプロセスBは永遠に動かず飢餓状態になります（次の Stage 60 でタイマー強制割込 TMR_IRQ へ進化します！）。',
     introDialogue: [
       {
         speaker: 'kai',
@@ -864,7 +1223,7 @@ export const CHAPTER5_STAGES = [
           rule: 'ハードウェアの EPC が読取専用でも、ユーザースタックへ EPC と R0 を積んで vDSO に着地させれば全レジスタ完全復元だ！',
           accent: '#ff7b54',
         },
-        text: '落ち着け！ 1個のCPUで2つの仕事を切り替える秘訣は、各プロセスの全状態 [state, base, epc, sp, r0..r3] を記録した8バイトの台帳【PCB】だ。さらにユーザー砂場の末尾（PC 16..17）に UNIX 伝統の【vDSO トランポリン（POP R0 → RET）】を仕込んである！ 23〜29番地で MMU切替とスタック積込を実装し、レジスタも私用スタックも1ビットも壊さずに交代させてみせよう！',
+        text: '落ち着け！ 1個のCPUで2つの仕事を切り替える秘訣は、各プロセスの全状態 [state, base, epc, sp, r0..r3] を記録した8バイトの台帳【PCB】だ。さらにユーザー砂場の末尾（PC 16..17）に UNIX 伝統の【vDSO トランポリン（POP R0 → RET）】を仕込んである！ まずは各プロセスが SYS_YIELD で自発的に席を譲る協調切替で、23〜29番地の MMU切替とスタック積込を実装し、1ビットも壊さずに交代させてみせよう！',
       },
     ],
     outroDialogue: [
@@ -878,10 +1237,10 @@ export const CHAPTER5_STAGES = [
           tag: 'モジュール図鑑へ登録：PCBコンテキストスイッチ',
           title: '🔄 PCB_CTX_SW 完成！ 2つの砂場が無破壊でバトンを繋いだ！',
           anim: 'ch5_pcb_ctx',
-          rule: 'だが嵐の現場では「譲ってくれないタスク」が来る──次はタイマー強制割込【RR_SCHED】だ！',
+          rule: '協調型ではプロセスAが SYS_YIELD を呼ばない限りプロセスBが永遠に飢餓する──次はタイマー強制割込【RR_SCHED】だ！',
           accent: '#ff7b54',
         },
-        text: '『……すごいけど、ちょっと待って！！ 今のはプロセスが自分から SYS_YIELD で席を譲ってくれたからだよね？ 本番の気象ループや電力制御ループは、処理に夢中で自分から譲らないよ！ 片方が止まらなくなったら、もう片方が凍えちゃう！！』',
+        text: '『……すごいけど、決定的な弱点があるよ！！ 今のはプロセスA（P0）が自分から SYS_YIELD で席を譲ってくれたからだよね？ もしプロセスAが一度も SYS_YIELD を呼ばずに動き続けたら、プロセスB（P1）には永遠に順番が回ってこず飢餓状態で凍えちゃう！ 本番の気象ループや電力制御ループは自分から譲らないよ！！』',
       },
     ],
     hints: [

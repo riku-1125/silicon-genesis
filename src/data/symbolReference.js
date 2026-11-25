@@ -201,6 +201,20 @@ export const SYMBOL_CATALOG = [
     category: 'signal',
   },
   {
+    key: 'ABI / スタック枠',
+    tokens: ['ABI', 'STACK_ABI', 'outer', 'inner', 'clobber_stack'],
+    en: 'Calling Convention & Stack Frame（呼出規約＆スタック枠）',
+    ja: 'ネスト呼出前に使うレジスタを PUSH で退避し復帰後に POP で復元する約束事。RET 後の旧スタック枠は次の関数呼出で上書きされるため安全バッファへ保存する',
+    category: 'kernel',
+  },
+  {
+    key: 'malloc / free / strdup',
+    tokens: ['malloc', 'free', 'strdup', 'MALLOC_STRDUP', 'CHUNK', 'チャンクヘッダ'],
+    en: 'User-Space Heap Allocator & String Duplicate（ユーザーヒープ割当・解放・動的複製）',
+    ja: 'malloc() は空きチャンクのヘッダを 1(USED) にして本体先頭 ptr を返し、strdup は終端 0 まで独立複製する。free(ptr) は 1バイト手前のヘッダ [ptr−1] を 0(FREE) へ戻して再利用可能にする',
+    category: 'kernel',
+  },
+  {
     key: 'kalloc / kfree',
     tokens: ['kalloc', 'kfree', 'BITMAP', 'SLOT'],
     en: 'Kernel Slot Allocator & Free（物理ビットマップ割当・解放）',

@@ -2,14 +2,14 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=41';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=42';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
   buildChapter3EndingSteps,
   buildChapter4EndingSteps,
   buildChapter5EndingSteps,
-} from './data/endings.js?v=41';
+} from './data/endings.js?v=42';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
@@ -35,18 +35,18 @@ import {
   isChapter3Unlocked,
   isChapter4Unlocked,
   isChapter5Unlocked,
-} from './state/storage.js?v=41';
-import { sound } from './audio/sound.js?v=41';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=41';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=41';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=41';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=41';
-import { Ark8IdePanel } from './ui/ark8Ide.js?v=41';
-import { Ark8OsIdePanel } from './ui/ark8OsIde.js?v=41';
-import { DialogueController } from './ui/dialogue.js?v=41';
-import { ModalManager } from './ui/modals.js?v=41';
-import { PrologueOverlay } from './ui/prologue.js?v=41';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=41';
+} from './state/storage.js?v=42';
+import { sound } from './audio/sound.js?v=42';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=42';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=42';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=42';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=42';
+import { Ark8IdePanel } from './ui/ark8Ide.js?v=42';
+import { Ark8OsIdePanel } from './ui/ark8OsIde.js?v=42';
+import { DialogueController } from './ui/dialogue.js?v=42';
+import { ModalManager } from './ui/modals.js?v=42';
+import { PrologueOverlay } from './ui/prologue.js?v=42';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=42';
 
 class SiliconGenesisApp {
   constructor() {
@@ -2132,7 +2132,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=41', { updateViaCache: 'none' })
+        .register('./sw.js?v=42', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

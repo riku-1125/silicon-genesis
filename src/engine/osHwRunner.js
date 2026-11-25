@@ -1214,6 +1214,7 @@ export function resetArk8OsHardware(hw, options = {}) {
 
   const board = {
     ram,
+    ramWriters: new Array(256).fill(null),
     disk,
     diskPtr: 0,
     kbQueue,
@@ -1227,6 +1228,27 @@ export function resetArk8OsHardware(hw, options = {}) {
   };
 
   return { board, state: probeArk8OsMachineState(hw, board) };
+}
+
+/**
+ * Looks up the latest RAM write record at or before `maxStepIdx` for `addr` (0..255).
+ */
+export function getRamWriterAtStep(ramWriteLog, addr, maxStepIdx = Infinity) {
+  if (!Array.isArray(ramWriteLog) || ramWriteLog.length === 0) return null;
+  const target = addr & 0xff;
+  for (let i = ramWriteLog.length - 1; i >= 0; i--) {
+    const entry = ramWriteLog[i];
+    if (entry.stepIdx <= maxStepIdx && entry.addr === target) return entry;
+  }
+  return null;
+}
+
+function computeChangedRegs(before, after) {
+  const changed = [];
+  for (let r = 0; r < 4; r++) {
+    if ((after?.regs?.[r] ?? 0) !== (before?.regs?.[r] ?? 0)) changed.push(r);
+  }
+  return changed;
 }
 
 /**
@@ -1260,6 +1282,9 @@ export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0, prevState = null
       dec: null,
       before,
       after,
+      changedRegs: computeChangedRegs(before, after),
+      changedSp: after.sp !== before.sp,
+      changedPc: after.pc !== before.pc,
       crtAppended: '',
       trapEvent: 'IRQ',
       blockedAttack: false,
@@ -1310,6 +1335,9 @@ export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0, prevState = null
       dec: null,
       before,
       after,
+      changedRegs: computeChangedRegs(before, after),
+      changedSp: after.sp !== before.sp,
+      changedPc: after.pc !== before.pc,
       crtAppended: '',
       trapEvent: 'MMU_FAULT',
       blockedAttack: true,
@@ -1395,8 +1423,21 @@ export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0, prevState = null
   let reloadedTimer = false;
   if (memWePre && !trapPre) {
     if (ramWe) {
-      board.ram[bAddr] = wdataPre & 0xff;
-      memWrite = { addr: bAddr, val: wdataPre & 0xff, region: 'RAM' };
+      const valByte = wdataPre & 0xff;
+      board.ram[bAddr] = valByte;
+      const writerInfo = {
+        stepIdx,
+        addr: bAddr,
+        pc: pcBefore,
+        op: part.op,
+        name: part.name,
+        val: valByte,
+        kMode: kBefore,
+        base,
+        region: 'RAM',
+      };
+      if (board.ramWriters) board.ramWriters[bAddr] = writerInfo;
+      memWrite = writerInfo;
     } else if (mmioEn && kPre && devWe) {
       memWrite = { addr: bAddr, val: wdataPre & 0xff, region: 'MMIO' };
       if (crtSel) {
@@ -1456,6 +1497,9 @@ export function stepArk8OsHardwareCycle(hw, board, stepIdx = 0, prevState = null
     dec,
     before,
     after,
+    changedRegs: computeChangedRegs(before, after),
+    changedSp: after.sp !== before.sp,
+    changedPc: after.pc !== before.pc,
     crtAppended,
     trapEvent,
     blockedAttack,
@@ -1736,6 +1780,7 @@ export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides 
   });
 
   const trace = [];
+  const ramWriteLog = [];
   let state = init;
   let haltedNormally = false;
   let unstable = false;
@@ -1824,8 +1869,20 @@ export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides 
         stats.faultCount++;
       }
       if (st.blockedAttack) stats.blockedAttacks++;
-      if (st.memWrite && st.memWrite.region === 'RAM' && st.memWrite.addr === 230 && st.memWrite.val === 1) {
-        stats.bitmap0SetHigh = true;
+      if (st.memWrite && st.memWrite.region === 'RAM') {
+        ramWriteLog.push({
+          stepIdx: c,
+          addr: st.memWrite.addr,
+          pc: st.pcBefore,
+          op: st.part?.op || 'STOR',
+          name: st.part?.name || '',
+          val: st.memWrite.val,
+          kMode: st.before.kMode,
+          base: st.before.base,
+        });
+        if (st.memWrite.addr === 230 && st.memWrite.val === 1) {
+          stats.bitmap0SetHigh = true;
+        }
       }
 
       const op = st.part?.op;
@@ -1851,6 +1908,8 @@ export function runArk8OsProgram(stage, slots = {}, customChips = {}, overrides 
     init,
     final: state,
     trace,
+    ramWriteLog,
+    ramWriters: board.ramWriters ? [...board.ramWriters] : new Array(256).fill(null),
     stats,
     haltedNormally,
     unstable,
@@ -1900,7 +1959,7 @@ function hasSubsequence(text, sub) {
  * OS-hardware/kernel stages including dynamic anti-cheat generalization checks
  * strictly on live compiled MOSFET silicon!
  */
-export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
+export function evaluateArk8OsStage(stage, slots = {}, customChips = {}, options = {}) {
   const spec = stage?.asmProgramSpec;
   if (!spec) {
     return { passed: false, message: 'ARK8-OS プログラム仕様が見つかりません。', trace: [] };
@@ -1914,7 +1973,7 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
 
   let run;
   try {
-    run = runArk8OsProgram(stage, slots, customChips);
+    run = runArk8OsProgram(stage, slots, customChips, options?.hw ? { hw: options.hw } : {});
   } catch (err) {
     return { passed: false, message: `実機ハードウェアエラー: ${err?.message || err}`, trace: [] };
   }
@@ -2118,6 +2177,175 @@ export function evaluateArk8OsStage(stage, slots = {}, customChips = {}) {
     return {
       passed: true,
       message: `ブート成功！！実機 ARK8_OS_HW が磁気ディスク[0xF2]から「${targetText}」（14B）と別バイナリ「${altText}」（18B）を統一RAM 0x40 へ動的展開し、CALL 32 で完全起動しました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 55b: STACK_ABI (ACT XII) — Nested CALL, Calling Convention (PUSH/POP), and Stack Frame Clobber Survival
+  if (stage.id === 'stage_55b') {
+    const targetText = spec.targetCrt || 'BA';
+    const altText = spec.altCrt || 'YX';
+    const initRam = spec.initialRam || { 80: 65, 81: 96, 82: 66, 83: 33 };
+    const altRam = spec.altInitialRam || { 80: 88, 81: 104, 82: 89, 83: 63 };
+    const outBuf = initRam[81] ?? 96;
+    const altOutBuf = altRam[81] ?? 104;
+
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」＋HALT停止）。19〜25番地の outer で PUSH R1 → CALL 11 → POP R1 により R1 を守り、安全バッファ [R2]・[R2+1] へ保存して RET で戻ろう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (!run.stats.usedCall || !run.stats.usedRet || !run.stats.usedPush || !run.stats.usedPop || !run.stats.usedStr) {
+      return {
+        passed: false,
+        message: '呼出規約の必須命令（CALL・RET・PUSH・POP・STR）が不足しています。PUSH R1 で退避し、ネスト CALL 後に POP R1 で復元して STR で安全バッファへ保存しよう！',
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.stats.minSp > 237) {
+      return {
+        passed: false,
+        message: `実ハードウェアスタック（SP最小=${run.stats.minSp}）のネスト深度が不足しています（目標: SP≦237）。PUSH R1 で退避した状態で inner(11番地) をネスト呼出ししよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.sp !== 240) {
+      return {
+        passed: false,
+        message: `終了時のスタックポインタが SP=${run.final.sp} で不均衡です（目標: SP=240）。PUSH と POP の対応および RET による正規復帰を確認しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (
+      run.final.ram[outBuf] !== initRam[82] ||
+      run.final.ram[outBuf + 1] !== initRam[80] ||
+      run.final.ram[238] !== initRam[83]
+    ) {
+      return {
+        passed: false,
+        message: `安全バッファ [0x${outBuf.toString(16).toUpperCase()}] またはスタック再利用跡 [0xEE] の状態が期待と異なります。outer の結果を [R2] と [R2+1] へ書き込んでから RET しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      initialRam: altRam,
+    });
+    if (
+      run2.unstable ||
+      !run2.haltedNormally ||
+      run2.final.crtText !== altText ||
+      run2.stats.minSp > 237 ||
+      run2.final.sp !== 240 ||
+      run2.final.ram[altOutBuf] !== altRam[82] ||
+      run2.final.ram[altOutBuf + 1] !== altRam[80] ||
+      run2.final.ram[238] !== altRam[83]
+    ) {
+      return {
+        passed: false,
+        message: `別文字・別バッファ検証（「${altText}」＠0x${altOutBuf.toString(16).toUpperCase()}）に失敗しました（CRT:「${run2.final.crtText || '(空)'}」）。固定番地ではなくポインタ R2 とスタック退避 PUSH/POP で汎用実装しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+
+    return {
+      passed: true,
+      message: `呼出規約 ABI 達成！！ネスト CALL（SP最小 ${run.stats.minSp} → 終了 ${run.final.sp}）と PUSH/POP 退避により、後続のスタック上書き（0xEE←「!」「?」）を乗り越えて「${targetText}」と「${altText}」を守り抜きました！`,
+      run,
+      trace: run.trace,
+    };
+  }
+
+  // Stage 55c: MALLOC_STRDUP (ACT XII) — User-Space Heap (malloc / free) & strdup Clone + Reuse + OOM
+  if (stage.id === 'stage_55c') {
+    const targetText = spec.targetCrt || 'OK:MK:!R';
+    const altText = spec.altCrt || 'HI:WI:!R';
+    const initRam = spec.initialRam || {
+      80: 79, 81: 75, 82: 0, 88: 77,
+      112: 0, 113: 63, 114: 63, 115: 63, 116: 63,
+      128: 0, 129: 63, 130: 63, 131: 63, 132: 63,
+    };
+    const altRam = spec.altInitialRam || {
+      80: 72, 81: 73, 82: 0, 88: 87,
+      112: 1, 113: 63, 114: 63, 115: 63, 116: 63,
+      128: 0, 129: 63, 130: 63, 131: 63, 132: 63,
+    };
+
+    if (run.final.crtText !== targetText || !run.haltedNormally) {
+      return {
+        passed: false,
+        message: `CRT出力が「${run.final.crtText || '(空)'}」です（目標:「${targetText}」＋HALT停止）。free(11・13番地)で ptr−1 のヘッダを 0 に戻し、strdup(18〜23番地)で NULL(0) まで1バイトずつヒープへ複製しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    if (!run.stats.usedLdr || !run.stats.usedStr || !run.stats.usedCall || !run.stats.usedRet) {
+      return {
+        passed: false,
+        message: '必須命令（LDR・STR・CALL・RET）が不足しています。ポインタ間接読込 LDR と間接書込 STR で strdup と free を実装しよう！',
+        run,
+        trace: run.trace,
+      };
+    }
+    if (run.final.sp !== 240) {
+      return {
+        passed: false,
+        message: `終了時のスタックポインタが SP=${run.final.sp} です（目標: SP=240）。strdup の末尾を RET で正規復帰させよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+    const staticOk1 = run.final.ram[80] === initRam[80] && run.final.ram[81] === initRam[81] && run.final.ram[82] === 0;
+    const heapOk1 = run.final.ram[113] === initRam[88] && run.final.ram[114] === initRam[81] && run.final.ram[115] === 0;
+    const freedChunk0 = (run.ramWriteLog || []).some((e) => e.addr === 112 && e.val === 0);
+    if (!staticOk1 || !heapOk1 || !freedChunk0 || run.final.ram[112] !== 1 || run.final.ram[128] !== 1) {
+      return {
+        passed: false,
+        message: '静的文字列の無傷保持・ヒープ複製の独立改変・チャンク解放再利用のいずれかが未達です。strdup で終端 0 までコピーし、free でヘッダ [ptr−1] を 0 へ戻そう！',
+        run,
+        trace: run.trace,
+      };
+    }
+
+    const run2 = runArk8OsProgram(stage, slots, customChips, {
+      hw: sharedHw,
+      fast: true,
+      initialRam: altRam,
+    });
+    const staticOk2 = run2.final.ram[80] === altRam[80] && run2.final.ram[81] === altRam[81] && run2.final.ram[82] === 0;
+    const heapOk2 = run2.final.ram[129] === altRam[88] && run2.final.ram[130] === altRam[81] && run2.final.ram[131] === 0;
+    if (
+      run2.unstable ||
+      !run2.haltedNormally ||
+      run2.final.crtText !== altText ||
+      run2.final.sp !== 240 ||
+      !staticOk2 ||
+      !heapOk2 ||
+      run2.final.ram[112] !== 1 ||
+      run2.final.ram[128] !== 1
+    ) {
+      return {
+        passed: false,
+        message: `別文字列・Chunk1割当検証（「${altText}」）に失敗しました（CRT:「${run2.final.crtText || '(空)'}」）。固定番地 [0x70] ではなく R0−1（ADDI R0, 255）と STR R1, [R0] で任意チャンクを解放しよう！`,
+        run,
+        trace: run.trace,
+      };
+    }
+
+    return {
+      passed: true,
+      message: `ユーザーヒープ完成！！strdup 動的複製・独立書換・満杯OOM拒否(!)・free解放再利用(R)を実機RAM [0x70..0x8F] 上で完遂し、「${targetText}」と Chunk1 検証「${altText}」の両方を制覇しました！`,
       run,
       trace: run.trace,
     };
