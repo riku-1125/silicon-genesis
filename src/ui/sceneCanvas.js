@@ -220,11 +220,17 @@ export class SceneCanvas {
 
   _getCollapsedStatusText() {
     if (this.unstable) return '⚠ 発振エラー';
+    if (this.stage?.kind === 'ark8_program') {
+      const ram2 = this._bitsToNum(this.outputs, 0, 8);
+      const pc = this.inputs[0] || 0;
+      return `ARK8 PC:${pc} RAM[2]:${ram2}`;
+    }
     if (this.stage?.kind === 'assembly_program') {
       const acc = this._bitsToNum(this.outputs, 0, 4);
       const pc = this.inputs[0] || 0;
       return `PC:${pc} ACC:${acc} [${acc.toString(2).padStart(4, '0')}]`;
     }
+
     if (this.stage?.id === 'stage_asm_enc') {
       const i1 = this.outputs[0] ? 1 : 0;
       const i0 = this.outputs[1] ? 1 : 0;
@@ -249,6 +255,8 @@ export class SceneCanvas {
 
   _getAmbientFacilityLog() {
     const n = this.stage?.number ?? 0;
+    if (n >= 36) return '✔ 地上ログ: ARK-7(118)+ARK-3(124)=242人 拠点ホライズン稼働中';
+    if (n >= 27) return '✔ 地上ログ: 42年ぶりの青空・太陽光＆風力マイクログリッド設営中';
     if (n >= 18) return '✔ 施設ログ: 夜間の揺れ1件・点検済み / 配給・水耕正常';
     if (n >= 12) return '✔ 施設ログ: 夜間の揺れ1件・記憶保持→朝点検済み';
     if (n === 11) return '✔ 施設ログ: B2水耕散水(0〜3区)・配給集計 正常';
@@ -312,6 +320,19 @@ export class SceneCanvas {
 
     const out0 = this.outputs[0] ? 1 : 0;
     const in0 = this.inputs[0] ? 1 : 0;
+
+    if (this.stage?.kind === 'ark8_program') {
+      const ram2 = this._bitsToNum(this.outputs, 0, 8);
+      const pc = this.inputs[0] || 0;
+      ctx.font = `bold ${compact ? 9.5 : 10}px monospace`;
+      ctx.fillStyle = '#52e3b6';
+      ctx.fillText('ARK8_SYS SRAM[2]', bx + 9, hdrY, boxW - 16);
+      ctx.font = `bold ${compact ? 12 : 13.5}px monospace`;
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(`${ram2} [0x${ram2.toString(16).toUpperCase().padStart(2, '0')}] PC:${pc}`, bx + 9, bodyY, boxW - 16);
+      ctx.restore();
+      return;
+    }
 
     if (this.stage?.id === 'stage_asm_enc') {
       const i1 = this.outputs[0] ? 1 : 0;

@@ -27,6 +27,14 @@ export const CHARACTERS = {
     color: '#f2994a',
     bgTint: 'rgba(242, 153, 74, 0.16)',
   },
+  kai: {
+    id: 'kai',
+    name: 'カイ（アーク3）',
+    role: 'アーク3 地上開拓隊チーフ・電力設備技師',
+    portrait: './assets/portrait_kai.jpg',
+    color: '#56ccf2',
+    bgTint: 'rgba(86, 204, 242, 0.16)',
+  },
 };
 
 export const SCENES = {
@@ -44,5 +52,10 @@ export const SCENES = {
     id: 'surface_rover',
     image: './assets/scene_surface_rover.jpg',
     label: '地上探査ローバー通信波',
+  },
+  horizon_camp: {
+    id: 'horizon_camp',
+    image: './assets/scene_horizon_camp.jpg',
+    label: '開拓拠点ホライズン（地上）',
   },
 };

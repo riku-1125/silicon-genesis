@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=37';
+import { sound } from '../audio/sound.js?v=38';
 
 const W = 340;
 const H = 126;
@@ -82,6 +82,241 @@ const GOAL_SPECS = {
       { ins: [['A = 5 (0101)', 1], ['B = 3 (0011)', 1], ['CIN = 0', 0]], outs: [['S = 8 (1000)', 1], ['COUT = 0', 0]], msg: '① 5 + 3 = 8 ▶ 下の位からくり上がりをバトンリレーして4桁計算！' },
       { ins: [['A = 9 (1001)', 1], ['B = 7 (0111)', 1], ['CIN = 0', 0]], outs: [['S = 0 (0000)', 0], ['COUT = 1 (+16)', 1]], msg: '② 9 + 7 = 16 ▶ 4桁を超えたぶんは COUT=1（16の位）へ！' },
       { ins: [['A = 6 (0110)', 1], ['B = 5 (0101)', 1], ['CIN = 1', 1]], outs: [['S = 12 (1100)', 1], ['COUT = 0', 0]], msg: '③ 6 + 5 + CIN(1) = 12 ▶ 下位からのくり上がりも一緒に加算！' },
+    ],
+  },
+  // Chapter 3 Live Diagrams (GOAL + Module Encyclopedia)
+  goal_mux4_4b: {
+    boxTitle: 'MUX4_4B',
+    boxSub: '4系統×4bit選択',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['D0..3=[3,9,12,6]', 1], ['S = 00 (0番)', 0]], outs: [['Y = 3 (D0)', 1]], msg: '① S=00 ▶ 1回戦・決勝とも上側を選び D0=3 を出力！' },
+      { ins: [['D0..3=[3,9,12,6]', 1], ['S = 10 (2番)', 1]], outs: [['Y = 12 (D2)', 1]], msg: '② S=10 ▶ 下グループの先頭 D2=12 をリボン束線で出力！' },
+      { ins: [['D0..3=[3,9,12,6]', 1], ['S = 11 (3番)', 1]], outs: [['Y = 6 (D3)', 1]], msg: '③ S=11 ▶ MUX_4B×3 のトーナメントで D3=6 を出力！' },
+    ],
+  },
+  mux4_4b: {
+    boxTitle: 'MUX4_4B',
+    boxSub: 'MUX_4B × 3',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['D0..D3 (4bit束)', 1], ['S0,S1 = 01', 1]], outs: [['Y = D1', 1]], msg: '① S0で組内選択 → S1で上下選択！ 4系統を1本へ！' },
+      { ins: [['D0..D3 (4bit束)', 1], ['S0,S1 = 11', 1]], outs: [['Y = D3', 1]], msg: '② RAM_4W の4つの記憶棚から指定番地を読み出す出口に活躍！' },
+    ],
+  },
+  goal_ram_4w: {
+    boxTitle: 'RAM_4W',
+    boxSub: '4語×4bit SRAM',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['番地 A = 0', 0], ['D=5, WE=1', 1]], outs: [['棚0 ← 5保存!', 1]], msg: '① A=0, WE=1, CLK↑ ▶ DEC2_4で選ばれた0番棚だけ「5」を保存！' },
+      { ins: [['番地 A = 2', 1], ['D=12, WE=1', 1]], outs: [['棚2 ← 12保存!', 1]], msg: '② A=2, WE=1, CLK↑ ▶ 2番棚に「12」を保存（0番棚の5は無事！）' },
+      { ins: [['番地 A = 0', 0], ['WE=0 (読出)', 0]], outs: [['Q = 5 (保持!)', 1]], msg: '③ A=0, WE=0 ▶ MUX4_4B で0番棚の「5」をいつでも読出可能！' },
+    ],
+  },
+  ram_4w: {
+    boxTitle: 'RAM_4W',
+    boxSub: 'DEC+AND+REG+MUX4',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['A=1, D=10', 1], ['WE=1, CLK↑', 1]], outs: [['棚1 ← 10', 1]], msg: '① DEC2_4×AND で選んだ棚だけ書込許可！ 電源ONのまま書き換え可能！' },
+      { ins: [['A=1, WE=0', 0], ['読出モード', 1]], outs: [['Q = 10', 1]], msg: '② 固定配線の ROM_4W と対をなす、本物のスタティックRAM（SRAM）！' },
+    ],
+  },
+  goal_add_8b: {
+    boxTitle: 'ADD_8B',
+    boxSub: 'ADD_4B × 2連結',
+    accent: '#5ce0a8',
+    steps: [
+      { ins: [['A = 118 (ARK7)', 1], ['B = 124 (ARK3)', 1]], outs: [['S = 242人!', 1], ['COUT = 0', 0]], msg: '① 118 + 124 = 242 ▶ 下位COUT→上位CIN連結で1バイト加算！' },
+      { ins: [['A = 200', 1], ['B = 56', 1]], outs: [['S = 0', 0], ['COUT = 1 (256)', 1]], msg: '② 200 + 56 = 256 ▶ 8bit上限を超えたら COUT=1 が立つ！' },
+    ],
+  },
+  add_8b: {
+    boxTitle: 'ADD_8B',
+    boxSub: '0〜255 (1Byte)',
+    accent: '#5ce0a8',
+    steps: [
+      { ins: [['A[7:0]=118', 1], ['B[7:0]=124', 1]], outs: [['S[7:0]=242', 1]], msg: '① SPLIT8→ADD_4B×2→JOIN8 で15の壁を破り1バイトの世界へ！' },
+      { ins: [['A[7:0]=42', 1], ['B=0, CIN=1', 1]], outs: [['S[7:0]=43', 1]], msg: '② B=0, CIN=1 にすれば PC+1 インクリメンタにもそのまま活躍！' },
+    ],
+  },
+  goal_reg_8b: {
+    boxTitle: 'REG_8B',
+    boxSub: 'RST付 1Byte記憶',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['D=242, LOAD=1', 1], ['RST=0, CLK↑', 0]], outs: [['Q = 242 保存', 1]], msg: '① RST=0, LOAD=1 ▶ 1バイト（242）を2つのREG_4Bへ保存！' },
+      { ins: [['D=99, LOAD=0', 0], ['RST=0, CLK↑', 0]], outs: [['Q = 242 保持', 1]], msg: '② LOAD=0 ▶ 外部ノイズが来ても 242 をしっかり保持！' },
+      { ins: [['D=99, LOAD=0', 0], ['RST=1, CLK↑', 1]], outs: [['Q = 0 (初期化!)', 0]], msg: '③ RST=1 ▶ MUXがアース0へ切替＋OR強制LOADで一瞬に 0 初期化！' },
+    ],
+  },
+  reg_8b: {
+    boxTitle: 'REG_8B',
+    boxSub: 'MUX+OR+REG_4B×2',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['LOAD=1, RST=0', 1], ['D = 180', 1]], outs: [['Q = 180', 1]], msg: '① 通常動作：1バイト（0〜255）をクロック同期で記憶・保持！' },
+      { ins: [['LOAD=0, RST=1', 1], ['電源ONリセット', 1]], outs: [['Q = 0', 0]], msg: '② ハードウェアRST：OS起動時に全レジスタとPCを0へ揃える原点！' },
+    ],
+  },
+  goal_xor_4b: {
+    boxTitle: 'XOR_4B',
+    boxSub: '4bit条件反転',
+    accent: '#ffb347',
+    steps: [
+      { ins: [['A = 0101 (5)', 1], ['INV = 0 (素通)', 0]], outs: [['Y = 0101 (5)', 1]], msg: '① INV=0 ▶ 4ビット束線をそのまま素通し！' },
+      { ins: [['A = 0101 (5)', 1], ['INV = 1 (反転)', 1]], outs: [['Y = 1010 (10)', 1]], msg: '② INV=1 ▶ 4個のXORが一斉に0↔1反転（2の補数引き算の心臓！）' },
+    ],
+  },
+  xor_4b: {
+    boxTitle: 'XOR_4B',
+    boxSub: 'XOR × 4',
+    accent: '#ffb347',
+    steps: [
+      { ins: [['A[3:0]=12', 1], ['INV=1', 1]], outs: [['Y[3:0]=3 (~A)', 1]], msg: '① 2個並べて ADD_8B(CIN=SUB) へ繋げば完璧な8ビット減算器に！' },
+    ],
+  },
+  goal_alu_8b: {
+    boxTitle: 'ALU_8B',
+    boxSub: '加減算 + Z/C/N',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['A=180, B=115', 1], ['SUB=1 (引算)', 1]], outs: [['Y=65', 1], ['Z=0 C=1 N=0', 1]], msg: '① 180−115=65 ▶ 余剰プラスなので C=1(A>=B), N=0(非負)！' },
+      { ins: [['A=50, B=50', 1], ['SUB=1 (引算)', 1]], outs: [['Y=0', 0], ['Z=1 C=1 N=0', 1]], msg: '② 50−50=0 ▶ ゼロ検知 Z=1 が点灯！（A==B を一発判定！）' },
+      { ins: [['A=30, B=80', 1], ['SUB=1 (引算)', 1]], outs: [['Y=206(-50)', 1], ['Z=0 C=0 N=1', 1]], msg: '③ 30−80=-50 ▶ bit7の符号フラグ N=1 が点灯し電力不足を検知！' },
+    ],
+  },
+  alu_8b: {
+    boxTitle: 'ALU_8B',
+    boxSub: 'Z / C / N フラグ',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['A=180, B=115', 1], ['SUB=1', 1]], outs: [['Y=65', 1], ['Z0 C1 N0', 1]], msg: '① 8bit加減算と Z(ゼロ)・C(桁溢れ)・N(負符号) を同時出力！' },
+      { ins: [['A=118, B=124', 1], ['SUB=0', 0]], outs: [['Y=242', 1], ['Z0 C0 N1', 1]], msg: '② すべての判断・大小比較を生む本格8bit演算コア！' },
+    ],
+  },
+  mux4_8b: {
+    boxTitle: 'MUX4_8B',
+    boxSub: 'MUX4_4B × 2',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['D0..3 (8bit束)', 1], ['S0,S1=11', 1]], outs: [['Y = D3 (242)', 1]], msg: '① 1バイト×4系統を自在切替！ S1=0なら2入力8bitMUXにもなる万能部品！' },
+    ],
+  },
+  goal_regfile_4: {
+    boxTitle: 'REGFILE_4',
+    boxSub: 'R0〜R3 2ポート',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['WA=0, WD=22', 1], ['WE=1, CLK↑', 1]], outs: [['R0 ← 22保存', 1]], msg: '① R0 に被乗数 22、R1 に回数 11 を保存！' },
+      { ins: [['RA=0, RB=1', 1], ['WE=0 (同時読)', 0]], outs: [['QA=22 (R0)', 1], ['QB=11 (R1)', 1]], msg: '② 2つの MUX4_8B で R0 と R1 を同時に読み出して ALU へ！' },
+    ],
+  },
+  regfile_4: {
+    boxTitle: 'REGFILE_4',
+    boxSub: 'REG_8B×4 + MUX×2',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['RA=2, RB=0', 1], ['ADD R2, R0', 1]], outs: [['QA=R2', 1], ['QB=R0', 1]], msg: '① 4本の8bit作業机から両手で2値を同時読出！ 将来のUNIX ABI直結！' },
+    ],
+  },
+  ram4_8b: {
+    boxTitle: 'RAM4_8B',
+    boxSub: 'RAM_4W × 2並列',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['A=0, D=180', 1], ['WE=1, CLK↑', 1]], outs: [['Q = 180', 1]], msg: '① RAM_4W×2 を並列接続してビット幅を4bit→8bit（1バイト）へ拡張！' },
+    ],
+  },
+  goal_sram_16b: {
+    boxTitle: 'SRAM_16B',
+    boxSub: 'RAM4_8B×4 階層',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['A=0 (バンク0)', 0], ['D=22, WE=1', 1]], outs: [['RAM[0]←22', 1]], msg: '① 上位2bit=00でバンク0を選択 → RAM[0] へ 22 を書込！' },
+      { ins: [['A=15 (バンク3)', 1], ['D=242, WE=1', 1]], outs: [['RAM[15]←242', 1]], msg: '② 上位2bit=11でバンク3を選択 → RAM[15] へ 242 を書込！' },
+      { ins: [['A=0, WE=0', 0], ['バンク0読出', 1]], outs: [['Q = 22保持!', 1]], msg: '③ 4バンク階層タイリングで16バイト（0〜15番地）自在アクセス！' },
+    ],
+  },
+  sram_16b: {
+    boxTitle: 'SRAM_16B',
+    boxSub: '16Byte 主記憶',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['A[3:0]=2', 1], ['D=242, WE=1', 1]], outs: [['Q = 242', 1]], msg: '① 4,578 NAND（9,156 MOSFET）の階層タイリング主記憶SRAM！' },
+    ],
+  },
+  pc_8b: {
+    boxTitle: 'PC_8B',
+    boxSub: 'RST/HALT/JNZ付',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['V=11, BR=1', 1], ['J=4', 1]], outs: [['PC → 4番!', 1]], msg: '① V≠0 かつ BR=1 で J=4番地へJNZジャンプ！' },
+      { ins: [['HALT=1', 1], ['RST=0', 0]], outs: [['PC 停止保持', 1]], msg: '② HALT=1 で安全停止、RST=1 で一瞬に 0番地へ復帰！' },
+    ],
+  },
+  goal_asm_enc8: {
+    boxTitle: 'ASM_ENC8',
+    boxSub: 'ASM_ENC×2 + OR×3',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['前半: SUB 押下', 1], ['OP2 = 0', 0]], outs: [['OP = 010', 1], ['KEY = 1', 1]], msg: '① 前半4命令（LDI〜JNZ）は OP2=0、下位2bitを前半ASM_ENCが出力！' },
+      { ins: [['後半: STOR 押下', 1], ['後半KEY=1!', 1]], outs: [['OP = 101', 1], ['KEY = 1', 1]], msg: '② 後半4命令（LOAD〜HALT）は後半ASM_ENCのKEYがそのままOP2=1になる！' },
+    ],
+  },
+  asm_enc8: {
+    boxTitle: 'ASM_ENC8',
+    boxSub: '8→3 階層符号器',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['8命令キー', 1], ['LOAD=1', 1]], outs: [['OP=100, K=1', 1]], msg: '① たった5チップ（33 NAND）で8命令キーを3ビット機械語へ符号化！' },
+    ],
+  },
+  goal_inst_dec8: {
+    boxTitle: 'INST_DEC8',
+    boxSub: '3→8 命令翻訳',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['OP = 100', 1], ['LOAD 命令', 1]], outs: [['WD1=1 (SRAM)', 1], ['REG_WE=1', 1]], msg: '① 100 LOAD ▶ 書戻しをSRAM側へ切替＆REG_WE=1 で読込！' },
+      { ins: [['OP = 101', 1], ['STOR 命令', 1]], outs: [['MEM_WE=1', 1], ['REG_WE=0', 0]], msg: '② 101 STOR ▶ レジスタ保護(REG_WE=0)のまま MEM_WE=1 でSRAM書込！' },
+      { ins: [['OP = 111', 1], ['HALT 命令', 1]], outs: [['HALT=1', 1], ['WE=0 (停止)', 0]], msg: '③ 111 HALT ▶ 全書込を閉じて HALT=1 でCPUを安全停止！' },
+    ],
+  },
+  inst_dec8: {
+    boxTitle: 'INST_DEC8',
+    boxSub: '8制御線自動切替',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['OP0..2=101', 1], ['STOR', 1]], outs: [['MEM_WE=1', 1]], msg: '① 8種の機械語から ALU・レジスタ・SRAM・PC の8制御線を自動生成！' },
+    ],
+  },
+  goal_ark8_sys: {
+    boxTitle: 'ARK8_SYS',
+    boxSub: '8bit Load/Store',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['LOAD R0,[0]', 1], ['SRAM[0]=180', 1]], outs: [['R0 ← 180', 1], ['PC=1', 1]], msg: '① SRAM から R0 へ 180 を読込！ 書戻しMUXが MEM 側を選択！' },
+      { ins: [['SUB R0, R1', 1], ['R1=115', 1]], outs: [['R0 ← 65', 1], ['PC=2', 1]], msg: '② REGFILE から R0・R1 を同時読出 → ALU_8B で 65 を算出！' },
+      { ins: [['STOR R0,[2]', 1], ['MEM_WE=1', 1]], outs: [['RAM[2]←65!', 1], ['PC=3', 1]], msg: '③ 計算結果 65 を SRAM[2] へ書戻し！ 14,806 MOSFET が一斉稼働！' },
+    ],
+  },
+  ark8_sys: {
+    boxTitle: 'ARK8_SYS',
+    boxSub: '14,806 MOSFET',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['16bit命令', 1], ['R0..3 + SRAM', 1]], outs: [['QA / MEM / PC', 1]], msg: '① 9チップ統合・7,403 NAND（14,806 MOSFET）の本物の8bit計算機！' },
+    ],
+  },
+  goal_ark8_mul: {
+    boxTitle: 'HORIZON_OS',
+    boxSub: '汎用ループ乗算',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['RAM[0]=22', 1], ['RAM[1]=11', 1]], outs: [['R0=22, R1=11', 1], ['R2=0, R3=1', 1]], msg: '① LOAD で被乗数と回数を R0, R1 へ読込、R2=0・R3=1 で準備！' },
+      { ins: [['ADD R2, R0', 1], ['SUB R1, R3', 1]], outs: [['R2=+22累積', 1], ['JNZ R1, 4!', 1]], msg: '② R1 が 0 になるまで 11回ループして 22 を足し込み続ける！' },
+      { ins: [['STOR R2,[2]', 1], ['HALT', 1]], outs: [['RAM[2]=242!', 1], ['完了停止!', 1]], msg: '③ R2=242 を SRAM[2] へ書き込み HALT！ 15×6=90 も同じコードで解ける！' },
     ],
   },
   goal_sr_latch: {

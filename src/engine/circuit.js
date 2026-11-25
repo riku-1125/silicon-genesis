@@ -90,16 +90,180 @@ export const PRIMITIVE_CHIPS = {
     pullCount: 1,
     depth: 0,
   },
+  SPLIT4: {
+    id: 'SPLIT4',
+    name: '4→1分岐',
+    shortName: 'SPL4',
+    titleJa: '4ビット分岐コネクタ（4→1×4）',
+    shortRuleJa: '4本のリボン束線 D[3:0] を 1本ずつ（0〜3）へほどく物理コネクタ（0 NAND）',
+    descJa: '4本の平行銅線（リボンケーブル）を1本ずつの電線（bit0〜bit3）へ分ける受動コネクタ。論理ゲートもトランジスタも一切含みません。',
+    inputs: ['D[3:0]'],
+    outputs: ['0', '1', '2', '3'],
+    color: '#2e586e',
+    accent: '#7cd4f5',
+    isPrimitive: true,
+    isBusAdapter: true,
+    nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
+    depth: 0,
+  },
+  JOIN4: {
+    id: 'JOIN4',
+    name: '1→4結束',
+    shortName: 'JON4',
+    titleJa: '4ビット結束コネクタ（1×4→4）',
+    shortRuleJa: '1本ずつの電線（0〜3）を 4本束線 D[3:0] へ束ねる物理コネクタ（0 NAND）',
+    descJa: '4本の独立した電線（bit0〜bit3）を1本のリボンケーブルへ圧着する受動コネクタ。論理ゲートは0個です。',
+    inputs: ['0', '1', '2', '3'],
+    outputs: ['D[3:0]'],
+    color: '#2e586e',
+    accent: '#7cd4f5',
+    isPrimitive: true,
+    isBusAdapter: true,
+    nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
+    depth: 0,
+  },
+  SPLIT8: {
+    id: 'SPLIT8',
+    name: '8→4+4分岐',
+    shortName: 'SPL8',
+    titleJa: '8ビット分岐コネクタ（8→下位4＋上位4）',
+    shortRuleJa: '8本束線 D[7:0] を下位4bit L[3:0] と上位4bit H[3:0] へ分ける物理コネクタ（0 NAND）',
+    descJa: '8ビット（1バイト）のリボンケーブルを、下位4ビット（0〜3）と上位4ビット（4〜7）の2本へ分ける受動コネクタ。ゲート数ゼロの純配線部品です。',
+    inputs: ['D[7:0]'],
+    outputs: ['L[3:0]', 'H[3:0]'],
+    color: '#2d635d',
+    accent: '#5ce0a8',
+    isPrimitive: true,
+    isBusAdapter: true,
+    nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
+    depth: 0,
+  },
+  JOIN8: {
+    id: 'JOIN8',
+    name: '4+4→8結束',
+    shortName: 'JON8',
+    titleJa: '8ビット結束コネクタ（下位4＋上位4→8）',
+    shortRuleJa: '下位4bit L[3:0] と上位4bit H[3:0] を8本束線 D[7:0] へ束ねる物理コネクタ（0 NAND）',
+    descJa: '下位4ビットと上位4ビットのリボンケーブルを1本の8ビット（1バイト）バスへ圧着する受動コネクタ。ゲート数ゼロの純配線部品です。',
+    inputs: ['L[3:0]', 'H[3:0]'],
+    outputs: ['D[7:0]'],
+    color: '#2d635d',
+    accent: '#5ce0a8',
+    isPrimitive: true,
+    isBusAdapter: true,
+    nandCount: 0,
+    swCount: 0,
+    pullCount: 0,
+    depth: 0,
+  },
 };
+
+/**
+ * Physical 4-bit ribbon-connector port view for Chapter 1–2 4-bit chips when
+ * placed inside a Chapter 3+ `busMode` circuit (exact 1:1 bit order match!).
+ */
+export const CHIP_BUS_PORTS = {
+  ADD_4BIT: { inputs: ['A[3:0]', 'B[3:0]', 'CIN'], outputs: ['S[3:0]', 'COUT'] },
+  MUX_4BIT: { inputs: ['A[3:0]', 'B[3:0]', 'SEL'], outputs: ['Y[3:0]'] },
+  REG_4BIT: { inputs: ['D[3:0]', 'LOAD', 'CLK'], outputs: ['Q[3:0]'] },
+  ZERO_4BIT: { inputs: ['A[3:0]'], outputs: ['Z'] },
+  ALU_4BIT: { inputs: ['A[3:0]', 'B[3:0]', 'SUB'], outputs: ['Y[3:0]', 'COUT'] },
+  PC_4BIT: { inputs: ['J[3:0]', 'JMP', 'CLK'], outputs: ['Q[3:0]'] },
+};
+
+/**
+ * Parses physical bus width from a pin label:
+ *   "A[3:0]" -> { label: "A[3:0]", base: "A", hi: 3, lo: 0, width: 4 }
+ *   "D[7:0]" -> { label: "D[7:0]", base: "D", hi: 7, lo: 0, width: 8 }
+ *   "CLK"    -> { label: "CLK",    base: "CLK", hi: 0, lo: 0, width: 1 }
+ */
+export function parsePinSpec(label) {
+  const s = String(label ?? '');
+  const m = s.match(/^(.+?)\[(\d+):(\d+)\]$/);
+  if (m) {
+    const hi = Number(m[2]);
+    const lo = Number(m[3]);
+    const width = Math.abs(hi - lo) + 1;
+    return { label: s, base: m[1], hi, lo, width };
+  }
+  return { label: s, base: s, hi: 0, lo: 0, width: 1 };
+}
+
+export function getPinWidth(label) {
+  return parsePinSpec(label).width;
+}
+
+export function getTotalPinBits(pinLabels = []) {
+  let total = 0;
+  for (const label of pinLabels) total += getPinWidth(label);
+  return total;
+}
+
+/**
+ * Packs logical per-pin values (e.g. [118, 124, 0] for ['A[7:0]', 'B[7:0]', 'CIN'])
+ * into a flat LSB-first bit array (0/1, or null for don't-care).
+ */
+export function packBusVector(pinLabels = [], values = []) {
+  const flat = [];
+  for (let i = 0; i < pinLabels.length; i++) {
+    const w = getPinWidth(pinLabels[i]);
+    const val = values[i];
+    if (val === null || val === undefined) {
+      for (let b = 0; b < w; b++) flat.push(null);
+    } else {
+      const n = Number(val) | 0;
+      for (let b = 0; b < w; b++) flat.push((n >> b) & 1);
+    }
+  }
+  return flat;
+}
+
+/**
+ * Unpacks a flat LSB-first bit array into per-pin integer values according to `pinLabels`.
+ */
+export function unpackBusVector(pinLabels = [], flatBits = []) {
+  const out = [];
+  let off = 0;
+  for (let i = 0; i < pinLabels.length; i++) {
+    const w = getPinWidth(pinLabels[i]);
+    let val = 0;
+    for (let b = 0; b < w; b++) {
+      if (flatBits[off + b]) val |= 1 << b;
+    }
+    out.push(val);
+    off += w;
+  }
+  return out;
+}
+
+export function getChipPorts(def, busMode = false) {
+  if (!def) return { inputs: [], outputs: [] };
+  if (busMode) {
+    const bp = def.busPorts || CHIP_BUS_PORTS[def.id];
+    if (bp) return { inputs: bp.inputs, outputs: bp.outputs };
+  }
+  return {
+    inputs: def.inputs || [],
+    outputs: def.outputs || [],
+  };
+}
 
 export function getChipDef(type, customChips = {}) {
   return PRIMITIVE_CHIPS[type] || customChips[type] || null;
 }
 
-export function createEmptyCircuit(inputs, outputs) {
+export function createEmptyCircuit(inputs, outputs, { busMode = false } = {}) {
+  const hasBusPins = [...inputs, ...outputs].some((p) => getPinWidth(p) > 1);
   return {
     inputs: [...inputs],
     outputs: [...outputs],
+    busMode: Boolean(busMode || hasBusPins),
     nodes: [],
     wires: [],
   };
@@ -109,6 +273,7 @@ export function cloneCircuit(circuit) {
   return {
     inputs: [...circuit.inputs],
     outputs: [...circuit.outputs],
+    busMode: Boolean(circuit.busMode),
     nodes: circuit.nodes.map((n) => ({ ...n })),
     wires: circuit.wires.map((w) => ({
       id: w.id,
@@ -160,7 +325,14 @@ export function computeCircuitMetrics(circuit, customChips = {}, visited = new S
     } else if (node.type === 'PULL') {
       pullCount += 1;
       maxChildDepth = Math.max(maxChildDepth, 0);
-    } else if (node.type === 'CONST_0' || node.type === 'CONST_1') {
+    } else if (
+      node.type === 'CONST_0' ||
+      node.type === 'CONST_1' ||
+      node.type === 'SPLIT4' ||
+      node.type === 'JOIN4' ||
+      node.type === 'SPLIT8' ||
+      node.type === 'JOIN8'
+    ) {
       maxChildDepth = Math.max(maxChildDepth, 0);
     } else {
       const def = customChips[node.type];

@@ -10,7 +10,7 @@
  *   - Selection callbacks for mobile floating action pills (Duplicate / Inspect / Delete / Cut Wire)
  */
 
-import { getChipDef } from '../engine/circuit.js';
+import { getChipDef, getChipPorts, getPinWidth, parsePinSpec, unpackBusVector } from '../engine/circuit.js';
 
 const GRID = 16;
 const BASE_BOARD_W = 760;
@@ -242,19 +242,42 @@ export class WorkbenchCanvas {
     };
   }
 
+  _isBusMode() {
+    return Boolean(this.circuit?.busMode || this.stage?.busMode);
+  }
+
+  _getNodePorts(type) {
+    const def = getChipDef(type, this.customChips);
+    return getChipPorts(def, this._isBusMode());
+  }
+
+  _pinsWidthCompatible(pinA, pinB) {
+    if (!pinA || !pinB || pinA.role === pinB.role) return false;
+    const src = pinA.role === 'src' ? pinA : pinB;
+    const dst = pinA.role === 'dst' ? pinA : pinB;
+    const sw = src.width || 1;
+    const dw = dst.width || 1;
+    if (sw === dw) return true;
+    if (sw === 1 && (src.chipType === 'CONST_0' || src.chipType === 'CONST_1')) return true;
+    return false;
+  }
+
   getChipDimensions(type) {
     const def = getChipDef(type, this.customChips);
     if (!def) return { w: 84, h: 56, pinStep: 28 };
     if (type === 'SW') return { w: 102, h: 66, pinStep: 28 };
     if (type === 'PULL') return { w: 96, h: 62, pinStep: 28 };
     if (type === 'CONST_1' || type === 'CONST_0') return { w: 78, h: 50, pinStep: 24 };
-    const maxPins = Math.max(def.inputs.length, def.outputs.length, 1);
+    const ports = this._getNodePorts(type);
+    const maxPins = Math.max(ports.inputs.length, ports.outputs.length, 1);
     const pinStep = maxPins >= 8 ? 22 : maxPins >= 5 ? 25 : 28;
     const badgePad = def.nandCount > 0 && maxPins >= 3 ? 12 : 0;
     const h = Math.max(56, maxPins * pinStep + 22 + badgePad);
     const labelLen = Math.max((def.name || type).length, 4);
-    const w =
-      maxPins >= 6
+    const hasBusLabel = [...ports.inputs, ...ports.outputs].some((p) => getPinWidth(p) > 1);
+    const w = hasBusLabel
+      ? Math.max(118, Math.round(labelLen * 9.5 + 42))
+      : maxPins >= 6
         ? Math.max(114, Math.round(labelLen * 9 + 36))
         : Math.max(86, Math.round(labelLen * 10 + 34));
     return { w, h, pinStep, badgePad };
@@ -320,9 +343,9 @@ export class WorkbenchCanvas {
   }
 
   _getNodePinPos(node, side, pinIdx) {
-    const def = getChipDef(node.type, this.customChips);
     const dim = this.getChipDimensions(node.type);
-    const pins = side === 'in' ? (def?.inputs || []) : (def?.outputs || []);
+    const ports = this._getNodePorts(node.type);
+    const pins = side === 'in' ? ports.inputs : ports.outputs;
     const n = pins.length;
     const bodyTop = node.y + 20;
     const bodyH = Math.max(24, dim.h - 20 - (dim.badgePad || 0));
@@ -395,30 +418,37 @@ export class WorkbenchCanvas {
     // External inputs act as signal SOURCES ('src')
     for (let i = 0; i < this.stage.inputs.length; i++) {
       const r = this._getInputRailPos(i);
+      const lbl = this.stage.inputs[i];
       pins.push({
         role: 'src',
         endpoint: { kind: 'input', pin: i },
         x: r.pinX,
         y: r.pinY,
-        label: this.stage.inputs[i],
+        label: lbl,
+        width: getPinWidth(lbl),
+        chipType: null,
       });
     }
     // External outputs act as signal DESTINATIONS ('dst')
     for (let i = 0; i < this.stage.outputs.length; i++) {
       const r = this._getOutputRailPos(i);
+      const lbl = this.stage.outputs[i];
       pins.push({
         role: 'dst',
         endpoint: { kind: 'output', pin: i },
         x: r.pinX,
         y: r.pinY,
-        label: this.stage.outputs[i],
+        label: lbl,
+        width: getPinWidth(lbl),
+        chipType: null,
       });
     }
     // Node pins
     for (const node of this.circuit.nodes) {
       const def = getChipDef(node.type, this.customChips);
       if (!def) continue;
-      def.inputs.forEach((lbl, idx) => {
+      const ports = this._getNodePorts(node.type);
+      ports.inputs.forEach((lbl, idx) => {
         const p = this._getNodePinPos(node, 'in', idx);
         pins.push({
           role: 'dst',
@@ -426,9 +456,11 @@ export class WorkbenchCanvas {
           x: p.x,
           y: p.y,
           label: lbl,
+          width: getPinWidth(lbl),
+          chipType: node.type,
         });
       });
-      def.outputs.forEach((lbl, idx) => {
+      ports.outputs.forEach((lbl, idx) => {
         const p = this._getNodePinPos(node, 'out', idx);
         pins.push({
           role: 'src',
@@ -436,6 +468,8 @@ export class WorkbenchCanvas {
           x: p.x,
           y: p.y,
           label: lbl,
+          width: getPinWidth(lbl),
+          chipType: node.type,
         });
       });
     }
@@ -524,6 +558,14 @@ export class WorkbenchCanvas {
 
   _tryCompleteWire(pinA, pinB) {
     if (!pinA || !pinB || pinA.role === pinB.role) return false;
+    if (!this._pinsWidthCompatible(pinA, pinB)) {
+      const sw = pinA.width || 1;
+      const dw = pinB.width || 1;
+      this.cb.onWireError?.(`ビット幅が合いません（${sw}bit と ${dw}bit）。同じ幅同士で繋ぐか、SPLIT/JOIN コネクタを使おう！`);
+      this.pendingPin = null;
+      this.wireDragPos = null;
+      return false;
+    }
     const src = pinA.role === 'src' ? pinA.endpoint : pinB.endpoint;
     const dst = pinA.role === 'dst' ? pinA.endpoint : pinB.endpoint;
     const dstPos = pinA.role === 'dst' ? pinA : pinB;
@@ -600,11 +642,14 @@ export class WorkbenchCanvas {
           const outIdx = this._hitTestOutputLamp(pt.x, pt.y);
           if (outIdx >= 0) {
             const r = this._getOutputRailPos(outIdx);
+            const lbl = this.stage.outputs[outIdx];
             this._tryCompleteWire(this.pendingPin, {
               role: 'dst',
               endpoint: { kind: 'output', pin: outIdx },
               x: r.pinX,
               y: r.pinY,
+              label: lbl,
+              width: getPinWidth(lbl),
             });
             this._notifySelection();
             return;
@@ -613,11 +658,14 @@ export class WorkbenchCanvas {
           const inIdx = this._hitTestInputSwitch(pt.x, pt.y);
           if (inIdx >= 0) {
             const r = this._getInputRailPos(inIdx);
+            const lbl = this.stage.inputs[inIdx];
             this._tryCompleteWire(this.pendingPin, {
               role: 'src',
               endpoint: { kind: 'input', pin: inIdx },
               x: r.pinX,
               y: r.pinY,
+              label: lbl,
+              width: getPinWidth(lbl),
             });
             this._notifySelection();
             return;
@@ -625,13 +673,16 @@ export class WorkbenchCanvas {
         }
       }
 
-      // 3. Input toggle switch body FIRST -> tapping the switch pill ALWAYS toggles 0<->1, never hijacked by pin hitbox!
+      // 3. Input toggle switch body FIRST -> tapping 1-bit toggles 0<->1; tapping bus switch left/right steps -1/+1!
       const inIdx = this._hitTestInputSwitch(pt.x, pt.y);
       if (inIdx >= 0) {
         this.pendingPin = null;
         this.selectedNodeId = null;
         this.selectedWireId = null;
-        this.cb.onToggleInput?.(inIdx);
+        const r = this._getInputRailPos(inIdx);
+        const w = getPinWidth(this.stage.inputs[inIdx]);
+        const delta = w > 1 ? (pt.x < r.boxX + r.boxW * 0.44 ? -1 : 1) : 1;
+        this.cb.onToggleInput?.(inIdx, delta);
         this._notifySelection();
         return;
       }
@@ -676,7 +727,15 @@ export class WorkbenchCanvas {
       const outIdx = this._hitTestOutputLamp(pt.x, pt.y);
       if (outIdx >= 0) {
         const r = this._getOutputRailPos(outIdx);
-        const lampPin = { role: 'dst', endpoint: { kind: 'output', pin: outIdx }, x: r.pinX, y: r.pinY };
+        const lbl = this.stage.outputs[outIdx];
+        const lampPin = {
+          role: 'dst',
+          endpoint: { kind: 'output', pin: outIdx },
+          x: r.pinX,
+          y: r.pinY,
+          label: lbl,
+          width: getPinWidth(lbl),
+        };
         this.selectedNodeId = null;
         this.selectedWireId = null;
         this.gesture = {
@@ -1163,85 +1222,98 @@ export class WorkbenchCanvas {
   }
 
   _drawInputRail(ctx) {
-    const outputs = this.inputBits;
+    const busVals = unpackBusVector(this.stage.inputs, this.inputBits);
     this.stage.inputs.forEach((label, idx) => {
       const r = this._getInputRailPos(idx);
-      const on = Boolean(outputs[idx]);
+      const spec = parsePinSpec(label);
+      const val = busVals[idx] || 0;
+      const on = val > 0;
       const isClk = label === 'CLK';
       const tall = r.boxH >= 50;
 
       ctx.save();
-      // Tactile button drop shadow so it looks unmistakably pressable!
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       this._roundRect(ctx, r.boxX, r.boxY + 3, r.boxW, r.boxH, 10);
       ctx.fill();
 
-      // Switch casing
       if (on) {
-        ctx.shadowColor = isClk ? 'rgba(208, 155, 255, 0.42)' : 'rgba(255, 184, 77, 0.45)';
+        ctx.shadowColor = spec.width > 1 ? 'rgba(86, 204, 242, 0.42)' : isClk ? 'rgba(208, 155, 255, 0.42)' : 'rgba(255, 184, 77, 0.45)';
         ctx.shadowBlur = 10;
       }
-      ctx.fillStyle = on ? (isClk ? '#442b62' : '#4a3312') : '#1c2836';
+      ctx.fillStyle = spec.width > 1
+        ? (on ? '#14384a' : '#162432')
+        : (on ? (isClk ? '#442b62' : '#4a3312') : '#1c2836');
       this._roundRect(ctx, r.boxX, r.boxY, r.boxW, r.boxH, 10);
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Subtle top inner bevel highlight
       ctx.fillStyle = on ? 'rgba(255, 240, 200, 0.12)' : 'rgba(255, 255, 255, 0.06)';
       this._roundRect(ctx, r.boxX + 2, r.boxY + 2, r.boxW - 4, Math.min(14, r.boxH * 0.34), 8);
       ctx.fill();
 
-      // Crisp outer border around the full switch casing
-      ctx.strokeStyle = on ? (isClk ? '#d8a8ff' : '#ffc15e') : '#50677f';
+      ctx.strokeStyle = spec.width > 1
+        ? (on ? (spec.width >= 8 ? '#52e3b6' : '#56ccf2') : '#446880')
+        : (on ? (isClk ? '#d8a8ff' : '#ffc15e') : '#50677f');
       ctx.lineWidth = on ? 2.4 : 1.8;
       this._roundRect(ctx, r.boxX, r.boxY, r.boxW, r.boxH, 10);
       ctx.stroke();
 
-      // Label (large, legible even when zoomed out on mobile!)
-      const labelFont = tall ? 14 : 12.5;
-      ctx.font = `bold ${labelFont}px monospace`;
-      ctx.fillStyle = on ? '#fff5dc' : '#c3d5e6';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, r.boxX + 9, r.pinY, r.boxW - 49);
+      if (spec.width > 1) {
+        // Multi-bit physical ribbon bus switch (tap left -1 / right +1!)
+        ctx.font = `bold ${tall ? 11.5 : 10.5}px monospace`;
+        ctx.fillStyle = spec.width >= 8 ? '#7ef7cf' : '#8ee5ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${spec.base} [${spec.width}b]`, r.boxX + r.boxW / 2, r.boxY + r.boxH * 0.3, r.boxW - 8);
 
-      // Tactile visual toggle pill (ON=1 / OFF=0) inside the right half of the switch button
-      const pillW = 34;
-      const pillH = tall ? 22 : 18;
-      const pillX = r.boxX + r.boxW - pillW - 6;
-      const pillY = r.pinY - pillH / 2;
-      ctx.fillStyle = on ? (isClk ? '#7b48b5' : '#b86d14') : '#101821';
-      this._roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
-      ctx.fill();
-      ctx.strokeStyle = on ? (isClk ? '#e4c4ff' : '#ffd98a') : '#3c5064';
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
+        ctx.font = `bold ${tall ? 14 : 12.5}px monospace`;
+        ctx.fillStyle = on ? '#fff5dc' : '#b7cee2';
+        ctx.fillText(`◀ ${val} ▶`, r.boxX + r.boxW / 2, r.boxY + r.boxH * 0.72, r.boxW - 8);
+      } else {
+        const labelFont = tall ? 14 : 12.5;
+        ctx.font = `bold ${labelFont}px monospace`;
+        ctx.fillStyle = on ? '#fff5dc' : '#c3d5e6';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, r.boxX + 9, r.pinY, r.boxW - 49);
 
-      // Sliding thumb dot + crisp 0/1 digit
-      const thumbR = Math.max(5.5, pillH / 2 - 3.5);
-      const thumbX = on ? pillX + pillW - thumbR - 3 : pillX + thumbR + 3;
-      ctx.beginPath();
-      ctx.arc(thumbX, r.pinY, thumbR, 0, Math.PI * 2);
-      ctx.fillStyle = on ? '#fff6dc' : '#6f859b';
-      ctx.fill();
+        const pillW = 34;
+        const pillH = tall ? 22 : 18;
+        const pillX = r.boxX + r.boxW - pillW - 6;
+        const pillY = r.pinY - pillH / 2;
+        ctx.fillStyle = on ? (isClk ? '#7b48b5' : '#b86d14') : '#101821';
+        this._roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+        ctx.fill();
+        ctx.strokeStyle = on ? (isClk ? '#e4c4ff' : '#ffd98a') : '#3c5064';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
 
-      ctx.font = `bold ${tall ? 11 : 10}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = on ? '#fff7e0' : '#8ea4ba';
-      ctx.fillText(on ? '1' : '0', on ? pillX + 9.5 : pillX + pillW - 9.5, r.pinY + 0.5);
+        const thumbR = Math.max(5.5, pillH / 2 - 3.5);
+        const thumbX = on ? pillX + pillW - thumbR - 3 : pillX + thumbR + 3;
+        ctx.beginPath();
+        ctx.arc(thumbX, r.pinY, thumbR, 0, Math.PI * 2);
+        ctx.fillStyle = on ? '#fff6dc' : '#6f859b';
+        ctx.fill();
 
-      // Pin stem + distinct circular wiring pad protruding to the right
-      this._drawPinPad(ctx, r.boxX + r.boxW, r.pinY, r.pinX, r.pinY, on, false);
+        ctx.font = `bold ${tall ? 11 : 10}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = on ? '#fff7e0' : '#8ea4ba';
+        ctx.fillText(on ? '1' : '0', on ? pillX + 9.5 : pillX + pillW - 9.5, r.pinY + 0.5);
+      }
+
+      this._drawPinPad(ctx, r.boxX + r.boxW, r.pinY, r.pinX, r.pinY, on, false, spec.width);
       ctx.restore();
     });
   }
 
   _drawOutputRail(ctx) {
-    const outVals = this.simulator ? this.simulator.getOutputs() : [];
+    const outBusVals = this.simulator ? this.simulator.getOutputBusValues() : [];
     this.stage.outputs.forEach((label, idx) => {
       const r = this._getOutputRailPos(idx);
-      const on = Boolean(outVals[idx]);
+      const spec = parsePinSpec(label);
+      const val = outBusVals[idx] || 0;
+      const on = val > 0;
       const tall = r.boxH >= 50;
 
       ctx.save();
@@ -1258,50 +1330,71 @@ export class WorkbenchCanvas {
       ctx.lineWidth = on ? 2.4 : 1.7;
       ctx.stroke();
 
-      // Bit value pill on left side of lamp
-      ctx.font = `bold ${tall ? 14.5 : 13}px monospace`;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = on ? '#8fffdc' : '#6c849c';
-      ctx.fillText(on ? '1' : '0', r.boxX + 10, r.pinY);
+      if (spec.width > 1) {
+        ctx.font = `bold ${tall ? 11.5 : 10.5}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = on ? '#9dfae0' : '#96b0c8';
+        ctx.fillText(`${spec.base} [${spec.width}b]`, r.boxX + r.boxW / 2, r.boxY + r.boxH * 0.3, r.boxW - 8);
 
-      // Output label
-      ctx.font = `bold ${tall ? 13.5 : 12}px monospace`;
-      ctx.textAlign = 'right';
-      ctx.fillStyle = on ? '#eefff9' : '#afc3d6';
-      ctx.fillText(label, r.boxX + r.boxW - 25, r.pinY, r.boxW - 44);
+        ctx.font = `bold ${tall ? 14 : 12.5}px monospace`;
+        ctx.fillStyle = on ? '#ffffff' : '#829bb3';
+        const hex = val.toString(16).toUpperCase().padStart(spec.width >= 8 ? 2 : 1, '0');
+        ctx.fillText(`${val} (0x${hex})`, r.boxX + r.boxW / 2, r.boxY + r.boxH * 0.72, r.boxW - 8);
+      } else {
+        ctx.font = `bold ${tall ? 14.5 : 13}px monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = on ? '#8fffdc' : '#6c849c';
+        ctx.fillText(on ? '1' : '0', r.boxX + 10, r.pinY);
 
-      // Bright LED lamp bulb
-      const bulbR = tall ? 7 : 5.8;
-      ctx.beginPath();
-      ctx.arc(r.boxX + r.boxW - 13, r.pinY, bulbR, 0, Math.PI * 2);
-      ctx.fillStyle = on ? '#5ef0c2' : '#253342';
-      ctx.fill();
-      ctx.strokeStyle = on ? '#d4fff0' : '#465c72';
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
+        ctx.font = `bold ${tall ? 13.5 : 12}px monospace`;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = on ? '#eefff9' : '#afc3d6';
+        ctx.fillText(label, r.boxX + r.boxW - 25, r.pinY, r.boxW - 44);
 
-      // Pin stem + circular wiring pad protruding to the left
-      this._drawPinPad(ctx, r.boxX, r.pinY, r.pinX, r.pinY, on, true);
+        const bulbR = tall ? 7 : 5.8;
+        ctx.beginPath();
+        ctx.arc(r.boxX + r.boxW - 13, r.pinY, bulbR, 0, Math.PI * 2);
+        ctx.fillStyle = on ? '#5ef0c2' : '#253342';
+        ctx.fill();
+        ctx.strokeStyle = on ? '#d4fff0' : '#465c72';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+
+      this._drawPinPad(ctx, r.boxX, r.pinY, r.pinX, r.pinY, on, true, spec.width);
       ctx.restore();
     });
   }
 
-  _drawPinPad(ctx, baseX, baseY, pinX, pinY, high, isEmerald) {
-    ctx.strokeStyle = high ? (isEmerald ? '#52e3b6' : '#ffb84d') : '#688098';
-    ctx.lineWidth = 3.4;
+  _drawPinPad(ctx, baseX, baseY, pinX, pinY, high, isEmerald, width = 1) {
+    const isBus = width > 1;
+    const busCol = width >= 8 ? '#52e3b6' : '#56ccf2';
+    ctx.strokeStyle = isBus ? (high ? busCol : '#4f738f') : high ? (isEmerald ? '#52e3b6' : '#ffb84d') : '#688098';
+    ctx.lineWidth = width >= 8 ? 6.4 : width >= 4 ? 5.0 : 3.4;
     ctx.beginPath();
     ctx.moveTo(baseX, baseY);
     ctx.lineTo(pinX, pinY);
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.arc(pinX, pinY, 6.8, 0, Math.PI * 2);
-    ctx.fillStyle = high ? (isEmerald ? '#6ff5ca' : '#ffd166') : '#1c2a38';
-    ctx.fill();
-    ctx.strokeStyle = high ? '#ffffff' : '#90aac4';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (isBus) {
+      const sz = width >= 8 ? 14 : 12.5;
+      this._roundRect(ctx, pinX - sz / 2, pinY - sz / 2, sz, sz, 3.5);
+      ctx.fillStyle = high ? busCol : '#172836';
+      ctx.fill();
+      ctx.strokeStyle = high ? '#ffffff' : '#85b8d4';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(pinX, pinY, 6.8, 0, Math.PI * 2);
+      ctx.fillStyle = high ? (isEmerald ? '#6ff5ca' : '#ffd166') : '#1c2a38';
+      ctx.fill();
+      ctx.strokeStyle = high ? '#ffffff' : '#90aac4';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
 
   _drawNodes(ctx) {
@@ -1426,27 +1519,30 @@ export class WorkbenchCanvas {
       }
 
       // Input pins (left)
-      (def?.inputs || []).forEach((lbl, idx) => {
+      const ports = this._getNodePorts(node.type);
+      ports.inputs.forEach((lbl, idx) => {
         const p = this._getNodePinPos(node, 'in', idx);
+        const w = getPinWidth(lbl);
         const high = Boolean(pinVals.inputs[idx]);
-        this._drawPinPad(ctx, node.x, p.y, p.x, p.y, high, false);
-        ctx.font = 'bold 10px monospace';
+        this._drawPinPad(ctx, node.x, p.y, p.x, p.y, high, false, w);
+        ctx.font = 'bold 9.5px monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = high ? '#ffd166' : '#9bb3c9';
-        ctx.fillText(lbl, node.x + 6, p.y);
+        ctx.fillStyle = w > 1 ? (high ? '#8ee5ff' : '#8cb3cc') : (high ? '#ffd166' : '#9bb3c9');
+        ctx.fillText(lbl, node.x + 6, p.y, dim.w * 0.55);
       });
 
       // Output pins (right)
-      (def?.outputs || []).forEach((lbl, idx) => {
+      ports.outputs.forEach((lbl, idx) => {
         const p = this._getNodePinPos(node, 'out', idx);
+        const w = getPinWidth(lbl);
         const high = Boolean(pinVals.outputs[idx]);
-        this._drawPinPad(ctx, node.x + dim.w, p.y, p.x, p.y, high, true);
-        ctx.font = 'bold 10px monospace';
+        this._drawPinPad(ctx, node.x + dim.w, p.y, p.x, p.y, high, true, w);
+        ctx.font = 'bold 9.5px monospace';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = high ? '#72f2c8' : '#9bb3c9';
-        ctx.fillText(lbl, node.x + dim.w - 6, p.y);
+        ctx.fillStyle = w > 1 ? (high ? '#7ef7cf' : '#8cb3cc') : (high ? '#72f2c8' : '#9bb3c9');
+        ctx.fillText(lbl, node.x + dim.w - 6, p.y, dim.w * 0.55);
       });
 
       ctx.restore();
@@ -1458,7 +1554,9 @@ export class WorkbenchCanvas {
     for (const wire of this.circuit.wires) {
       const curve = this._getWireCurve(wire);
       if (!curve) continue;
-      const high = this.simulator ? this.simulator.getWireValue(wire.id) === 1 : false;
+      const busInfo = this.simulator ? this.simulator.getWireBusValue(wire.id) : { value: 0, width: 1 };
+      const high = busInfo.value > 0;
+      const isBus = busInfo.width > 1;
       const selected = this.selectedWireId === wire.id;
 
       ctx.save();
@@ -1468,25 +1566,26 @@ export class WorkbenchCanvas {
       ctx.beginPath();
       ctx.moveTo(curve.p0.x, curve.p0.y);
       ctx.bezierCurveTo(curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y, curve.p3.x, curve.p3.y);
-      ctx.strokeStyle = 'rgba(8, 13, 19, 0.85)';
-      ctx.lineWidth = selected ? 8 : 6;
+      ctx.strokeStyle = 'rgba(8, 13, 19, 0.88)';
+      ctx.lineWidth = selected ? (isBus ? 11 : 8) : (isBus ? (busInfo.width >= 8 ? 10 : 8.5) : 6);
       ctx.stroke();
 
-      // Main conductive wire
+      // Main conductive wire (thick cyan/emerald ribbon for 4-bit/8-bit bus bundles!)
+      const busColor = busInfo.width >= 8 ? '#52e3b6' : '#56ccf2';
       if (selected) {
         ctx.strokeStyle = '#ff6b6b';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = isBus ? 6.5 : 4;
       } else if (unstable) {
         ctx.strokeStyle = Math.sin(this.time * 24) > 0 ? '#ff5252' : '#ff9f43';
-        ctx.lineWidth = 3.2;
+        ctx.lineWidth = isBus ? 5.5 : 3.2;
       } else if (high) {
-        ctx.shadowColor = 'rgba(255, 184, 77, 0.65)';
+        ctx.shadowColor = isBus ? 'rgba(86, 204, 242, 0.55)' : 'rgba(255, 184, 77, 0.65)';
         ctx.shadowBlur = 8;
-        ctx.strokeStyle = '#ffb84d';
-        ctx.lineWidth = 3.2;
+        ctx.strokeStyle = isBus ? busColor : '#ffb84d';
+        ctx.lineWidth = isBus ? (busInfo.width >= 8 ? 6.2 : 4.8) : 3.2;
       } else {
-        ctx.strokeStyle = '#475c70';
-        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = isBus ? '#395a73' : '#475c70';
+        ctx.lineWidth = isBus ? (busInfo.width >= 8 ? 5.2 : 4.2) : 2.4;
       }
       ctx.stroke();
       ctx.shadowBlur = 0;
@@ -1498,10 +1597,28 @@ export class WorkbenchCanvas {
           const t = (phase + k * 0.5) % 1;
           const pt = evalCubic(curve.p0, curve.p1, curve.p2, curve.p3, t);
           ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 2.7, 0, Math.PI * 2);
-          ctx.fillStyle = '#fff5cc';
+          ctx.arc(pt.x, pt.y, isBus ? 3.2 : 2.7, 0, Math.PI * 2);
+          ctx.fillStyle = isBus ? '#e8ffff' : '#fff5cc';
           ctx.fill();
         }
+      }
+
+      // Live numeric value pill on selected or active multi-bit bus wires
+      if (isBus && (selected || high)) {
+        const mid = evalCubic(curve.p0, curve.p1, curve.p2, curve.p3, 0.5);
+        const tag = `${busInfo.value}`;
+        ctx.font = 'bold 9.5px monospace';
+        const tw = Math.max(20, ctx.measureText(tag).width + 8);
+        ctx.fillStyle = 'rgba(10, 18, 26, 0.92)';
+        this._roundRect(ctx, mid.x - tw / 2, mid.y - 7.5, tw, 15, 4);
+        ctx.fill();
+        ctx.strokeStyle = selected ? '#ff6b6b' : busColor;
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tag, mid.x, mid.y + 0.5);
       }
       ctx.restore();
     }
@@ -1575,9 +1692,10 @@ export class WorkbenchCanvas {
     ctx.save();
     for (const pin of this._allPins()) {
       if (pin.role !== targetRole) continue;
+      if (!this._pinsWidthCompatible(activePin, pin)) continue;
       ctx.beginPath();
       ctx.arc(pin.x, pin.y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(82, 227, 182, 0.85)';
+      ctx.strokeStyle = pin.width > 1 ? 'rgba(86, 204, 242, 0.9)' : 'rgba(82, 227, 182, 0.85)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }

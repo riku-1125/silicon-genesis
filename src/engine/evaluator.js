@@ -9,11 +9,27 @@
  */
 
 import { compileCircuit } from './simulator.js';
-import { computeCircuitMetrics } from './circuit.js';
+import { computeCircuitMetrics, getTotalPinBits, packBusVector, unpackBusVector } from './circuit.js';
+
+function resolveTestInput(stage, rawInput, rawBusInput) {
+  if (Array.isArray(rawBusInput)) return packBusVector(stage.inputs, rawBusInput);
+  return rawInput || [];
+}
+
+function resolveTestExpected(stage, rawExpected, rawBusExpected) {
+  if (Array.isArray(rawBusExpected)) return packBusVector(stage.outputs, rawBusExpected);
+  return rawExpected || [];
+}
 
 export function evaluateStage(stage, circuit, customChips = {}) {
   // Verify all placed chips are allowed in this stage
   const allowed = new Set(stage.allowedPrimitives || ['NAND']);
+  if (stage.busMode) {
+    allowed.add('SPLIT4');
+    allowed.add('JOIN4');
+    allowed.add('SPLIT8');
+    allowed.add('JOIN8');
+  }
   for (const chipId of Object.keys(customChips)) {
     // Allow all custom chips unlocked prior to this stage (or any custom chip in sandbox)
     if (!stage.allowedCustomChips || stage.allowedCustomChips.includes(chipId)) {
@@ -52,45 +68,63 @@ export function evaluateStage(stage, circuit, customChips = {}) {
     // Optional pre-steps (e.g. silent initialization before checked steps)
     if (Array.isArray(stage.initSteps)) {
       for (const initInput of stage.initSteps) {
-        sim.evaluate(initInput);
+        const flatInit =
+          initInput && !Array.isArray(initInput) && Array.isArray(initInput.busInput)
+            ? packBusVector(stage.inputs, initInput.busInput)
+            : initInput;
+        sim.evaluate(flatInit);
       }
     }
 
     for (let idx = 0; idx < stage.tests.length; idx++) {
       const test = stage.tests[idx];
+      const expected = resolveTestExpected(stage, test.expected, test.busExpected);
       // Support optional multi-phase step (e.g., setup CLK=0 then rising edge CLK=1)
-      if (Array.isArray(test.phases)) {
+      const rawPhases = Array.isArray(test.busPhases)
+        ? test.busPhases.map((bp) => packBusVector(stage.inputs, bp))
+        : test.phases;
+      if (Array.isArray(rawPhases)) {
         let lastRes = null;
-        for (const phaseInput of test.phases) {
+        for (const phaseInput of rawPhases) {
           lastRes = sim.evaluate(phaseInput);
         }
         const actual = lastRes.outputs;
         const unstable = lastRes.unstable;
         if (unstable) anyUnstable = true;
 
-        const match = !unstable && outputsMatch(actual, test.expected);
+        const match = !unstable && outputsMatch(actual, expected);
         if (!match) allPassed = false;
+        const dispIn = test.busDisplayInput
+          ? packBusVector(stage.inputs, test.busDisplayInput)
+          : test.displayInput || rawPhases[rawPhases.length - 1];
         results.push({
           index: idx,
           label: test.label || `Step ${idx + 1}`,
-          input: test.displayInput || test.phases[test.phases.length - 1],
-          phases: test.phases,
-          expected: test.expected,
+          input: dispIn,
+          busInput: unpackBusVector(stage.inputs, dispIn),
+          phases: rawPhases,
+          expected,
+          busExpected: Array.isArray(test.busExpected) ? test.busExpected : unpackBusVector(stage.outputs, expected),
           actual,
+          busActual: unpackBusVector(stage.outputs, actual),
           passed: match,
           unstable,
         });
       } else {
-        const res = sim.evaluate(test.input);
+        const flatIn = resolveTestInput(stage, test.input, test.busInput);
+        const res = sim.evaluate(flatIn);
         if (res.unstable) anyUnstable = true;
-        const match = !res.unstable && outputsMatch(res.outputs, test.expected);
+        const match = !res.unstable && outputsMatch(res.outputs, expected);
         if (!match) allPassed = false;
         results.push({
           index: idx,
           label: test.label || `Step ${idx + 1}`,
-          input: test.input,
-          expected: test.expected,
+          input: flatIn,
+          busInput: Array.isArray(test.busInput) ? test.busInput : unpackBusVector(stage.inputs, flatIn),
+          expected,
+          busExpected: Array.isArray(test.busExpected) ? test.busExpected : unpackBusVector(stage.outputs, expected),
           actual: res.outputs,
+          busActual: unpackBusVector(stage.outputs, res.outputs),
           passed: match,
           unstable: res.unstable,
         });
@@ -100,17 +134,22 @@ export function evaluateStage(stage, circuit, customChips = {}) {
     // Combinational mode: test every vector cleanly
     for (let idx = 0; idx < stage.tests.length; idx++) {
       const test = stage.tests[idx];
+      const flatIn = resolveTestInput(stage, test.input, test.busInput);
+      const expected = resolveTestExpected(stage, test.expected, test.busExpected);
       sim.reset();
-      const res = sim.evaluate(test.input);
+      const res = sim.evaluate(flatIn);
       if (res.unstable) anyUnstable = true;
-      const match = !res.unstable && outputsMatch(res.outputs, test.expected);
+      const match = !res.unstable && outputsMatch(res.outputs, expected);
       if (!match) allPassed = false;
       results.push({
         index: idx,
         label: test.label || `Case ${idx + 1}`,
-        input: test.input,
-        expected: test.expected,
+        input: flatIn,
+        busInput: Array.isArray(test.busInput) ? test.busInput : unpackBusVector(stage.inputs, flatIn),
+        expected,
+        busExpected: Array.isArray(test.busExpected) ? test.busExpected : unpackBusVector(stage.outputs, expected),
         actual: res.outputs,
+        busActual: unpackBusVector(stage.outputs, res.outputs),
         passed: match,
         unstable: res.unstable,
       });
@@ -200,37 +239,54 @@ export function reproduceDiagnosticState(stage, circuit, customChips, evalResult
   const sim = compileCircuit(circuit, customChips);
   sim.reset();
 
+  const totalInBits = getTotalPinBits(stage.inputs);
   const steps = evalResult?.results?.length ? evalResult.results : stage.tests || [];
   const target = steps[caseIdx] || stage.tests?.[caseIdx];
   if (!target) {
-    return { simulator: sim, inputBits: new Array(stage.inputs.length).fill(0), step: null };
+    return { simulator: sim, inputBits: new Array(totalInBits).fill(0), step: null };
   }
 
-  let inputBits = new Array(stage.inputs.length).fill(0);
+  let inputBits = new Array(totalInBits).fill(0);
 
   if (stage.mode === 'sequential') {
     if (Array.isArray(stage.initSteps)) {
       for (const initInput of stage.initSteps) {
-        inputBits = [...initInput];
+        inputBits =
+          initInput && !Array.isArray(initInput) && Array.isArray(initInput.busInput)
+            ? packBusVector(stage.inputs, initInput.busInput)
+            : [...initInput];
         sim.evaluate(inputBits);
       }
     }
     for (let i = 0; i <= caseIdx && i < steps.length; i++) {
       const st = steps[i];
       const rawTest = stage.tests?.[i];
-      const phases = st.phases || rawTest?.phases;
+      const phases =
+        st.phases ||
+        (Array.isArray(rawTest?.busPhases)
+          ? rawTest.busPhases.map((bp) => packBusVector(stage.inputs, bp))
+          : rawTest?.phases);
       if (Array.isArray(phases)) {
         for (const ph of phases) {
           inputBits = [...ph];
           sim.evaluate(inputBits);
         }
       } else {
-        inputBits = [...(st.input || rawTest?.input || inputBits)];
+        inputBits = [
+          ...(st.input ||
+            (Array.isArray(rawTest?.busInput)
+              ? packBusVector(stage.inputs, rawTest.busInput)
+              : rawTest?.input) ||
+            inputBits),
+        ];
         sim.evaluate(inputBits);
       }
     }
   } else {
-    inputBits = [...target.input];
+    inputBits = [
+      ...(target.input ||
+        (Array.isArray(target.busInput) ? packBusVector(stage.inputs, target.busInput) : inputBits)),
+    ];
     sim.evaluate(inputBits);
   }
 

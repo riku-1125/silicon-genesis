@@ -21,6 +21,7 @@ export function createDefaultSave() {
     discoveredTerms: [],      // glossary term IDs actually encountered in dialogue so far
     seenPrologue: false,
     chapter2Unlocked: false,
+    chapter3Unlocked: false,
     seenIntroStages: [],
     seenTheaterStages: [],    // stage IDs whose full-screen Story Theater has been shown at least once
     soundEnabled: true,
@@ -96,12 +97,37 @@ export function isChapter1Cleared(save) {
 
 /**
  * Chapter 2 unlocks upon clearing Chapter 1 (STAGE 17).
- * Also stays unlocked if the save already contains any cleared Chapter 2 stage.
+ * Also stays unlocked if the save already contains any cleared Chapter 2/3 stage.
  */
 export function isChapter2Unlocked(save) {
   if (isChapter1Cleared(save)) return true;
   const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
-  return cleared.some((id) => STAGES.find((s) => s.id === id)?.chapter === 2);
+  return cleared.some((id) => (STAGES.find((s) => s.id === id)?.chapter || 1) >= 2);
+}
+
+/**
+ * Returns true once the player has cleared Chapter 2 (STAGE 26 / id: stage_24).
+ */
+export function isChapter2Cleared(save) {
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.includes('stage_24');
+}
+
+/**
+ * Chapter 3 unlocks upon clearing Chapter 2 (STAGE 26) or if any Chapter 3 stage is cleared.
+ */
+export function isChapter3Unlocked(save) {
+  if (isChapter2Cleared(save)) return true;
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.some((id) => (STAGES.find((s) => s.id === id)?.chapter || 1) >= 3);
+}
+
+/**
+ * Returns true once the player has cleared Chapter 3 (STAGE 42 / id: stage_42).
+ */
+export function isChapter3Cleared(save) {
+  const cleared = Array.isArray(save?.clearedStages) ? save.clearedStages : [];
+  return cleared.includes('stage_42');
 }
 
 /**

@@ -6,6 +6,7 @@ import { PROLOGUE_STEPS } from '../src/data/prologue.js';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
+  buildChapter3EndingSteps,
 } from '../src/data/endings.js';
 import {
   GLOSSARY_TERMS,
@@ -26,6 +27,9 @@ import {
   isStageUnlocked,
   isChapter1Cleared,
   isChapter2Unlocked,
+  isChapter2Cleared,
+  isChapter3Unlocked,
+  isChapter3Cleared,
 } from '../src/state/storage.js';
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
@@ -46,6 +50,16 @@ import {
   probeInstructionDecode,
   makeInstructionPart,
 } from '../src/engine/romRunner.js';
+import {
+  ARK8_OPCODES,
+  assembleArk8ProgramText,
+  formatArk8ProgramText,
+  compileArk8Hardware,
+  buildArk8RowMap,
+  getArk8RomFuseMatrix,
+  runArk8Program,
+  evaluateArk8Stage,
+} from '../src/engine/romRunner8.js';
 import { exportSiliconBlueprint } from '../src/engine/siliconExport.js';
 
 /**
@@ -79,8 +93,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 29-stage campaign (Ch.1 + Ch.2): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 29);
+test('Full 45-stage campaign (Ch.1 + Ch.2 + Ch.3): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 45);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -864,7 +878,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 28);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 42);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
@@ -1689,4 +1703,153 @@ test('v37 Full Physical Silicon: MOSFET+PULL flattening & fault propagation, zer
   assert.ok(stats.moduleCount >= 24);
   assert.ok(summaryJa.includes(String(stats.totalSwCount)));
   assert.ok(summaryJa.includes(String(stats.totalPullCount)));
+});
+
+test('v38 Chapter 3: Bus Bundles, Writable SRAM, 8-Bit ARK8_SYS (14,806 MOSFETs), Loop Mul, Fault Propagation & Verilog Bus Export', () => {
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter3Hardware: true, provisioned: false });
+
+  // 1. All 14 Chapter 3 circuit stages (STAGE 27 MUX4_4B .. STAGE 40 ARK8_SYS) compile & pass on true physical MOSFETs!
+  const ch3CircuitStages = STAGES.filter((s) => s.chapter === 3 && s.mode !== 'physics');
+  assert.equal(ch3CircuitStages.length, 14);
+  for (const st of ch3CircuitStages) {
+    const chipId = st.rewardChip.id;
+    const def = customChips[chipId];
+    assert.ok(def?.circuit, `Missing Chapter 3 blueprint for ${chipId}`);
+    const res = evaluateStage(st, def.circuit, customChips);
+    assert.equal(res.passed, true, `Stage ${st.code} (${chipId}) failed: ${JSON.stringify(res)}`);
+  }
+
+  // Exact verified physical silicon counts for ARK8_SYS
+  const hw8 = compileArk8Hardware(customChips);
+  assert.equal(hw8.sim.isPhysicalSilicon, true);
+  assert.equal(hw8.sim.nandGateCount, 0);
+  assert.equal(hw8.siliconStats.nandCount, 7403);
+  assert.equal(hw8.siliconStats.swCount, 14806);
+  assert.equal(hw8.siliconStats.pullCount, 7403);
+
+  // 2. Stage 41 (`stage_41`): Microgrid surplus (180 - 115 = 65 & dynamic 210 - 90 = 120)
+  const st41 = getStageById('stage_41');
+  const asm41Text = [
+    '0: LOAD R0, [0] ; solar',
+    '1: LOAD R1, [1] ; load',
+    '2: SUB R0, R1   ; surplus',
+    '3: STOR R0, [2] ; write battery cmd',
+    '4: HALT',
+  ].join('\n');
+  const parsed41 = assembleArk8ProgramText(asm41Text, st41);
+  assert.equal(parsed41.ok, true, `Stage 41 assembly parse failed: ${JSON.stringify(parsed41.errors)}`);
+  const eval41 = evaluateArk8Stage(st41, parsed41.slots, customChips);
+  assert.equal(eval41.passed, true, `Stage 41 failed: ${eval41.message}`);
+  assert.equal(eval41.run.final.ram[2], 65);
+
+  // Reject hardcoded shortcut on Stage 41 (LDI 65 -> STOR [2])
+  const cheat41 = assembleArk8ProgramText('0: LDI R0, 65\n1: STOR R0, [2]\n2: HALT', st41);
+  assert.equal(evaluateArk8Stage(st41, cheat41.slots, customChips).passed, false);
+
+  // 3. Stage 42 (`stage_42`): General Loop Multiplication on real MOSFET SRAM (22*11=242 & 15*6=90)
+  const st42 = getStageById('stage_42');
+  const asm42Text = [
+    '0: LOAD R0, [0]',
+    '1: LOAD R1, [1]',
+    '2: LDI R2, 0',
+    '3: LDI R3, 1',
+    '4: ADD R2, R0',
+    '5: SUB R1, R3',
+    '6: JNZ R1, 4',
+    '7: STOR R2, [2]',
+    '8: HALT',
+  ].join('\n');
+  const parsed42 = assembleArk8ProgramText(asm42Text, st42);
+  assert.equal(parsed42.ok, true, `Stage 42 assembly parse failed: ${JSON.stringify(parsed42.errors)}`);
+  // Format -> re-assemble round-trip
+  const rt42 = assembleArk8ProgramText(formatArk8ProgramText(st42, parsed42.slots), st42);
+  assert.equal(rt42.ok, true);
+  assert.deepEqual(rt42.slots, parsed42.slots);
+
+  const eval42 = evaluateArk8Stage(st42, parsed42.slots, customChips);
+  assert.equal(eval42.passed, true, `Stage 42 failed: ${eval42.message}`);
+  assert.equal(eval42.run.final.ram[2], 242);
+  assert.equal(eval42.run.final.regs[1], 0);
+  assert.equal(eval42.run.final.regs[2], 242);
+  assert.ok(eval42.trace.length >= 35, `Expected full 11-iteration loop trace, got ${eval42.trace.length}`);
+
+  // Reject hardcoded shortcut on Stage 42
+  const cheat42 = assembleArk8ProgramText('0: LDI R2, 242\n1: STOR R2, [2]\n2: HALT', st42);
+  assert.equal(evaluateArk8Stage(st42, cheat42.slots, customChips).passed, false);
+
+  // 4. Physical fault propagation: breaking Stage 00-C NAND or ASM_ENC8 breaks Stage 42 on ARK8_SYS!
+  const brokenNandChips = { ...customChips };
+  const brokenNand = cloneCircuit(customChips.NAND.circuit);
+  brokenNand.wires = brokenNand.wires.filter((w) => w.to.kind !== 'output');
+  brokenNandChips.NAND = { ...customChips.NAND, circuit: brokenNand };
+  assert.equal(evaluateArk8Stage(st42, parsed42.slots, brokenNandChips).passed, false);
+
+  const brokenEnc8Chips = { ...customChips };
+  const brokenEnc8 = cloneCircuit(customChips.ASM_ENC8.circuit);
+  brokenEnc8.wires = brokenEnc8.wires.filter((w) => !(w.to.kind === 'output' && w.to.pin === 2));
+  brokenEnc8Chips.ASM_ENC8 = { ...customChips.ASM_ENC8, circuit: brokenEnc8 };
+  assert.equal(evaluateArk8Stage(st42, parsed42.slots, brokenEnc8Chips).passed, false);
+
+  // 5. 16-bit Mask ROM Fuse Matrix & Verilog-2001 Bus Export (`romArch: 'ark8'`)
+  assert.deepEqual(Object.keys(ARK8_OPCODES), ['LDI', 'ADD', 'SUB', 'JNZ', 'LOAD', 'STOR', 'ADDI', 'HALT']);
+  const rowMap42 = buildArk8RowMap(st42, parsed42.slots);
+  const fuse42 = getArk8RomFuseMatrix(rowMap42, hw8);
+  assert.equal(fuse42.wordCount, 9);
+  assert.ok(fuse42.totalBurnedFuses > 20);
+
+  const bp8 = exportSiliconBlueprint(customChips, {
+    romRows: fuse42.rows,
+    romArch: 'ark8',
+    stageTitle: 'STAGE 42: 記憶の大地・真の汎用ループ乗算',
+  });
+  assert.match(bp8.verilog, /module ARK8_SYS\b/);
+  assert.match(bp8.verilog, /module SRAM_16B\b/);
+  assert.match(bp8.verilog, /module ASM_ENC8\b/);
+  assert.match(bp8.verilog, /module ARK8_PROGRAM_ROM\b/);
+  assert.match(bp8.verilog, /\[7:0\]/);
+  const opens8 = (bp8.verilog.match(/^\s*module\s+[A-Za-z_]/gm) || []).length;
+  const closes8 = (bp8.verilog.match(/^\s*endmodule\b/gm) || []).length;
+  assert.equal(opens8, closes8);
+  assert.ok(opens8 >= 38, `Expected >=38 Verilog modules for full ARK8 stack, got ${opens8}`);
+  assert.equal(bp8.stats.cpuNandCount, 7403);
+  assert.equal(bp8.stats.cpuSwCount, 14806);
+  assert.equal(bp8.stats.cpuPullCount, 7403);
+
+  // 6. Chapter 3 progression locks, Chapter 3 Ending beats, glossary round-trip & clean prose (no raw markdown)
+  const postCh1Save = { clearedStages: ['stage_17'] };
+  assert.equal(isChapter2Cleared(postCh1Save), false);
+  assert.equal(isChapter3Unlocked(postCh1Save), false);
+  assert.equal(isStageUnlocked(postCh1Save, 'stage_27'), false);
+
+  const postCh2Save = { clearedStages: ['stage_17', 'stage_24'] };
+  assert.equal(isChapter2Cleared(postCh2Save), true);
+  assert.equal(isChapter3Unlocked(postCh2Save), true);
+  assert.equal(isChapter3Cleared(postCh2Save), false);
+  assert.equal(isStageUnlocked(postCh2Save, 'stage_27'), true);
+  assert.equal(isStageUnlocked(postCh2Save, 'stage_28'), false);
+
+  const postCh3Save = { clearedStages: ['stage_17', 'stage_24', 'stage_42'] };
+  assert.equal(isChapter3Cleared(postCh3Save), true);
+
+  const ch3Ending = buildChapter3EndingSteps({
+    ark8SysNandCount: 7403,
+    ark8SysSwCount: 14806,
+    ark8SysPullCount: 7403,
+  });
+  assert.ok(ch3Ending.length >= 10);
+  assert.ok(ch3Ending.some((s) => s.text.includes('7403') && s.text.includes('14806')));
+  assert.ok(ch3Ending.some((s) => Array.isArray(s.choices) && s.choices.length === 3));
+  const validSpeakers = new Set([null, 'kagari', 'mina', 'hako', 'kai']);
+  for (const step of ch3Ending) {
+    assert.ok(validSpeakers.has(step.speaker), `Unexpected Chapter 3 ending speaker '${step.speaker}'`);
+    assert.ok(!step.text.includes('**') && !step.text.includes('`'), `Raw markdown in Ch3 ending: ${step.text}`);
+    assert.equal(tokenizeGlossaryText(step.text).map((t) => t.text).join(''), step.text);
+  }
+  for (const st of STAGES.filter((s) => s.chapter === 3)) {
+    for (const line of [...(st.introDialogue || []), ...(st.outroDialogue || [])]) {
+      assert.ok(validSpeakers.has(line.speaker), `Unexpected Ch3 speaker '${line.speaker}' in ${st.id}`);
+      assert.ok(!line.text.includes('**') && !line.text.includes('`'), `Raw markdown in ${st.id}: ${line.text}`);
+    }
+  }
 });

@@ -5884,6 +5884,422 @@ textarea:focus-visible {
 }
 
 /* ============================================================================
+   CHAPTER 3 (HORIZON CAMP) & ARK-8 16-BIT ASSEMBLY IDE STYLES
+   ============================================================================ */
+.title-btn-chapter3 {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: clamp(12px, 3.4vw, 14px);
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: #e9fff5;
+  background: linear-gradient(180deg, #1d7558 0%, #104938 100%);
+  border: 2px solid #52e3b6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 3px 0 #07261d,
+    0 0 22px rgba(82, 227, 182, 0.36);
+  transition: transform 0.1s, filter 0.14s;
+}
+.title-btn-chapter3:active {
+  transform: translateY(2px);
+}
+.title-btn-chapter3.locked {
+  color: #8fa6bc;
+  background: linear-gradient(180deg, #17222d 0%, #101821 100%);
+  border: 1.5px dashed #425a70;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 0 #070b10;
+  font-size: 13px;
+}
+.title-btn-chapter3.locked:active {
+  transform: none;
+  border-color: #607d98;
+}
+
+.title-btn-ending.horizon {
+  border-color: rgba(82, 227, 182, 0.72);
+  color: #c2ffea;
+  background: linear-gradient(180deg, rgba(22, 84, 66, 0.75) 0%, rgba(12, 46, 37, 0.9) 100%);
+}
+
+.map-chapter-banner.ch3 {
+  background: linear-gradient(90deg, rgba(22, 102, 76, 0.42) 0%, rgba(15, 42, 36, 0.88) 100%);
+  border-color: #52e3b6;
+  color: #b4ffea;
+}
+.map-chapter-banner.ch3.locked {
+  background: linear-gradient(90deg, rgba(24, 34, 45, 0.8) 0%, rgba(16, 23, 31, 0.92) 100%);
+  border: 1.5px dashed #435a70;
+  color: #8ea5bc;
+}
+.map-jump-pill.ch3 {
+  color: #b8ffea;
+  background: rgba(82, 227, 182, 0.12);
+  border-color: rgba(82, 227, 182, 0.48);
+}
+.map-quick-btn.ed3 {
+  border-color: rgba(82, 227, 182, 0.65);
+  color: #b6ffea;
+  background: rgba(18, 72, 56, 0.55);
+}
+
+.victory-cert-card.horizon {
+  background: linear-gradient(145deg, rgba(16, 68, 54, 0.92) 0%, rgba(13, 31, 44, 0.96) 100%);
+  border-color: #52e3b6;
+  box-shadow: 0 0 26px rgba(82, 227, 182, 0.25);
+}
+.victory-cert-card.horizon .vcert-eyebrow {
+  color: #7ef7d0;
+}
+
+/* ARK-8 Hardware Monitor (4 Registers + 16-Byte SRAM Dump + 16-Bit Bridge) */
+.ark8-bridge {
+  gap: 5px;
+}
+.ark8-hex-pill {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(86, 204, 242, 0.14);
+  border: 1px solid rgba(86, 204, 242, 0.45);
+  color: #8ce9ff;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.ark8-dec-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ark8-dec-summary {
+  font-size: 10.5px;
+  color: #bdd6eb;
+  line-height: 1.35;
+}
+
+.ark8-state-section {
+  background: rgba(7, 13, 20, 0.72);
+  border: 1px solid rgba(64, 98, 128, 0.45);
+  border-radius: 8px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ark8-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #cde3f5;
+}
+.ark8-pc-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ark8-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(28, 46, 64, 0.85);
+  border: 1px solid rgba(86, 128, 166, 0.45);
+  color: #a8c4dc;
+}
+.ark8-badge.pc {
+  color: #ffe8ad;
+  border-color: rgba(255, 198, 86, 0.5);
+  background: rgba(78, 52, 16, 0.55);
+}
+.ark8-badge.on {
+  color: #84ffda;
+  border-color: rgba(82, 227, 182, 0.6);
+  background: rgba(16, 72, 54, 0.65);
+}
+.ark8-badge.halt {
+  color: #ffb8d0;
+  border-color: #f093b0;
+  background: rgba(94, 34, 60, 0.72);
+}
+
+.ark8-regs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.ark8-reg-cell {
+  background: rgba(13, 23, 34, 0.92);
+  border: 1px solid rgba(72, 108, 140, 0.5);
+  border-radius: 6px;
+  padding: 4px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ark8-reg-cell.changed {
+  border-color: #ffd166;
+  background: rgba(94, 68, 18, 0.48);
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.28);
+}
+.ark8-reg-name {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #7ee8ff;
+}
+.ark8-reg-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff6dc;
+  line-height: 1.15;
+}
+.ark8-reg-hex {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #7c9cb8;
+}
+
+.ark8-sram-hint {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #88a8c4;
+}
+.ark8-ram-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 3px;
+}
+.ark8-ram-cell {
+  background: rgba(11, 20, 30, 0.92);
+  border: 1px solid rgba(58, 86, 114, 0.45);
+  border-radius: 5px;
+  padding: 3px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.ark8-ram-cell.is-input {
+  border-color: rgba(86, 204, 242, 0.55);
+  background: rgba(14, 42, 62, 0.65);
+}
+.ark8-ram-cell.is-target {
+  border-color: rgba(255, 196, 86, 0.72);
+  background: rgba(74, 52, 16, 0.45);
+}
+.ark8-ram-cell.target-hit {
+  border-color: #52e3b6;
+  background: rgba(18, 92, 66, 0.72);
+  box-shadow: 0 0 10px rgba(82, 227, 182, 0.42);
+}
+.ark8-ram-cell.written {
+  border-color: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.45);
+}
+.ark8-ram-cell.mem-active {
+  outline: 1.5px solid #7ee8ff;
+}
+.ark8-ram-addr {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: #7e9eb8;
+  line-height: 1;
+}
+.ark8-ram-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  color: #e9f5ff;
+  line-height: 1.25;
+}
+.ark8-ram-cell.target-hit .ark8-ram-val {
+  color: #9effdf;
+}
+
+/* ARK-8 16-bit Fuse Matrix extra reg column */
+.ark8-fuse-table th.fuse-th-reg {
+  color: #7ee8ff;
+}
+.ark8-fuse-table .fuse-cell.burned.reg-fuse {
+  color: #7ee8ff;
+}
+.ark8-fuse-table td,
+.ark8-fuse-table th {
+  padding: 2px 3px;
+  font-size: 9.5px;
+}
+
+/* ARK-8 Code Tokens */
+.asm-op-token.op-load {
+  color: #7ee8ff;
+}
+.asm-op-token.op-stor {
+  color: #7ef7d0;
+}
+.asm-op-token.op-addi {
+  color: #ffd166;
+}
+.asm-op-token.op-halt {
+  color: #f4a2be;
+}
+.asm-code-row.ark8-code-row {
+  grid-template-columns: 32px minmax(112px, auto) auto 1fr;
+  gap: 4px;
+}
+.ark8-row-code {
+  min-width: 112px;
+  white-space: nowrap;
+  gap: 4px;
+}
+.ark8-code-row .asm-val-token {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ark8-code-row .asm-row-bits {
+  min-width: 50px;
+  font-size: 10px;
+  padding: 2px 4px;
+}
+
+/* ARK-8 Composer (8 Opcodes + Rd/Rs Pills + 8-Bit Physical DIP Bank) */
+.ark8-composer {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.ark8-comp-ops {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+  scrollbar-width: none;
+}
+.ark8-comp-ops::-webkit-scrollbar {
+  display: none;
+}
+.ark8-op-btn {
+  flex: 0 0 auto;
+  min-width: 42px;
+  padding: 2px 5px;
+}
+.ark8-comp-vals {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+  scrollbar-width: none;
+}
+.ark8-comp-vals::-webkit-scrollbar {
+  display: none;
+}
+.ark8-comp-hint {
+  font-size: 10.5px;
+  color: #95b2cc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ark8-comp-hint.ok {
+  color: #8bf7d2;
+  font-weight: 800;
+}
+.ark8-reg-picker,
+.ark8-imm-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.ark8-picker-lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: #9bb8d2;
+  margin-right: 1px;
+}
+.ark8-reg-pill {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1.5px solid #355068;
+  background: #101d2a;
+  color: #c2dcf2;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+}
+.ark8-reg-pill.active {
+  border-color: #ffd166;
+  background: rgba(168, 112, 24, 0.55);
+  color: #fff6d6;
+}
+.ark8-reg-pill.rs.active {
+  border-color: #56ccf2;
+  background: rgba(24, 108, 144, 0.58);
+  color: #e4fbff;
+}
+.asm-step-pm.wide {
+  width: auto;
+  padding: 0 5px;
+  font-size: 10px;
+}
+.ark8-dip-bank {
+  gap: 2px;
+}
+.ark8-dip-sw {
+  min-width: 24px;
+  padding: 2px 2px;
+}
+.ark8-dip-sw .asm-dip-w {
+  font-size: 8px;
+}
+
+@media (max-width: 440px) {
+  .ark8-ram-grid {
+    gap: 2px;
+  }
+  .ark8-ram-val {
+    font-size: 10px;
+  }
+  .ark8-reg-val {
+    font-size: 13px;
+  }
+  .ark8-op-btn {
+    min-width: 40px;
+    padding: 2px 5px;
+  }
+  .ark8-reg-pill {
+    min-width: 28px;
+    height: 26px;
+    font-size: 10.5px;
+  }
+}
+
+@media (max-height: 500px) {
+  .title-btn-chapter3 {
+    min-height: 36px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
+
+/* ============================================================================
    DESKTOP HOVER FEEDBACK & REDUCED MOTION ACCESSIBILITY
    ============================================================================ */
 @media (hover: hover) {
@@ -5904,6 +6320,7 @@ textarea:focus-visible {
   .asm-op-btn:hover,
   .asm-num-pill:hover,
   .asm-mode-btn:hover,
+  .ark8-reg-pill:hover,
   .btn-silicon-pill:hover,
   .pro-choice-btn:hover,
   .st-prev-btn:hover:not(:disabled),
@@ -5916,6 +6333,7 @@ textarea:focus-visible {
   }
   .title-btn-primary:hover,
   .title-btn-chapter2:hover:not(.locked),
+  .title-btn-chapter3:hover:not(.locked),
   .title-btn-secondary:hover {
     filter: brightness(1.09);
   }

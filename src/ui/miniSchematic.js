@@ -9,8 +9,8 @@
  * and drives real-time signal animation through the compiled logic engine!
  */
 
-import { STAGES } from '../data/stages.js?v=37';
-import { PRIMITIVE_CHIPS, getChipDef } from '../engine/circuit.js';
+import { STAGES } from '../data/stages.js?v=38';
+import { PRIMITIVE_CHIPS, getChipDef, getChipPorts, getPinWidth, packBusVector } from '../engine/circuit.js';
 import { compileCircuit } from '../engine/simulator.js';
 
 function esc(str) {
@@ -27,13 +27,15 @@ function esc(str) {
  */
 function computeLayout(circuit, customChips) {
   const nodes = circuit.nodes || [];
+  const busMode = Boolean(circuit.busMode) || [...(circuit.inputs || []), ...(circuit.outputs || [])].some((p) => getPinWidth(p) > 1);
   const nodeBox = (node) => {
     const def = getChipDef(node.type, customChips) || PRIMITIVE_CHIPS.NAND;
-    const mp = Math.max(def.inputs.length, def.outputs.length, 1);
+    const ports = getChipPorts(def, busMode);
+    const mp = Math.max(ports.inputs.length, ports.outputs.length, 1);
     const step = mp >= 8 ? 22 : 26;
     const nh = Math.max(52, mp * step + 18);
     const nw = mp >= 6 ? 102 : Math.max(78, Math.round(Math.max((def.name || node.type).length, 4) * 9.5 + 24));
-    return { nw, nh, def, step };
+    return { nw, nh, def, ports, step };
   };
 
   let minX = Infinity;
@@ -85,7 +87,7 @@ export function renderMiniSchematicSvg(circuit, customChips) {
     if (ep.kind === 'output') return outPos(ep.pin);
     const box = placed.get(ep.nodeId);
     if (!box) return { x: w / 2, y: h / 2 };
-    const pins = side === 'in' ? box.def.inputs : box.def.outputs;
+    const pins = side === 'in' ? box.ports.inputs : box.ports.outputs;
     const startY = box.y + box.nh / 2 - ((pins.length - 1) * box.step) / 2;
     const y = pins.length <= 1 ? box.y + box.nh / 2 : startY + ep.pin * box.step;
     return { x: side === 'in' ? box.x : box.x + box.nw, y };
@@ -225,16 +227,22 @@ export function startMiniSchematicLoop(
     if (isCombinational || idx === 0) {
       sim.reset();
     }
-    if (Array.isArray(step.phases)) {
+    if (Array.isArray(step.busPhases)) {
+      for (const bp of step.busPhases) {
+        sim.evaluate(packBusVector(circuit.inputs, bp));
+      }
+    } else if (Array.isArray(step.phases)) {
       for (const ph of step.phases) {
         sim.evaluate(ph);
       }
+    } else if (Array.isArray(step.busInput)) {
+      sim.evaluate(packBusVector(circuit.inputs, step.busInput));
     } else if (Array.isArray(step.input)) {
       sim.evaluate(step.input);
     }
 
-    const inBits = sim.getInputs();
-    const outBits = sim.getOutputs();
+    const inVals = sim.getInputBusValues();
+    const outVals = sim.getOutputBusValues();
 
     const badgeEl = badgeSelector ? containerEl.querySelector(badgeSelector) : null;
     if (badgeEl) {
@@ -244,54 +252,61 @@ export function startMiniSchematicLoop(
     }
 
     // 1. Update Input Terminals
-    inBits.forEach((bit, i) => {
+    inVals.forEach((val, i) => {
       const rect = containerEl.querySelector(`[data-mini-in-rect="${i}"]`);
       const txt = containerEl.querySelector(`[data-mini-in-text="${i}"]`);
+      const active = val > 0;
       if (rect) {
-        rect.setAttribute('fill', bit ? '#3b2a10' : '#1b2632');
-        rect.setAttribute('stroke', bit ? '#ffd166' : '#486078');
+        rect.setAttribute('fill', active ? '#3b2a10' : '#1b2632');
+        rect.setAttribute('stroke', active ? '#ffd166' : '#486078');
       }
       if (txt) {
         const lbl = txt.getAttribute('data-lbl') || `IN${i}`;
-        txt.textContent = `${lbl}=${bit}`;
-        txt.setAttribute('fill', bit ? '#ffe599' : '#8fa6bc');
+        txt.textContent = `${lbl}=${val}`;
+        txt.setAttribute('fill', active ? '#ffe599' : '#8fa6bc');
       }
     });
 
     // 2. Update Output Terminals
-    outBits.forEach((bit, i) => {
+    outVals.forEach((val, i) => {
       const rect = containerEl.querySelector(`[data-mini-out-rect="${i}"]`);
       const txt = containerEl.querySelector(`[data-mini-out-text="${i}"]`);
+      const active = val > 0;
       if (rect) {
-        rect.setAttribute('fill', bit ? '#123d2f' : '#16222d');
-        rect.setAttribute('stroke', bit ? '#52e3b6' : '#3b5368');
+        rect.setAttribute('fill', active ? '#123d2f' : '#16222d');
+        rect.setAttribute('stroke', active ? '#52e3b6' : '#3b5368');
       }
       if (txt) {
         const lbl = txt.getAttribute('data-lbl') || `OUT${i}`;
-        txt.textContent = `${lbl}=${bit}`;
-        txt.setAttribute('fill', bit ? '#8fffdc' : '#8fa6bc');
+        txt.textContent = `${lbl}=${val}`;
+        txt.setAttribute('fill', active ? '#8fffdc' : '#8fa6bc');
       }
     });
 
-    // 3. Update Wires (glowing flowing current when carrying 1!)
+    // 3. Update Wires (glowing flowing current when carrying non-zero value!)
     for (const wire of circuit.wires || []) {
-      const val = sim.getWireValue(wire.id);
+      const bw = sim.getWireBusValue(wire.id);
+      const val = bw.value > 0 ? 1 : 0;
       const baseEl = containerEl.querySelector(`[data-mini-wire="${wire.id}"]`);
       const flowEl = containerEl.querySelector(`[data-mini-wire-flow="${wire.id}"]`);
+      const sw = bw.width > 1 ? (bw.width >= 8 ? '4.8' : '3.8') : '2.6';
       if (baseEl) {
-        baseEl.setAttribute('stroke', val ? '#d98a2b' : '#2e4154');
+        baseEl.setAttribute('stroke-width', sw);
+        baseEl.setAttribute('stroke', val ? (bw.width > 1 ? '#56ccf2' : '#d98a2b') : '#2e4154');
         baseEl.setAttribute('opacity', val ? '0.95' : '0.65');
       }
       if (flowEl) {
+        flowEl.setAttribute('stroke-width', sw);
+        flowEl.setAttribute('stroke', bw.width > 1 ? '#7ef7cf' : '#ffd166');
         flowEl.setAttribute('opacity', val ? '0.95' : '0');
       }
     }
 
     // 4. Update Sub-Chip Nodes
     for (const node of circuit.nodes || []) {
-      const pinVals = sim.getNodePinValues(node.id);
+      const pinVals = sim.getNodePinBusValues(node.id);
       const outs = pinVals.outputs || [];
-      const anyHigh = outs.some((b) => b === 1);
+      const anyHigh = outs.some((o) => o.value > 0);
       const rectEl = containerEl.querySelector(`[data-mini-node="${node.id}"]`);
       const valEl = containerEl.querySelector(`[data-mini-node-val="${node.id}"]`);
       if (rectEl) {
@@ -301,7 +316,8 @@ export function startMiniSchematicLoop(
         rectEl.setAttribute('stroke-width', anyHigh ? '2.4' : '1.6');
       }
       if (valEl) {
-        valEl.textContent = outs.length > 4 ? `OUT:${outs.join('')}` : `OUT: ${outs.join(',')}`;
+        const summary = outs.map((o) => o.value).join(',');
+        valEl.textContent = summary.length > 9 ? `OUT:${summary.slice(0, 8)}…` : `OUT: ${summary}`;
         valEl.setAttribute('fill', anyHigh ? '#72f2c8' : '#7b93ab');
       }
     }

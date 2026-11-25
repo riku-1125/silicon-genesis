@@ -9,13 +9,18 @@
  * physical Bill of Materials (NAND / MOSFET / Pull-up Resistor counts).
  */
 
-import { computeCircuitMetrics } from './circuit.js';
+import { computeCircuitMetrics, getChipPorts, parsePinSpec } from './circuit.js';
 import { provisionStandardChips } from './blueprints.js';
 import {
   buildProgrammableRomCircuit,
   compileRomHardware,
   getRomFuseMatrix,
 } from './romRunner.js';
+import {
+  buildArk8RomCircuit,
+  compileArk8Hardware,
+  getArk8RomFuseMatrix,
+} from './romRunner8.js';
 
 const VERILOG_RESERVED = new Set([
   'always', 'and', 'assign', 'automatic', 'begin', 'buf', 'bufif0', 'bufif1',
@@ -37,7 +42,10 @@ const VERILOG_RESERVED = new Set([
   'weak1', 'while', 'wire', 'wor', 'xnor', 'xor',
 ]);
 
-const PRIMITIVE_NON_MODULES = new Set(['SW', 'PULL', 'CONST_0', 'CONST_1']);
+const PRIMITIVE_NON_MODULES = new Set([
+  'SW', 'PULL', 'CONST_0', 'CONST_1',
+  'SPLIT4', 'JOIN4', 'SPLIT8', 'JOIN8',
+]);
 
 function sanitizeIdent(raw, fallback = 'sig') {
   let s = String(raw ?? '')
@@ -52,19 +60,24 @@ function sanitizeIdent(raw, fallback = 'sig') {
 function buildModulePorts(inputs = [], outputs = []) {
   const used = new Set();
   const alloc = (raw, fallback) => {
-    let name = sanitizeIdent(raw, fallback);
+    const spec = parsePinSpec(raw);
+    let name = sanitizeIdent(spec.base, fallback);
     if (used.has(name)) {
       let n = 2;
       while (used.has(`${name}_${n}`)) n++;
       name = `${name}_${n}`;
     }
     used.add(name);
-    return name;
+    return { name, width: spec.width, hi: spec.hi, lo: spec.lo };
   };
   return {
     inPorts: inputs.map((name, i) => alloc(name, `in_${i}`)),
     outPorts: outputs.map((name, i) => alloc(name, `out_${i}`)),
   };
+}
+
+function fmtWidthPrefix(width) {
+  return width > 1 ? `[${width - 1}:0] ` : '';
 }
 
 function normalizeRomRows(romRows) {
@@ -113,8 +126,8 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
   }
 
   const allPortDecls = [
-    ...inPorts.map((p) => `  input  wire ${p}`),
-    ...outPorts.map((p) => `  output wire ${p}`),
+    ...inPorts.map((p) => `  input  wire ${fmtWidthPrefix(p.width)}${p.name}`),
+    ...outPorts.map((p) => `  output wire ${fmtWidthPrefix(p.width)}${p.name}`),
   ];
 
   if (allPortDecls.length === 0) {
@@ -125,10 +138,15 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
     lines.push(');');
   }
 
+  const circuitBusMode =
+    Boolean(circuit.busMode) ||
+    inPorts.some((p) => p.width > 1) ||
+    outPorts.some((p) => p.width > 1);
+
   // Assign deterministic, collision-free tags to every node
   const nodeTag = new Map();
   const nodeById = new Map();
-  const usedTags = new Set([...inPorts, ...outPorts]);
+  const usedTags = new Set([...inPorts.map((p) => p.name), ...outPorts.map((p) => p.name)]);
   for (let i = 0; i < circuit.nodes.length; i++) {
     const node = circuit.nodes[i];
     nodeById.set(node.id, node);
@@ -153,29 +171,47 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
     }
   }
 
-  const getNodeOutCount = (node) => {
-    if (node.type === 'SW' || node.type === 'PULL' || node.type === 'NAND') return 1;
-    if (node.type === 'CONST_0' || node.type === 'CONST_1') return 1;
+  const getNodeOutWidths = (node) => {
+    if (node.type === 'SW' || node.type === 'PULL' || node.type === 'NAND') return [1];
+    if (node.type === 'CONST_0' || node.type === 'CONST_1') return [1];
+    if (node.type === 'SPLIT4') return [1, 1, 1, 1];
+    if (node.type === 'JOIN4') return [4];
+    if (node.type === 'SPLIT8') return [4, 4];
+    if (node.type === 'JOIN8') return [8];
+    const def = workingChips[node.type];
+    if (def) {
+      const ports = getChipPorts(def, circuitBusMode);
+      return ports.outputs.map((p) => parsePinSpec(p).width);
+    }
     const childMod = sanitizeIdent(node.type, 'CHIP');
     const childPorts = portTable.get(childMod);
-    if (childPorts) return childPorts.outPorts.length;
-    return workingChips[node.type]?.outputs?.length || 0;
+    if (childPorts) return childPorts.outPorts.map((p) => p.width);
+    return [];
   };
 
-  const resolveExpr = (from) => {
-    if (!from) return "1'b0";
+  const resolveExpr = (from, expectedWidth = 1) => {
+    const zeroLit = `${expectedWidth}'b${'0'.repeat(expectedWidth)}`;
+    const oneLit = `${expectedWidth}'b${'1'.repeat(expectedWidth)}`;
+    if (!from) return zeroLit;
     if (from.kind === 'input') {
-      return inPorts[from.pin] || "1'b0";
+      const p = inPorts[from.pin];
+      if (!p) return zeroLit;
+      if (p.width === 1 && expectedWidth > 1) return `{${expectedWidth}{${p.name}}}`;
+      return p.name;
     }
     if (from.kind === 'node') {
       const srcNode = nodeById.get(from.nodeId);
-      if (!srcNode) return "1'b0";
-      if (srcNode.type === 'CONST_0') return "1'b0";
-      if (srcNode.type === 'CONST_1') return "1'b1";
+      if (!srcNode) return zeroLit;
+      if (srcNode.type === 'CONST_0') return zeroLit;
+      if (srcNode.type === 'CONST_1') return oneLit;
       const tag = nodeTag.get(srcNode.id);
-      return `w_${tag}_o${from.pin}`;
+      const srcWidths = getNodeOutWidths(srcNode);
+      const srcW = srcWidths[from.pin] || 1;
+      const sym = `w_${tag}_o${from.pin}`;
+      if (srcW === 1 && expectedWidth > 1) return `{${expectedWidth}{${sym}}}`;
+      return sym;
     }
-    return "1'b0";
+    return zeroLit;
   };
 
   // Declare internal wires for every non-constant node output
@@ -183,9 +219,9 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
   for (const node of circuit.nodes) {
     if (node.type === 'CONST_0' || node.type === 'CONST_1') continue;
     const tag = nodeTag.get(node.id);
-    const outCount = getNodeOutCount(node);
-    for (let p = 0; p < outCount; p++) {
-      wireDecls.push(`  wire w_${tag}_o${p};`);
+    const outWidths = getNodeOutWidths(node);
+    for (let p = 0; p < outWidths.length; p++) {
+      wireDecls.push(`  wire ${fmtWidthPrefix(outWidths[p])}w_${tag}_o${p};`);
     }
   }
   if (wireDecls.length > 0) {
@@ -199,23 +235,86 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
     if (node.type === 'CONST_0' || node.type === 'CONST_1') continue;
     const tag = nodeTag.get(node.id);
     if (node.type === 'SW') {
-      const inFlow = resolveExpr(nodeInputWire.get(`${node.id}:0`));
-      const gate = resolveExpr(nodeInputWire.get(`${node.id}:1`));
+      const inFlow = resolveExpr(nodeInputWire.get(`${node.id}:0`), 1);
+      const gate = resolveExpr(nodeInputWire.get(`${node.id}:1`), 1);
       instLines.push(`  sg_nmos_sw u_${tag} (.in_flow(${inFlow}), .gate(${gate}), .out_flow(w_${tag}_o0));`);
     } else if (node.type === 'PULL') {
-      const drainCtl = resolveExpr(nodeInputWire.get(`${node.id}:0`));
+      const drainCtl = resolveExpr(nodeInputWire.get(`${node.id}:0`), 1);
       instLines.push(`  sg_pullup  u_${tag} (.drain_ctl(${drainCtl}), .out_sig(w_${tag}_o0));`);
+    } else if (node.type === 'SPLIT4') {
+      const busExpr = resolveExpr(nodeInputWire.get(`${node.id}:0`), 4);
+      for (let b = 0; b < 4; b++) {
+        instLines.push(`  assign w_${tag}_o${b} = ${busExpr}[${b}];`);
+      }
+    } else if (node.type === 'JOIN4') {
+      const b0 = resolveExpr(nodeInputWire.get(`${node.id}:0`), 1);
+      const b1 = resolveExpr(nodeInputWire.get(`${node.id}:1`), 1);
+      const b2 = resolveExpr(nodeInputWire.get(`${node.id}:2`), 1);
+      const b3 = resolveExpr(nodeInputWire.get(`${node.id}:3`), 1);
+      instLines.push(`  assign w_${tag}_o0 = {${b3}, ${b2}, ${b1}, ${b0}};`);
+    } else if (node.type === 'SPLIT8') {
+      const busExpr = resolveExpr(nodeInputWire.get(`${node.id}:0`), 8);
+      instLines.push(`  assign w_${tag}_o0 = ${busExpr}[3:0];`);
+      instLines.push(`  assign w_${tag}_o1 = ${busExpr}[7:4];`);
+    } else if (node.type === 'JOIN8') {
+      const loExpr = resolveExpr(nodeInputWire.get(`${node.id}:0`), 4);
+      const hiExpr = resolveExpr(nodeInputWire.get(`${node.id}:1`), 4);
+      instLines.push(`  assign w_${tag}_o0 = {${hiExpr}, ${loExpr}};`);
     } else {
       const childMod = sanitizeIdent(node.type, 'CHIP');
       const childPorts = portTable.get(childMod);
       if (!childPorts) continue;
+      const def = workingChips[node.type];
+      const viewPorts = def ? getChipPorts(def, circuitBusMode) : null;
+      const usesBusAdapterView =
+        circuitBusMode &&
+        viewPorts &&
+        (viewPorts.inputs.length !== childPorts.inPorts.length ||
+          viewPorts.outputs.length !== childPorts.outPorts.length);
+
       const conns = [];
-      for (let i = 0; i < childPorts.inPorts.length; i++) {
-        const expr = resolveExpr(nodeInputWire.get(`${node.id}:${i}`));
-        conns.push(`.${childPorts.inPorts[i]}(${expr})`);
-      }
-      for (let o = 0; o < childPorts.outPorts.length; o++) {
-        conns.push(`.${childPorts.outPorts[o]}(w_${tag}_o${o})`);
+      if (usesBusAdapterView) {
+        // Expand bus view pins bit-by-bit onto the child module's 1-bit Verilog ports
+        let flatInIdx = 0;
+        for (let vp = 0; vp < viewPorts.inputs.length; vp++) {
+          const w = parsePinSpec(viewPorts.inputs[vp]).width;
+          const expr = resolveExpr(nodeInputWire.get(`${node.id}:${vp}`), w);
+          if (w === 1) {
+            const cp = childPorts.inPorts[flatInIdx++];
+            if (cp) conns.push(`.${cp.name}(${expr})`);
+          } else {
+            for (let b = 0; b < w; b++) {
+              const cp = childPorts.inPorts[flatInIdx++];
+              if (cp) {
+                const bitExpr = expr.includes("'") ? `${expr.endsWith('1') ? "1'b1" : "1'b0"}` : `${expr}[${b}]`;
+                conns.push(`.${cp.name}(${bitExpr})`);
+              }
+            }
+          }
+        }
+        let flatOutIdx = 0;
+        for (let vp = 0; vp < viewPorts.outputs.length; vp++) {
+          const w = parsePinSpec(viewPorts.outputs[vp]).width;
+          if (w === 1) {
+            const cp = childPorts.outPorts[flatOutIdx++];
+            if (cp) conns.push(`.${cp.name}(w_${tag}_o${vp})`);
+          } else {
+            for (let b = 0; b < w; b++) {
+              const cp = childPorts.outPorts[flatOutIdx++];
+              if (cp) conns.push(`.${cp.name}(w_${tag}_o${vp}[${b}])`);
+            }
+          }
+        }
+      } else {
+        for (let i = 0; i < childPorts.inPorts.length; i++) {
+          const cp = childPorts.inPorts[i];
+          const expr = resolveExpr(nodeInputWire.get(`${node.id}:${i}`), cp.width);
+          conns.push(`.${cp.name}(${expr})`);
+        }
+        for (let o = 0; o < childPorts.outPorts.length; o++) {
+          const cp = childPorts.outPorts[o];
+          conns.push(`.${cp.name}(w_${tag}_o${o})`);
+        }
       }
       instLines.push(`  ${childMod} u_${tag} (${conns.join(', ')});`);
     }
@@ -227,8 +326,9 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
 
   // Emit output continuous assignments
   for (let i = 0; i < outPorts.length; i++) {
-    const expr = resolveExpr(extOutputWire.get(i));
-    lines.push(`  assign ${outPorts[i]} = ${expr};`);
+    const op = outPorts[i];
+    const expr = resolveExpr(extOutputWire.get(i), op.width);
+    lines.push(`  assign ${op.name} = ${expr};`);
   }
 
   lines.push('endmodule');
@@ -242,7 +342,7 @@ function emitCircuitModule(modName, circuit, portTable, workingChips, { commentL
  */
 export function exportSiliconBlueprint(
   customChips = {},
-  { romCircuit = null, romRows = null, stageTitle = '' } = {}
+  { romCircuit = null, romRows = null, romArch = null, stageTitle = '' } = {}
 ) {
   const workingChips = {};
   for (const [id, def] of Object.entries(customChips || {})) {
@@ -253,12 +353,16 @@ export function exportSiliconBlueprint(
 
   // Normalize optional live assembly ROM rows into a Map<addr, { part }>
   const normalizedRomMap = normalizeRomRows(romRows);
+  const isArk8Rom =
+    romArch === 'ark8' ||
+    (normalizedRomMap && Array.from(normalizedRomMap.values()).some((e) => e.part?.word16 !== undefined));
+  const romModName = isArk8Rom ? 'ARK8_PROGRAM_ROM' : 'ARK4_PROGRAM_ROM';
 
   // Lazily build canonical fallback chips ONLY to fill any missing referenced dependency
   let canonicalFallback = null;
   const getFallback = () => {
     if (!canonicalFallback) {
-      canonicalFallback = provisionStandardChips({}, { includeChapter2Hardware: true, provisioned: true });
+      canonicalFallback = provisionStandardChips({}, { includeChapter3Hardware: true, provisioned: true });
     }
     return canonicalFallback;
   };
@@ -267,21 +371,34 @@ export function exportSiliconBlueprint(
   let liveRomCircuit = romCircuit || null;
   let fuseMatrix = null;
   if (!liveRomCircuit && normalizedRomMap) {
-    // Ensure ROM dependencies exist on workingChips without overwriting player chips
     const fb = getFallback();
-    for (const req of ['NAND', 'NOT', 'AND', 'OR', 'DEC_2TO4', 'ASM_ENC']) {
+    const reqs = isArk8Rom
+      ? ['NAND', 'NOT', 'AND', 'OR', 'DEC_2TO4', 'ASM_ENC', 'ASM_ENC8']
+      : ['NAND', 'NOT', 'AND', 'OR', 'DEC_2TO4', 'ASM_ENC'];
+    for (const req of reqs) {
       if (!workingChips[req] && fb[req]) {
         workingChips[req] = fb[req];
       }
     }
-    let hwForEnc = null;
-    try {
-      hwForEnc = compileRomHardware(workingChips);
-    } catch {
-      hwForEnc = null;
+    if (isArk8Rom) {
+      let hw8 = null;
+      try {
+        hw8 = compileArk8Hardware(workingChips);
+      } catch {
+        hw8 = null;
+      }
+      liveRomCircuit = buildArk8RomCircuit(normalizedRomMap, hw8);
+      fuseMatrix = getArk8RomFuseMatrix(normalizedRomMap, hw8);
+    } else {
+      let hwForEnc = null;
+      try {
+        hwForEnc = compileRomHardware(workingChips);
+      } catch {
+        hwForEnc = null;
+      }
+      liveRomCircuit = buildProgrammableRomCircuit(normalizedRomMap, hwForEnc);
+      fuseMatrix = getRomFuseMatrix(normalizedRomMap, hwForEnc);
     }
-    liveRomCircuit = buildProgrammableRomCircuit(normalizedRomMap, hwForEnc);
-    fuseMatrix = getRomFuseMatrix(normalizedRomMap, hwForEnc);
   }
 
   // Transitively resolve all missing referenced sub-chips (including Stage 00-C NAND!)
@@ -348,16 +465,16 @@ export function exportSiliconBlueprint(
   }
   if (liveRomCircuit) {
     portTable.set(
-      'ARK4_PROGRAM_ROM',
+      romModName,
       buildModulePorts(liveRomCircuit.inputs || [], liveRomCircuit.outputs || [])
     );
   }
 
   // Compute physical Bill of Materials (BOM)
   const zeroM = { nandCount: 0, swCount: 0, pullCount: 0 };
-  const cpuDef = workingChips.ARK4_SYS || workingChips.ARK4_CORE || null;
+  const cpuDef = workingChips.ARK8_SYS || workingChips.ARK4_SYS || workingChips.ARK4_CORE || null;
   const cpuM = cpuDef?.circuit ? computeCircuitMetrics(cpuDef.circuit, workingChips) : zeroM;
-  const encDef = workingChips.ASM_ENC || null;
+  const encDef = workingChips.ASM_ENC8 || workingChips.ASM_ENC || null;
   const encM = encDef?.circuit ? computeCircuitMetrics(encDef.circuit, workingChips) : zeroM;
   const romM = liveRomCircuit
     ? computeCircuitMetrics(liveRomCircuit, workingChips)
@@ -404,8 +521,8 @@ export function exportSiliconBlueprint(
     '// SILICON GENESIS — Full Physical Silicon Netlist (IEEE 1364-2001 Verilog HDL)',
     ...(stageTitle ? [`// Stage / Target : ${stageTitle}`] : []),
     `// CPU Silicon    : ${cpuDef ? cpuDef.id : 'NONE'} (${stats.cpuNandCount} NAND = ${stats.cpuSwCount} MOSFET + ${stats.cpuPullCount} Pull-up Resistors)`,
-    `// Key Encoder    : ${encDef ? 'ASM_ENC' : 'NONE'} (${stats.encNandCount} NAND = ${stats.encSwCount} MOSFET + ${stats.encPullCount} Pull-up Resistors)`,
-    `// Program ROM    : ${liveRomCircuit ? 'ARK4_PROGRAM_ROM' : workingChips.ROM_4W ? 'ROM_4W' : 'NONE'} (${stats.romNandCount} NAND = ${stats.romSwCount} MOSFET + ${stats.romPullCount} Pull-up Resistors)`,
+    `// Key Encoder    : ${encDef ? encDef.id : 'NONE'} (${stats.encNandCount} NAND = ${stats.encSwCount} MOSFET + ${stats.encPullCount} Pull-up Resistors)`,
+    `// Program ROM    : ${liveRomCircuit ? romModName : workingChips.ROM_4W ? 'ROM_4W' : 'NONE'} (${stats.romNandCount} NAND = ${stats.romSwCount} MOSFET + ${stats.romPullCount} Pull-up Resistors)`,
     `// TOTAL SILICON  : ${stats.totalNandCount} NAND = ${stats.totalSwCount} MOSFET + ${stats.totalPullCount} Pull-up Resistors (${stats.moduleCount} Modules)`,
     '// ============================================================================',
     '',
@@ -462,7 +579,7 @@ export function exportSiliconBlueprint(
   // Emit optional live burned Mask ROM module
   if (liveRomCircuit) {
     const romComments = [
-      `ARK4_PROGRAM_ROM — Burned Mask ROM Matrix (${romM.nandCount} NAND = ${romM.swCount} MOSFET + ${romM.pullCount} Pull-up Resistors)`,
+      `${romModName} — Burned Mask ROM Matrix (${romM.nandCount} NAND = ${romM.swCount} MOSFET + ${romM.pullCount} Pull-up Resistors)`,
     ];
     if (fuseMatrix) {
       romComments.push(
@@ -470,12 +587,16 @@ export function exportSiliconBlueprint(
       );
       for (const r of fuseMatrix.rows) {
         if (!r.part) continue;
-        const immBits = `${r.imm[3]}${r.imm[2]}${r.imm[1]}${r.imm[0]}`;
-        romComments.push(`  [${r.addrBits}] addr ${r.addr}: ${r.part.name.padEnd(6, ' ')} -> ${r.i1}${r.i0}:${immBits}`);
+        if (isArk8Rom) {
+          romComments.push(`  [${r.addrBits}] addr ${r.addr}: ${r.part.name.padEnd(14, ' ')} -> ${r.part.hex16 || ''}`);
+        } else {
+          const immBits = `${r.imm[3]}${r.imm[2]}${r.imm[1]}${r.imm[0]}`;
+          romComments.push(`  [${r.addrBits}] addr ${r.addr}: ${r.part.name.padEnd(6, ' ')} -> ${r.i1}${r.i0}:${immBits}`);
+        }
       }
     }
     blocks.push(
-      emitCircuitModule('ARK4_PROGRAM_ROM', liveRomCircuit, portTable, workingChips, {
+      emitCircuitModule(romModName, liveRomCircuit, portTable, workingChips, {
         commentLines: romComments,
       })
     );

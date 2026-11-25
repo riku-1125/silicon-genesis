@@ -2,14 +2,19 @@
  * SILICON GENESIS — Main Application Orchestrator
  */
 
-import { STAGES, ACTS, getStageById } from './data/stages.js?v=37';
+import { STAGES, ACTS, getStageById } from './data/stages.js?v=38';
 import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
-} from './data/endings.js?v=37';
+  buildChapter3EndingSteps,
+} from './data/endings.js?v=38';
 import {
   PRIMITIVE_CHIPS,
   getChipDef,
+  getPinWidth,
+  getTotalPinBits,
+  packBusVector,
+  unpackBusVector,
   createEmptyCircuit,
   cloneCircuit,
   connectWire,
@@ -25,16 +30,18 @@ import {
   persistSaveData,
   resetSaveData,
   isChapter2Unlocked,
-} from './state/storage.js?v=37';
-import { sound } from './audio/sound.js?v=37';
-import { SceneCanvas } from './ui/sceneCanvas.js?v=37';
-import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=37';
-import { PhysicsLabCanvas } from './ui/physicsLab.js?v=37';
-import { AssemblyIdePanel } from './ui/assemblyIde.js?v=37';
-import { DialogueController } from './ui/dialogue.js?v=37';
-import { ModalManager } from './ui/modals.js?v=37';
-import { PrologueOverlay } from './ui/prologue.js?v=37';
-import { glossaryPopover } from './ui/glossaryPopover.js?v=37';
+  isChapter3Unlocked,
+} from './state/storage.js?v=38';
+import { sound } from './audio/sound.js?v=38';
+import { SceneCanvas } from './ui/sceneCanvas.js?v=38';
+import { WorkbenchCanvas } from './ui/workbenchCanvas.js?v=38';
+import { PhysicsLabCanvas } from './ui/physicsLab.js?v=38';
+import { AssemblyIdePanel } from './ui/assemblyIde.js?v=38';
+import { Ark8IdePanel } from './ui/ark8Ide.js?v=38';
+import { DialogueController } from './ui/dialogue.js?v=38';
+import { ModalManager } from './ui/modals.js?v=38';
+import { PrologueOverlay } from './ui/prologue.js?v=38';
+import { glossaryPopover } from './ui/glossaryPopover.js?v=38';
 
 class SiliconGenesisApp {
   constructor() {
@@ -77,6 +84,9 @@ class SiliconGenesisApp {
       onStartChapter2: () => {
         this.startChapter2();
       },
+      onStartChapter3: () => {
+        this.startChapter3();
+      },
       onReplayEnding1: () => {
         this._playChapterEnding(1, {
           endBtnLabel: 'タイトルへ戻る ▶',
@@ -89,14 +99,24 @@ class SiliconGenesisApp {
           onComplete: () => this.prologue.showTitle(this.save),
         });
       },
+      onReplayEnding3: () => {
+        this._playChapterEnding(3, {
+          endBtnLabel: 'タイトルへ戻る ▶',
+          onComplete: () => this.prologue.showTitle(this.save),
+        });
+      },
     });
     this.workbench = new WorkbenchCanvas(this.dom.workbenchCanvas, {
       onPlaceChip: (type, x, y) => this.placeChip(type, x, y),
       onGrabChip: () => sound.haptic(8),
       onMoveChip: (nodeId, x, y) => this.moveChip(nodeId, x, y),
       onConnectWire: (from, to) => this.addWire(from, to),
+      onWireError: (msg) => {
+        sound.playTestStep(0, false);
+        this.showToast(msg);
+      },
       onDeleteWire: (wireId) => this.deleteWire(wireId),
-      onToggleInput: (pinIdx) => this.toggleInputBit(pinIdx),
+      onToggleInput: (pinIdx, delta) => this.toggleInputBit(pinIdx, delta),
       onSelectionChange: (sel) => this.handleSelectionChange(sel),
     });
     this.physicsLab = new PhysicsLabCanvas(this.dom.physicsLabCanvas, {
@@ -165,6 +185,45 @@ class SiliconGenesisApp {
           this._pendingFinalClockResolve = null;
           resolve();
         }
+      },
+      onLiveState: ({ inputs, outputs, unstable }) => {
+        this.inputBits = inputs;
+        if (unstable) sound.playAlarm();
+        this.sceneCanvas.setState({
+          stage: this.stage,
+          inputs,
+          outputs,
+          cleared: this.save.clearedStages.includes(this.stage.id),
+          testing: this.isRunningTest,
+          unstable,
+        });
+      },
+    });
+    this.ark8Ide = new Ark8IdePanel(this.dom.assemblyIde, this.dom.paletteScroll, {
+      onSlotsChange: (slots) => {
+        if (!this.stage) return;
+        this.save.physicsDrafts[this.stage.id] = slots;
+        persistSaveData(this.save);
+      },
+      onSound: (kind) => {
+        if (kind === 'place') sound.playChipPlace();
+        else if (kind === 'clock') sound.playClockPulse();
+        else if (kind === 'error') sound.playTestStep(0, false);
+        else sound.playSwitch(true);
+      },
+      onInspectChip: (chipId) => {
+        const inspectChips = { ...this.save.customChips };
+        if (!inspectChips[chipId]) {
+          provisionStandardChips(inspectChips, { includeChapter3Hardware: true, provisioned: true });
+        }
+        this.modals.openChipInspector(chipId, inspectChips);
+      },
+      onExportSilicon: (payload) => {
+        this._openSiliconExportModal(payload);
+      },
+      onOpenSpec: () => {
+        const isCleared = this.stage ? this.save.clearedStages.includes(this.stage.id) : false;
+        this.modals.openSpec(this.stage, isCleared);
       },
       onLiveState: ({ inputs, outputs, unstable }) => {
         this.inputBits = inputs;
@@ -260,6 +319,12 @@ class SiliconGenesisApp {
         },
         onReplayEnding2: () => {
           this._playChapterEnding(2, {
+            endBtnLabel: '作業台へ戻る ▶',
+            onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
+          });
+        },
+        onReplayEnding3: () => {
+          this._playChapterEnding(3, {
             endBtnLabel: '作業台へ戻る ▶',
             onComplete: () => sound.setBgmTrack(this._getStageWorkBgm(this.stage)),
           });
@@ -374,7 +439,7 @@ class SiliconGenesisApp {
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
         endLabel:
-          this.stage.kind === 'assembly_program'
+          this._isAsmStage(this.stage)
             ? 'プログラムを組む ▶'
             : this.stage.mode === 'physics'
               ? '実験台へ ▶'
@@ -401,8 +466,8 @@ class SiliconGenesisApp {
       this.workbench.zoomBy(1.22);
     });
     this.dom.btnClearBoard.addEventListener('click', () => {
-      if (this.stage.kind === 'assembly_program') {
-        this.assemblyIde.clearAll();
+      if (this._isAsmStage(this.stage)) {
+        this._getActiveIde(this.stage).clearAll();
         sound.playDelete();
         return;
       }
@@ -423,7 +488,9 @@ class SiliconGenesisApp {
         danger: true,
         onConfirm: () => {
           this._pushUndo();
-          this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs);
+          this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs, {
+            busMode: Boolean(this.stage.busMode),
+          });
           sound.playDelete();
           this._afterCircuitEdit();
           this.showToast('作業台をクリアしました（↶ で元に戻せます）');
@@ -574,8 +641,16 @@ class SiliconGenesisApp {
     window.visualViewport?.addEventListener('resize', scheduleRefit);
   }
 
+  _isAsmStage(stage = this.stage) {
+    return stage?.kind === 'assembly_program' || stage?.kind === 'ark8_program';
+  }
+
+  _getActiveIde(stage = this.stage) {
+    return stage?.kind === 'ark8_program' ? this.ark8Ide : this.assemblyIde;
+  }
+
   _fitActiveCanvas() {
-    if (this.stage?.kind === 'assembly_program') {
+    if (this._isAsmStage(this.stage)) {
       return;
     }
     if (this.stage?.mode === 'physics') {
@@ -677,13 +752,17 @@ class SiliconGenesisApp {
       savedDraft.outputs.length === this.stage.outputs.length
     ) {
       this.circuit = cloneCircuit(savedDraft);
+      this.circuit.busMode = Boolean(this.stage.busMode);
     } else if (this.stage.initialCircuit) {
       this.circuit = cloneCircuit(this.stage.initialCircuit);
+      this.circuit.busMode = Boolean(this.stage.busMode);
     } else {
-      this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs);
+      this.circuit = createEmptyCircuit(this.stage.inputs, this.stage.outputs, {
+        busMode: Boolean(this.stage.busMode),
+      });
     }
 
-    this.inputBits = new Array(this.stage.inputs.length).fill(0);
+    this.inputBits = new Array(getTotalPinBits(this.stage.inputs)).fill(0);
 
     // Header badge & title
     const act = ACTS.find((a) => a.id === this.stage.act) || ACTS[0];
@@ -716,7 +795,7 @@ class SiliconGenesisApp {
         sceneKey: this.stage.scene,
         stageBadge: this.stage.isSandbox ? 'FREE LAB' : `${act.roman} · STAGE ${this.stage.code}`,
         endLabel:
-          this.stage.kind === 'assembly_program'
+          this._isAsmStage(this.stage)
             ? 'プログラムを組む ▶'
             : this.stage.mode === 'physics'
               ? '実験台へ ▶'
@@ -732,7 +811,7 @@ class SiliconGenesisApp {
       this.dialogue.showGoal(this.stage.plainGoal, 'hako', this.stage.incidentBrief || null);
     }
 
-    const isAssembly = this.stage.kind === 'assembly_program';
+    const isAssembly = this._isAsmStage(this.stage);
     const isPhysics = this.stage.mode === 'physics';
     const isPhysicsCanvas = isPhysics && !isAssembly;
 
@@ -752,7 +831,7 @@ class SiliconGenesisApp {
 
     if (isAssembly) {
       this.simulator = null;
-      this.assemblyIde.setStage(
+      this._getActiveIde(this.stage).setStage(
         this.stage,
         this.save.physicsDrafts?.[this.stage.id] || null,
         this.save.customChips
@@ -793,6 +872,7 @@ class SiliconGenesisApp {
 
   _getDefaultRunBtnLabel() {
     if (this.stage?.isSandbox) return '⚡ CLK脈動';
+    if (this.stage?.chapter === 3) return '▶ 実機テスト実行';
     if (this.stage?.chapter === 2) return '▶ 主任決裁・テスト実行';
     return '▶ テスト実行';
   }
@@ -829,6 +909,11 @@ class SiliconGenesisApp {
 
   _getAvailableChipIds() {
     const list = [...(this.stage.allowedPrimitives || ['NAND'])];
+    if (this.stage.busMode) {
+      for (const busId of ['SPLIT4', 'JOIN4', 'SPLIT8', 'JOIN8']) {
+        if (!list.includes(busId)) list.push(busId);
+      }
+    }
     const orderedCustomIds = STAGES.map((s) => s.rewardChip?.id).filter(Boolean);
 
     for (const cid of orderedCustomIds) {
@@ -907,9 +992,17 @@ class SiliconGenesisApp {
                 ? 'いつも1'
                 : id === 'CONST_0'
                   ? 'いつも0'
-                  : isProv
-                    ? `${def.nandCount}N·支給`
-                    : `${def.nandCount}N`;
+                  : id === 'SPLIT4'
+                    ? '4→1×4'
+                    : id === 'JOIN4'
+                      ? '1×4→4'
+                      : id === 'SPLIT8'
+                        ? '8→4×2'
+                        : id === 'JOIN8'
+                          ? '4×2→8'
+                          : isProv
+                            ? `${def.nandCount}N·支給`
+                            : `${def.nandCount}N`;
 
       const wrap = document.createElement('div');
       wrap.className = 'palette-chip-wrap';
@@ -1045,25 +1138,48 @@ class SiliconGenesisApp {
     this.placeChip(orig.type, orig.x + 24, orig.y + 32);
   }
 
-  toggleInputBit(pinIdx) {
-    this.inputBits[pinIdx] = this.inputBits[pinIdx] ? 0 : 1;
-    sound.playSwitch(Boolean(this.inputBits[pinIdx]));
+  toggleInputBit(pinIdx, delta = 1) {
+    const inputs = this.stage?.inputs || [];
+    if (pinIdx < 0 || pinIdx >= inputs.length) return;
+    const width = getPinWidth(inputs[pinIdx]);
+    if (width <= 1 && !this.stage?.busMode) {
+      this.inputBits[pinIdx] = this.inputBits[pinIdx] ? 0 : 1;
+      sound.playSwitch(Boolean(this.inputBits[pinIdx]));
+      this._evaluateLive();
+      return;
+    }
+
+    const vals = unpackBusVector(inputs, this.inputBits);
+    const cur = vals[pinIdx] || 0;
+    const next =
+      width <= 1
+        ? cur ? 0 : 1
+        : ((cur + (delta || 1)) % (1 << width) + (1 << width)) % (1 << width);
+    vals[pinIdx] = next;
+    this.inputBits = packBusVector(inputs, vals);
+    sound.playSwitch(next > 0);
     this._evaluateLive();
   }
 
   pulseClock() {
-    const clkIdx = this.stage.inputs.indexOf('CLK');
-    if (clkIdx < 0) return;
+    const inputs = this.stage?.inputs || [];
+    const clkPinIdx = inputs.indexOf('CLK');
+    if (clkPinIdx < 0) return;
+    let clkBitOffset = 0;
+    for (let i = 0; i < clkPinIdx; i++) {
+      clkBitOffset += getPinWidth(inputs[i]);
+    }
     sound.playClockPulse();
     // Clean rising-edge pulse: settle at 0 -> rise to 1 -> fall to 0
-    this.inputBits[clkIdx] = 0;
+    this.inputBits[clkBitOffset] = 0;
     this._evaluateLive();
-    this.inputBits[clkIdx] = 1;
+    this.inputBits[clkBitOffset] = 1;
     this._evaluateLive();
     this.workbench.triggerTestFlash();
+    const targetStageId = this.stage.id;
     setTimeout(() => {
-      if (this.stage.inputs[clkIdx] === 'CLK') {
-        this.inputBits[clkIdx] = 0;
+      if (this.stage?.id === targetStageId && this.stage.inputs[clkPinIdx] === 'CLK') {
+        this.inputBits[clkBitOffset] = 0;
         this._evaluateLive();
       }
     }, 180);
@@ -1175,6 +1291,10 @@ class SiliconGenesisApp {
   }
 
   _syncSceneCanvas() {
+    if (this._isAsmStage(this.stage)) {
+      this._getActiveIde(this.stage)?._notifyLiveState?.();
+      return;
+    }
     this.sceneCanvas.setState({
       stage: this.stage,
       inputs: this.inputBits,
@@ -1262,9 +1382,10 @@ class SiliconGenesisApp {
   }
 
   async _runPhysicsTestSuite({ skipFinalClockPause = false } = {}) {
-    const isAsm = this.stage.kind === 'assembly_program';
+    const isAsm = this._isAsmStage(this.stage);
+    const activeIde = isAsm ? this._getActiveIde(this.stage) : null;
     const evalResult = isAsm
-      ? this.assemblyIde.evaluateAssembly()
+      ? activeIde.evaluateAssembly()
       : this.physicsLab.evaluatePhysics();
     this.lastEvalResult = evalResult;
     if (!evalResult.results || evalResult.results.length === 0) {
@@ -1278,10 +1399,10 @@ class SiliconGenesisApp {
     this.dom.btnRunTest.disabled = true;
     this.dom.testProgressBar.classList.remove('hidden');
 
-    const prefix = isAsm ? '実機CPU実行' : '物理検証';
-    const stepDelay = evalResult.results.length > 5 ? 300 : 520;
+    const prefix = this.stage.kind === 'ark8_program' ? 'ARK-8実機実行' : isAsm ? '実機CPU実行' : '物理検証';
+    const stepDelay = evalResult.results.length > 16 ? 65 : evalResult.results.length > 5 ? 260 : 500;
 
-    // On Stage 24 (Grand Finale II), pause right before the final hatch-opening command (4番地: LDI 15)
+    // On Stage 24 (Grand Finale II), pause right before the final hatch-opening command (3番地: LDI 15)
     // on a first-time clear so the player personally delivers the final clock pulse!
     const shouldPauseBeforeFinalOpen =
       this.stage.isChapter2Finale &&
@@ -1295,7 +1416,7 @@ class SiliconGenesisApp {
       : evalResult.results.length;
 
     const showStep = (idxVal) => {
-      if (isAsm) this.assemblyIde.setTraceStep(idxVal);
+      if (isAsm) activeIde.setTraceStep(idxVal);
       else this.physicsLab.setControlBit(idxVal);
     };
 
@@ -1304,7 +1425,9 @@ class SiliconGenesisApp {
       const step = evalResult.results[i];
       this.dom.testProgressLabel.textContent = `${prefix} ${i + 1}/${evalResult.results.length}: ${step.label}`;
       showStep(step.input[0]);
-      sound.playTestStep(i, step.passed);
+      if (evalResult.results.length <= 16 || i % 3 === 0 || i === preLoopEnd - 1) {
+        sound.playTestStep(i % 8, step.passed);
+      }
       await new Promise((r) => setTimeout(r, stepDelay));
     }
 
@@ -1315,7 +1438,7 @@ class SiliconGenesisApp {
       const finalStep = evalResult.results[finalIdx];
       const asmRows = this.stage?.asmProgramSpec?.rows || [];
       const finalAddr = asmRows.length > 0 ? asmRows[asmRows.length - 1].addr : 3;
-      if (isAsm) this.assemblyIde.setAwaitingFinalClock(true);
+      if (isAsm) activeIde.setAwaitingFinalClock(true);
       else this.physicsLab.setAwaitingFinalClock(true);
       this.dom.testProgressLabel.textContent =
         `⚡ カウント0達成・${finalAddr}番地到達！ 最終開門クロックを入力せよ！`;
@@ -1328,7 +1451,7 @@ class SiliconGenesisApp {
       });
       if (token !== this._testRunToken) return;
 
-      if (isAsm) this.assemblyIde.setAwaitingFinalClock(false);
+      if (isAsm) activeIde.setAwaitingFinalClock(false);
       else this.physicsLab.setAwaitingFinalClock(false);
       this.dom.btnRunTest.disabled = true;
       this.dom.btnRunTest.classList.remove('final-clock-ready');
@@ -1422,17 +1545,20 @@ class SiliconGenesisApp {
     this._syncSceneCanvas();
 
     // 4. Play post-clear revelation dialogue (or full-screen Chapter Ending!), then open Chip Forging ceremony!
-    sound.setBgmTrack(this.stage.isFinale ? 'finale' : 'story');
+    sound.setBgmTrack(this.stage.isFinale || this.stage.isChapter2Finale || this.stage.isChapter3Finale ? 'finale' : 'story');
     const nextStage = this._getNextStage();
     const isCh1Finale = this.stage.id === 'stage_17';
     const isCh2Finale = this.stage.id === 'stage_24';
+    const isCh3Finale = this.stage.id === 'stage_42';
     const journeyStats = this._collectEndingStats(metrics);
 
     const canExportOnVictory =
       isCh1Finale ||
       isCh2Finale ||
+      isCh3Finale ||
       this.stage.id === 'stage_21' ||
-      this.stage.kind === 'assembly_program';
+      this.stage.id === 'stage_40' ||
+      this._isAsmStage(this.stage);
 
     const openCeremony = () => {
       this.modals.openVictory(this.stage, chipDef, metrics, Boolean(nextStage), {
@@ -1445,9 +1571,9 @@ class SiliconGenesisApp {
               })
           : null,
         onReplayEnding:
-          isCh1Finale || isCh2Finale
+          isCh1Finale || isCh2Finale || isCh3Finale
             ? () =>
-                this._playChapterEnding(isCh2Finale ? 2 : 1, {
+                this._playChapterEnding(isCh3Finale ? 3 : isCh2Finale ? 2 : 1, {
                   endBtnLabel: '達成レコードへ戻る ▶',
                   onComplete: () => openCeremony(),
                 })
@@ -1481,7 +1607,14 @@ class SiliconGenesisApp {
     } else if (isCh2Finale) {
       this.dialogue.showGoal(`☀ 第二章完結：${this.stage.revealedTitle}`, 'hako');
       this._playChapterEnding(2, {
-        endBtnLabel: 'グランドフィナーレ認定証へ ▶',
+        endBtnLabel: '第二章・達成認定証へ ▶',
+        metrics,
+        onComplete: openCeremony,
+      });
+    } else if (isCh3Finale) {
+      this.dialogue.showGoal(`📡 第三章完結：${this.stage.revealedTitle}`, 'hako');
+      this._playChapterEnding(3, {
+        endBtnLabel: '第三章・達成認定証へ ▶',
         metrics,
         onComplete: openCeremony,
       });
@@ -1491,7 +1624,7 @@ class SiliconGenesisApp {
         fallbackGoal: `✔ クリア済：${this.stage.revealedTitle}`,
         sceneKey: this.stage.scene,
         stageBadge: `✔ CLEAR · ${act.roman} ${this.stage.code}`,
-        endLabel: this.stage.kind === 'assembly_program' ? '実行結果へ ▶' : 'チップ登録へ ▶',
+        endLabel: this._isAsmStage(this.stage) ? '実行結果へ ▶' : 'チップ登録へ ▶',
         onComplete: openCeremony,
       });
     } else {
@@ -1516,6 +1649,7 @@ class SiliconGenesisApp {
     customChips = null,
     romCircuit = null,
     romRows = null,
+    romArch = 'auto',
     stageTitle = '',
     onBack = null,
     backLabel = '◀ 戻る',
@@ -1523,14 +1657,16 @@ class SiliconGenesisApp {
     let exportChips = customChips ? { ...customChips } : { ...(this.save?.customChips || {}) };
     let finalRomCircuit = romCircuit;
     let finalRomRows = romRows;
+    let finalRomArch = romArch;
     let finalStageTitle = stageTitle;
 
-    if (this.stage?.kind === 'assembly_program' && !finalRomRows) {
-      const asmPayload = this.assemblyIde?.getExportPayload?.();
+    if (this._isAsmStage(this.stage) && !finalRomRows) {
+      const asmPayload = this._getActiveIde(this.stage)?.getExportPayload?.();
       if (asmPayload) {
         exportChips = asmPayload.customChips || exportChips;
         finalRomCircuit = asmPayload.romCircuit ?? finalRomCircuit;
         finalRomRows = asmPayload.romRows ?? finalRomRows;
+        finalRomArch = asmPayload.romArch || finalRomArch;
         finalStageTitle = finalStageTitle || asmPayload.stageTitle || '';
       }
     }
@@ -1538,6 +1674,7 @@ class SiliconGenesisApp {
     this.modals.openSiliconExport(exportChips, {
       romCircuit: finalRomCircuit,
       romRows: finalRomRows,
+      romArch: finalRomArch,
       stageTitle:
         finalStageTitle ||
         (this.stage ? `STAGE ${this.stage.code} ${this.stage.revealedTitle || this.stage.title}` : ''),
@@ -1555,6 +1692,9 @@ class SiliconGenesisApp {
       : null;
     const ark4SysMetrics = chips.ARK4_SYS?.circuit
       ? computeCircuitMetrics(chips.ARK4_SYS.circuit, chips)
+      : null;
+    const ark8SysMetrics = chips.ARK8_SYS?.circuit
+      ? computeCircuitMetrics(chips.ARK8_SYS.circuit, chips)
       : null;
     const ark4NandCount =
       this.save?.bestNandCounts?.stage_17 ??
@@ -1586,6 +1726,22 @@ class SiliconGenesisApp {
       chips.ARK4_SYS?.pullCount ??
       (this.stage?.id === 'stage_24' ? latestMetrics?.pullCount : null) ??
       ark4SysNandCount;
+    const ark8SysNandCount =
+      ark8SysMetrics?.nandCount ??
+      chips.ARK8_SYS?.nandCount ??
+      this.save?.bestNandCounts?.stage_40 ??
+      (this.stage?.id === 'stage_42' ? latestMetrics?.nandCount : null) ??
+      7403;
+    const ark8SysSwCount =
+      ark8SysMetrics?.swCount ??
+      chips.ARK8_SYS?.swCount ??
+      (this.stage?.id === 'stage_42' ? latestMetrics?.swCount : null) ??
+      ark8SysNandCount * 2;
+    const ark8SysPullCount =
+      ark8SysMetrics?.pullCount ??
+      chips.ARK8_SYS?.pullCount ??
+      (this.stage?.id === 'stage_42' ? latestMetrics?.pullCount : null) ??
+      ark8SysNandCount;
     return {
       ark4NandCount,
       ark4SwCount,
@@ -1593,6 +1749,9 @@ class SiliconGenesisApp {
       ark4SysNandCount,
       ark4SysSwCount,
       ark4SysPullCount,
+      ark8SysNandCount,
+      ark8SysSwCount,
+      ark8SysPullCount,
       forgedChipCount: Math.max(forgedChipCount, 1),
       clearedCount: (this.save?.clearedStages || []).length,
     };
@@ -1601,7 +1760,11 @@ class SiliconGenesisApp {
   _playChapterEnding(chapterNum, { endBtnLabel = '次へ ▶', metrics = null, onComplete = null } = {}) {
     const stats = this._collectEndingStats(metrics);
     const steps =
-      chapterNum === 2 ? buildChapter2EndingSteps(stats) : buildChapter1EndingSteps(stats);
+      chapterNum === 3
+        ? buildChapter3EndingSteps(stats)
+        : chapterNum === 2
+          ? buildChapter2EndingSteps(stats)
+          : buildChapter1EndingSteps(stats);
     this.dialogue.close();
     this.prologue.playEnding(steps, {
       endBtnLabel,
@@ -1610,7 +1773,7 @@ class SiliconGenesisApp {
   }
 
   // ===========================================================================
-  // CHAPTER 2 LAUNCH (UNLOCKED UPON CLEARING CHAPTER 1 / STAGE 17)
+  // CHAPTER 2 & 3 LAUNCHERS
   // ===========================================================================
   startChapter2() {
     if (!isChapter2Unlocked(this.save)) {
@@ -1633,19 +1796,60 @@ class SiliconGenesisApp {
     requestAnimationFrame(() => this._fitActiveCanvas());
   }
 
+  startChapter3() {
+    if (!isChapter3Unlocked(this.save)) {
+      sound.playSwitch(false);
+      this.showToast('第二章（STAGE 26：地上大ハッチ開門）をクリアすると第三章が解放されます！');
+      return;
+    }
+    this._ensureChipsForChapter3();
+    const ch3Stages = STAGES.filter((s) => s.chapter === 3);
+    const clearedSet = new Set(this.save.clearedStages || []);
+    const curIsCh3 = ch3Stages.some((s) => s.id === this.save.currentStageId);
+    const firstUnclearedCh3 = ch3Stages.find((s) => !clearedSet.has(s.id));
+    const targetId = curIsCh3
+      ? this.save.currentStageId
+      : firstUnclearedCh3
+        ? firstUnclearedCh3.id
+        : 'stage_27';
+
+    this.loadStage(targetId, { autoIntro: true });
+    requestAnimationFrame(() => this._fitActiveCanvas());
+  }
+
   _ensureChapter1ChipsForChapter2() {
     this.save.seenPrologue = true;
     this.save.chapter2Unlocked = true;
 
-    // Provision standard working circuits for any Chapter 1 modules the player has not yet forged,
-    // marking them with `provisioned: true` while keeping Chapter 1 stages uncleared until solved!
     provisionStandardChips(this.save.customChips, {
       includeChapter2Hardware: false,
       provisioned: true,
     });
 
-    const ch1Stages = STAGES.filter((s) => s.chapter !== 2);
+    const ch1Stages = STAGES.filter((s) => (s.chapter || 1) === 1);
     for (const st of ch1Stages) {
+      for (const cid of st.codexUnlock || []) {
+        if (!this.save.unlockedCodex.includes(cid)) {
+          this.save.unlockedCodex.push(cid);
+        }
+      }
+    }
+
+    persistSaveData(this.save);
+  }
+
+  _ensureChipsForChapter3() {
+    this.save.seenPrologue = true;
+    this.save.chapter2Unlocked = true;
+    this.save.chapter3Unlocked = true;
+
+    provisionStandardChips(this.save.customChips, {
+      includeChapter2Hardware: true,
+      provisioned: true,
+    });
+
+    const prevStages = STAGES.filter((s) => (s.chapter || 1) <= 2);
+    for (const st of prevStages) {
       for (const cid of st.codexUnlock || []) {
         if (!this.save.unlockedCodex.includes(cid)) {
           this.save.unlockedCodex.push(cid);
@@ -1676,7 +1880,7 @@ class SiliconGenesisApp {
         }
       });
       navigator.serviceWorker
-        .register('./sw.js?v=37', { updateViaCache: 'none' })
+        .register('./sw.js?v=38', { updateViaCache: 'none' })
         .then((reg) => reg.update().catch(() => {}))
         .catch(() => {});
     }

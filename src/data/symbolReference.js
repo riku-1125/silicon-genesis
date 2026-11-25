@@ -33,8 +33,64 @@ export const SYMBOL_CATALOG = [
     key: 'JNZ',
     tokens: ['JNZ'],
     en: 'Jump if Not Zero（0でなければジャンプ）',
-    ja: 'もし今の ACC が 0 でない（Z=0）なら指定番地へ飛ぶ。0（Z=1）になったら飛ばず次の番地へ進む（ACCは変えない）',
+    ja: 'もし今の値が 0 でない（Z=0）なら指定番地へ飛ぶ。0（Z=1）になったら飛ばず次の番地へ進む',
     category: 'opcode',
+  },
+  {
+    key: 'LOAD',
+    tokens: ['LOAD'],
+    en: 'Load from SRAM（メモリ読込）',
+    ja: 'SRAM の指定番地 [addr] から 1バイトをレジスタ Rd へ読み込む（第3章・機械語 100）',
+    category: 'opcode',
+  },
+  {
+    key: 'STOR',
+    tokens: ['STOR', 'STORE'],
+    en: 'Store to SRAM（メモリ書込）',
+    ja: 'レジスタ Rs の 1バイトを SRAM の指定番地 [addr] へ書き込む（第3章・機械語 101）',
+    category: 'opcode',
+  },
+  {
+    key: 'ADDI',
+    tokens: ['ADDI'],
+    en: 'Add Immediate（即値加算）',
+    ja: 'レジスタ Rd に即値 IMM（0〜255）を直接足して Rd へ保存する（第3章・機械語 110）',
+    category: 'opcode',
+  },
+  {
+    key: 'HALT',
+    tokens: ['HALT'],
+    en: 'Halt CPU（CPU停止）',
+    ja: 'PC の更新を止めてプログラムを安全に完了させる命令（第3章・機械語 111）',
+    category: 'opcode',
+  },
+  {
+    key: 'RST',
+    tokens: ['RST'],
+    en: 'Reset（物理リセット線）',
+    ja: '1 にしてクロックを打つとレジスタや PC を一瞬で 0 へ初期化するハードウェアリセット端子',
+    category: 'signal',
+  },
+  {
+    key: 'RD / RS',
+    tokens: ['RD0', 'RD1', 'RS0', 'RS1', 'WA0', 'RA0', 'RB0'],
+    en: 'Destination / Source Register（書込先・参照元レジスタ選択）',
+    ja: '4本の8bit汎用レジスタ（R0〜R3）のどれを使うかを選ぶ2ビット番号',
+    category: 'signal',
+  },
+  {
+    key: 'MEM_WE / REG_WE',
+    tokens: ['MEM_WE', 'REG_WE', 'ALU_B'],
+    en: 'Memory / Register Write Enable（書込許可＆入力切替）',
+    ja: 'REG_WE=1 でレジスタ書込、MEM_WE=1 で SRAM 書込、ALU_B=1 で ALU 右入力を IMM に切替',
+    category: 'signal',
+  },
+  {
+    key: 'SPL / JON',
+    tokens: ['SPLIT4', 'JOIN4', 'SPLIT8', 'JOIN8', 'SPL4', 'JON4', 'SPL8', 'JON8'],
+    en: 'Bus Splitter / Joiner（物理リボンコネクタ）',
+    ja: '4本・8本のリボン束線をほどいたり束ねたりするゲート0個の物理コネクタ',
+    category: 'signal',
   },
   {
     key: 'NOP',
@@ -260,6 +316,17 @@ export const ARK4_ISA_TABLE = [
   },
 ];
 
+export const ARK8_ISA_TABLE = [
+  { code: '000', op: 'LDI Rd, n', reading: 'エルディーアイ', full: 'Load Immediate', meaning: '8bit即値 n（0〜255）をレジスタ Rd へ直接代入', pins: 'WD=01, REG_WE=1' },
+  { code: '001', op: 'ADD Rd, Rs', reading: 'アド', full: 'Add Registers', meaning: 'Rd ← Rd + Rs（レジスタ同士の8bit加算）', pins: 'WD=00, REG_WE=1' },
+  { code: '010', op: 'SUB Rd, Rs', reading: 'サブ', full: 'Subtract Registers', meaning: 'Rd ← Rd − Rs（レジスタ同士の8bit減算）', pins: 'SUB=1, REG_WE=1' },
+  { code: '011', op: 'JNZ Rd, addr', reading: 'ジェイエヌゼット', full: 'Jump if Not Zero', meaning: 'Rd ≠ 0 なら addr 番地へジャンプ（0なら通過）', pins: 'BR=1, REG_WE=0' },
+  { code: '100', op: 'LOAD Rd, [a]', reading: 'ロード', full: 'Load from SRAM', meaning: 'SRAM の a 番地（0〜15）から Rd へ 1バイト読込', pins: 'WD=10, REG_WE=1' },
+  { code: '101', op: 'STOR Rs, [a]', reading: 'ストア', full: 'Store to SRAM', meaning: 'Rs の 1バイトを SRAM の a 番地（0〜15）へ書込', pins: 'MEM_WE=1' },
+  { code: '110', op: 'ADDI Rd, n', reading: 'アドアイ', full: 'Add Immediate', meaning: 'Rd ← Rd + n（レジスタに即値 n を加算）', pins: 'ALU_B=1, REG_WE=1' },
+  { code: '111', op: 'HALT', reading: 'ハルト', full: 'Halt CPU', meaning: 'PC を停止させてプログラムを安全に完了する', pins: 'HALT=1' },
+];
+
 /**
  * Collects all relevant symbol/abbreviation definitions for the given stage
  * so the Spec modal always explains every cryptic name on screen!
@@ -306,6 +373,7 @@ export function getStageSymbolReferences(stage) {
  */
 export function stageUsesIsaTable(stage) {
   if (!stage) return false;
+  if (stageUsesArk8IsaTable(stage)) return false;
   return (
     stage.kind === 'assembly_program' ||
     stage.id === 'stage_17' ||
@@ -313,5 +381,18 @@ export function stageUsesIsaTable(stage) {
     stage.id === 'stage_21' ||
     stage.id === 'stage_asm_enc' ||
     stage.id === 'stage_rom_4w'
+  );
+}
+
+/**
+ * Whether this stage involves the Chapter 3 ARK-8 8-instruction set (LDI..HALT).
+ */
+export function stageUsesArk8IsaTable(stage) {
+  if (!stage) return false;
+  return (
+    stage.kind === 'ark8_program' ||
+    stage.id === 'stage_38' ||
+    stage.id === 'stage_39' ||
+    stage.id === 'stage_40'
   );
 }

@@ -19,6 +19,12 @@ function formatStats(stats = {}) {
     Number.isFinite(stats.ark4SysSwCount) && stats.ark4SysSwCount > 0 ? stats.ark4SysSwCount : ark4SysNand * 2;
   const ark4SysPull =
     Number.isFinite(stats.ark4SysPullCount) && stats.ark4SysPullCount > 0 ? stats.ark4SysPullCount : ark4SysNand;
+  const ark8SysNand =
+    Number.isFinite(stats.ark8SysNandCount) && stats.ark8SysNandCount > 0 ? stats.ark8SysNandCount : 7403;
+  const ark8SysTr =
+    Number.isFinite(stats.ark8SysSwCount) && stats.ark8SysSwCount > 0 ? stats.ark8SysSwCount : ark8SysNand * 2;
+  const ark8SysPull =
+    Number.isFinite(stats.ark8SysPullCount) && stats.ark8SysPullCount > 0 ? stats.ark8SysPullCount : ark8SysNand;
   const forgedChips = Number.isFinite(stats.forgedChipCount) && stats.forgedChipCount > 0 ? stats.forgedChipCount : 18;
   const clearedCount = Number.isFinite(stats.clearedCount) && stats.clearedCount > 0 ? stats.clearedCount : 20;
   return {
@@ -28,6 +34,9 @@ function formatStats(stats = {}) {
     ark4SysNand,
     ark4SysTr,
     ark4SysPull,
+    ark8SysNand,
+    ark8SysTr,
+    ark8SysPull,
     forgedChips,
     clearedCount,
   };
@@ -331,16 +340,143 @@ export function buildChapter2EndingSteps(rawStats = {}) {
     {
       scene: './assets/scene_ending_bluesky.jpg',
       canvasScene: 'fx_bluesky_breeze',
-      dateline: 'SILICON GENESIS // ALL CHAPTERS COMPLETE',
+      dateline: 'CHAPTER II COMPLETE // NEXT: 記憶の大地',
       mood: 'bluesky',
       sfx: 'powerup',
       chapterCard: {
-        roman: 'SILICON GENESIS · FIN',
-        title: '砂とスイッチから、青空へ',
-        sub: `全ミッション完結 · 自作CPU ARK4_SYS (${s.ark4SysNand} NAND / MOSFET ${s.ark4SysTr}個＋抵抗 ${s.ark4SysPull}本)`,
+        roman: 'CHAPTER II · COMPLETE',
+        title: '青空への帰還 ── 完結',
+        sub: `解放：第三章「記憶の大地」（STAGE 27〜42）· ARK4_SYS (${s.ark4SysNand} NAND)`,
       },
       speaker: null,
-      text: `たった1粒の砂（シリコン）から MOSFET トランジスタと抵抗を生み出し、論理ゲート・加算器・記憶回路・480 NAND の自律CPU・命令エンコーダ・4ワード焼付マスクROM、そして外部回路ゼロの純粋4行 JNZ ループまで──1ミリの飛躍もなくあなた自身が創り上げた本物のシリコン計算機が、118人全員を青空の下へ導きました。\n【SILICON GENESIS】を最後までプレイしていただき、本当にありがとうございました！`,
+      text: `たった1粒の砂（シリコン）から鍛えた 480 NAND（実機 MOSFET ${s.ark4SysTr}個＋抵抗 ${s.ark4SysPull}本）の自律CPUと焼付ROMが、118人全員を42年ぶりの青空へ導いた。\nそして地上で合流したアーク3とともに、新しい街を築くための次なる跳躍──「書き換え可能な記憶（SRAM）」と「1バイト（8ビット）汎用計算機」の物語、第三章『記憶の大地』がいま幕を開ける！`,
+    },
+  ];
+}
+
+/**
+ * CHAPTER III GRAND ENDING — Clearing Stage 42 (`stage_42`, 真の汎用ループ乗算＆242人配給演算)
+ */
+export function buildChapter3EndingSteps(rawStats = {}) {
+  const s = formatStats(rawStats);
+  return [
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.01 16:40 // 開拓拠点ホライズン・中央管理棟',
+      mood: 'amber',
+      bgm: 'finale',
+      fx: 'shake',
+      sfx: 'powerup',
+      speaker: 'hako',
+      text: `『……全サイクル完了！ 君が組んだ8ビット汎用計算機【ARK8_SYS（${s.ark8SysNand} NAND／実機 MOSFET ${s.ark8SysTr}個＋プルアップ抵抗 ${s.ark8SysPull}本）】の SRAM[2] に、総配給数【242（11110010）】が正確に書き込まれ、HALT 信号で美しく停止したぞ！！』`,
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.01 16:42 // 242人分の新しい暮らし',
+      mood: 'bluesky',
+      sfx: 'powerup',
+      speaker: 'kai',
+      text: 'おいおい、マジかよ……！ 16ビットの命令コードから4本のレジスタと16バイトの書き換えSRAMを全部フル稼働させて、アーク7の118人と俺たちアーク3の124人──242人分の食料と電力の配分表が一瞬で出ちまったぜ！！',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.01 16:43 // もう15で止まらない',
+      mood: 'bluesky',
+      speaker: 'mina',
+      text: 'すごいよ、主任さん！！ つい数日前まで「15」までしか数えられなかったのに、いまは 242人全員の名前も、今日の太陽発電の余剰も、書き換えできる SRAM の棚にちゃんと覚えさせられるんだね……！！',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.01 16:45 // 1万個のMOSFETが刻んだ歴史',
+      mood: 'dawn',
+      speaker: 'kagari',
+      text: '4ビットから8ビット（1バイト）へ。固定配線のマスクROMから書き換え可能なSRAMへ。そして1本のACCから4本の汎用レジスタ（R0〜R3）と Load/Store 構造へ──君はたった数日間で、人類が1960年代から70年代にかけて駆け上がった半導体革命を、1ミリの飛躍もなく地上で再現してみせたんだ！',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.01 16:47 // 夕焼けの開拓地にて',
+      mood: 'dawn',
+      speaker: null,
+      text: '丘の上のソーラーパネルが茜色の光を反射し、風力タービンがゆっくりと回る。アーク7とアーク3の子どもたちが一緒に駆け回り、広場には焼きたてのパンと海風の匂いが満ちていた。',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.01 16:50 // カイからの問いかけ',
+      mood: 'dawn',
+      speaker: 'kai',
+      text: 'なあ主任、俺ずっと気になってたんだ。あんたが砂から組み上げてきたこの計算機──この先、どこまでデカくしていくつもりなんだ？',
+      choices: [
+        {
+          label: '「誰がどんなアプリを書いても安全に同時に動く、本物の『OS』まで作り上げます！」',
+          replySpeaker: 'kagari',
+          replyText: 'ほうっ……UNIX のような本物のカーネルとマルチタスクOSか！ 素晴らしい野望だ！ 今作った R0〜R3 と物理リセット線 RST、そして16ビット命令の空き枠は、まさにその日のために設計したんだよ！',
+        },
+        {
+          label: '「画面に文字を映して、242人みんながキーボードで使える道具にしたいです！」',
+          replySpeaker: 'mina',
+          replyText: 'わぁ、いいね！！ 2進数のランプだけじゃなく、本物の文字画面に「おはようございます」って出たら、子どもたちも絶対よろこぶよ！',
+        },
+        {
+          label: '「他のシェルターとも通信して、地上の仲間全員を1つのネットワークで繋ぎます！」',
+          replySpeaker: 'kai',
+          replyText: '最高だな！ アーク3とアーク7だけじゃ終わらせねえ。この広い青空の下、まだ眠ってる連中を全員起こしてやろうぜ！',
+        },
+      ],
+    },
+    {
+      scene: './assets/scene_surface_rover.jpg',
+      canvasScene: 'fx_beacon',
+      dateline: '2094.12.01 17:04 // 緊急受信：北方420km・未知の電波',
+      mood: 'alert',
+      fx: 'shake',
+      sfx: 'error',
+      speaker: 'hako',
+      text: '『……待て、全員静かにしろ！！ 長距離受信アンテナが、北方420kmから強烈なデジタル搬送波を捉えたぞ！ 識別コードは──【ARK-5（北方気象観測シェルター）】！！』',
+    },
+    {
+      scene: './assets/scene_surface_rover.jpg',
+      canvasScene: 'fx_beacon',
+      dateline: '2094.12.01 17:05 // 届いたのは「メッセージ」だけではなかった',
+      mood: 'alert',
+      speaker: 'kai',
+      text: 'アーク5が生きてたのか！？ すぐ解読してくれ、ハコ！ 何て送ってきてる！？',
+    },
+    {
+      scene: './assets/scene_surface_rover.jpg',
+      canvasScene: 'fx_beacon',
+      dateline: '2094.12.01 17:06 // ハーバード型の限界',
+      mood: 'alert',
+      speaker: 'hako',
+      text: '『テキストは「大気異常データあり・至急解読用プログラムを受信し実行せよ」──だがな主任、後ろに続いて送られてきているのは、生きた機械語プログラムそのものだ！\n今の ARK8_SYS は命令が固定の【マスクROM】側、データだけが【SRAM】側（ハーバード型）だ。外部から届いた新しいプログラムを、そのまま実行することができない！！』',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.01 17:08 // 真のノイマン型への扉',
+      mood: 'amber',
+      sfx: 'powerup',
+      speaker: 'kagari',
+      text: '……ついにその時が来たな、主任！\n「命令」と「データ」を同じ1本の大きな16ビットRAMに載せ、起動用ブートROMから外部プログラムをメモリへ読み込んで走らせる──真の【ストアードプログラム方式（16ビット統一ノイマン型）】へ進化する時だ！',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: 'CHAPTER III COMPLETE // ROAD TO ARK-OS',
+      mood: 'bluesky',
+      sfx: 'powerup',
+      chapterCard: {
+        roman: 'CHAPTER III · COMPLETE',
+        title: '記憶の大地 ── 完結',
+        sub: `自作8bit計算機 ARK8_SYS (${s.ark8SysNand} NAND / MOSFET ${s.ark8SysTr}個＋抵抗 ${s.ark8SysPull}本) 完成`,
+      },
+      speaker: null,
+      text: `バス束線・書き込み可能SRAM・リセット付8bitレジスタ・Z/C/Nフラグ付ALU・4本汎用レジスタ・16バイト主記憶・16ビット拡張命令対応【ARK8_SYS】──すべての部品を砂のMOSFETから1ミリの飛躍もなく組み上げ、242人の地上拠点「ホライズン」に計算の記憶が宿った。\nそして物語は次なる舞台、第4章『汎用計算機とブート（16bit真ノイマン型）』──やがて誕生する自作UNIX系OS『ARK-OS』への道へと続く！`,
     },
   ];
 }

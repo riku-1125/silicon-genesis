@@ -3,40 +3,58 @@
  */
 
 import { CHARACTERS } from '../data/characters.js';
-import { PROLOGUE_STEPS } from '../data/prologue.js?v=37';
-import { STAGES } from '../data/stages.js?v=37';
-import { collectTermIdsFromTexts } from '../data/glossary.js?v=37';
-import { isChapter1Cleared, isChapter2Unlocked } from '../state/storage.js?v=37';
-import { sound } from '../audio/sound.js?v=37';
+import { PROLOGUE_STEPS } from '../data/prologue.js?v=38';
+import { STAGES } from '../data/stages.js?v=38';
+import { collectTermIdsFromTexts } from '../data/glossary.js?v=38';
+import {
+  isChapter1Cleared,
+  isChapter2Unlocked,
+  isChapter2Cleared,
+  isChapter3Unlocked,
+  isChapter3Cleared,
+} from '../state/storage.js?v=38';
+import { sound } from '../audio/sound.js?v=38';
 import {
   mountRichText,
   updateRichTextProgress,
   bindGlossaryDelegation,
   glossaryPopover,
-} from './glossaryPopover.js?v=37';
-import { EndingSceneCanvas } from './endingCanvas.js?v=37';
+} from './glossaryPopover.js?v=38';
+import { EndingSceneCanvas } from './endingCanvas.js?v=38';
 
 export class PrologueOverlay {
   constructor(
     rootEl,
-    { onFinish, onContinue, onStartChapter2, onReplayEnding1, onReplayEnding2 }
+    {
+      onFinish,
+      onContinue,
+      onStartChapter2,
+      onStartChapter3,
+      onReplayEnding1,
+      onReplayEnding2,
+      onReplayEnding3,
+    }
   ) {
     this.root = rootEl;
     this.onFinish = onFinish;
     this.onContinue = onContinue;
     this.onStartChapter2 = onStartChapter2;
+    this.onStartChapter3 = onStartChapter3;
     this.onReplayEnding1 = onReplayEnding1;
     this.onReplayEnding2 = onReplayEnding2;
+    this.onReplayEnding3 = onReplayEnding3;
 
     this.titleScreen = rootEl.querySelector('#title-screen');
     this.storyScreen = rootEl.querySelector('#prologue-story');
     this.btnStartNew = rootEl.querySelector('#btn-title-start');
     this.btnContinue = rootEl.querySelector('#btn-title-continue');
     this.btnChapter2 = rootEl.querySelector('#btn-title-chapter2');
+    this.btnChapter3 = rootEl.querySelector('#btn-title-chapter3');
     this.btnReplayPrologue = rootEl.querySelector('#btn-title-prologue');
     this.endingReplaysWrap = rootEl.querySelector('#title-ending-replays');
     this.btnReplayEnd1 = rootEl.querySelector('#btn-title-end1');
     this.btnReplayEnd2 = rootEl.querySelector('#btn-title-end2');
+    this.btnReplayEnd3 = rootEl.querySelector('#btn-title-end3');
     this.titleProgressMeta = rootEl.querySelector('#title-progress-meta');
 
     this.bgImg = rootEl.querySelector('#pro-bg');
@@ -98,6 +116,17 @@ export class PrologueOverlay {
       this.onStartChapter2?.();
     });
 
+    this.btnChapter3?.addEventListener('click', () => {
+      if (this.btnChapter3.classList.contains('locked')) {
+        sound.playSwitch(false);
+        this.onStartChapter3?.();
+        return;
+      }
+      sound.playPowerUp();
+      this.hide();
+      this.onStartChapter3?.();
+    });
+
     this.btnReplayPrologue.addEventListener('click', () => {
       sound.playPowerUp();
       this.startStory();
@@ -111,6 +140,11 @@ export class PrologueOverlay {
     this.btnReplayEnd2?.addEventListener('click', () => {
       sound.playPowerUp();
       this.onReplayEnding2?.();
+    });
+
+    this.btnReplayEnd3?.addEventListener('click', () => {
+      sound.playPowerUp();
+      this.onReplayEnding3?.();
     });
 
     this.btnSkip.addEventListener('click', (e) => {
@@ -196,12 +230,31 @@ export class PrologueOverlay {
             : '☀ 第二章：青空への帰還（STAGE 18〜）';
       }
     }
+    if (this.btnChapter3) {
+      const ch3Open = isChapter3Unlocked(save);
+      const ch3Stages = STAGES.filter((s) => s.chapter === 3);
+      const clearedSet = new Set(save.clearedStages || []);
+      const anyCh3Cleared = ch3Stages.some((s) => clearedSet.has(s.id));
+      const nextCh3 = ch3Stages.find((s) => !clearedSet.has(s.id)) || ch3Stages[ch3Stages.length - 1];
+      this.btnChapter3.classList.toggle('locked', !ch3Open);
+      this.btnChapter3.setAttribute('aria-disabled', ch3Open ? 'false' : 'true');
+      if (!ch3Open) {
+        this.btnChapter3.textContent = '🔒 第三章：記憶の大地（第二章クリアで解放）';
+      } else {
+        this.btnChapter3.textContent =
+          anyCh3Cleared && nextCh3
+            ? `📡 第三章：記憶の大地（STAGE ${nextCh3.code}〜）`
+            : '📡 第三章：記憶の大地（STAGE 27〜）';
+      }
+    }
     if (this.endingReplaysWrap) {
       const ch1Done = isChapter1Cleared(save);
-      const ch2Done = Boolean(save?.clearedStages?.includes('stage_24'));
-      this.endingReplaysWrap.classList.toggle('hidden', !ch1Done && !ch2Done);
+      const ch2Done = isChapter2Cleared(save);
+      const ch3Done = isChapter3Cleared(save);
+      this.endingReplaysWrap.classList.toggle('hidden', !ch1Done && !ch2Done && !ch3Done);
       this.btnReplayEnd1?.classList.toggle('hidden', !ch1Done);
       this.btnReplayEnd2?.classList.toggle('hidden', !ch2Done);
+      this.btnReplayEnd3?.classList.toggle('hidden', !ch3Done);
     }
   }
 
@@ -396,7 +449,15 @@ export class PrologueOverlay {
     this._onTypeDone = onDone;
 
     const pitch =
-      speakerKey === 'mina' ? 560 : speakerKey === 'kagari' ? 420 : speakerKey === 'hako' ? 310 : 370;
+      speakerKey === 'mina'
+        ? 560
+        : speakerKey === 'kagari'
+          ? 420
+          : speakerKey === 'kai'
+            ? 355
+            : speakerKey === 'hako'
+              ? 310
+              : 370;
 
     this._timer = setInterval(() => {
       this.charIdx += 2;
