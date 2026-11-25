@@ -17,12 +17,12 @@ import {
   hasGlossaryTerms,
   isGlossaryTermUnlocked,
   isGlossaryDiagramUnlocked,
-} from '../data/glossary.js?v=39';
+} from '../data/glossary.js?v=40';
 import { getChipDef, computeCircuitMetrics } from '../engine/circuit.js';
-import { persistSaveData } from '../state/storage.js?v=39';
-import { sound } from '../audio/sound.js?v=39';
-import { StoryDiagramPlayer } from './storyDiagram.js?v=39';
-import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=39';
+import { persistSaveData } from '../state/storage.js?v=40';
+import { sound } from '../audio/sound.js?v=40';
+import { StoryDiagramPlayer } from './storyDiagram.js?v=40';
+import { renderMiniSchematicSvg, startMiniSchematicLoop } from './miniSchematic.js?v=40';
 
 let _saveProvider = null;
 

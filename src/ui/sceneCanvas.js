@@ -18,6 +18,7 @@ export class SceneCanvas {
     this.cleared = false;
     this.testing = false;
     this.unstable = false;
+    this.osTelemetry = null;
     this.time = 0;
     this.waveHistory = new Array(48).fill(0);
     this.waveAccum = 0;
@@ -39,13 +40,14 @@ export class SceneCanvas {
     }
   }
 
-  setState({ stage, inputs, outputs, cleared, testing, unstable }) {
+  setState({ stage, inputs, outputs, cleared, testing, unstable, osTelemetry }) {
     if (stage !== undefined) this.stage = stage;
     if (inputs !== undefined) this.inputs = inputs;
     if (outputs !== undefined) this.outputs = outputs;
     if (cleared !== undefined) this.cleared = cleared;
     if (testing !== undefined) this.testing = testing;
     if (unstable !== undefined) this.unstable = unstable;
+    if (osTelemetry !== undefined) this.osTelemetry = osTelemetry;
   }
 
   start() {
@@ -118,17 +120,20 @@ export class SceneCanvas {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Drifting atmospheric dust motes / surface embers
+    // 2. Drifting atmospheric dust motes / surface embers / northern station CRT motes
     const isSurface = sceneKey === 'surface_rover';
+    const isArk5Station = sceneKey === 'ark5_station';
     for (const m of this.motes) {
       const mx = ((m.x + this.time * m.vx) % 1 + 1) % 1 * w;
       const my = ((m.y - this.time * m.vy) % 1 + 1) % 1 * h;
       const alpha = 0.25 + 0.25 * Math.sin(this.time * 2.4 + m.phase);
       ctx.fillStyle = this.cleared
         ? `rgba(82, 227, 182, ${alpha})`
-        : isSurface
-          ? `rgba(255, 168, 76, ${alpha * 1.3})`
-          : `rgba(255, 210, 140, ${alpha})`;
+        : isArk5Station
+          ? `rgba(126, 232, 255, ${alpha * 1.15})`
+          : isSurface
+            ? `rgba(255, 168, 76, ${alpha * 1.3})`
+            : `rgba(255, 210, 140, ${alpha})`;
       ctx.fillRect(mx, my, m.r * 1.6, m.r * 1.6);
     }
 
@@ -220,6 +225,16 @@ export class SceneCanvas {
 
   _getCollapsedStatusText() {
     if (this.unstable) return '⚠ 発振エラー';
+    if (this.stage?.kind === 'ark8_os_program') {
+      const t = this.osTelemetry || {};
+      const mode = t.kMode === 0 ? 'U' : 'K';
+      const pc = t.pc ?? this.inputs[0] ?? 0;
+      const sp = t.sp ?? 0xf0;
+      const spHex = sp.toString(16).toUpperCase().padStart(2, '0');
+      const crt = String(t.crtText || '').replace(/[\r\n]+/g, ' ').slice(-8);
+      return `OS[${mode}] PC:${pc} SP:${spHex}${crt ? ` "${crt}"` : ''}`;
+    }
+
     if (this.stage?.kind === 'ark8_program') {
       const ram2 = this._bitsToNum(this.outputs, 0, 8);
       const pc = this.inputs[0] || 0;
@@ -255,6 +270,8 @@ export class SceneCanvas {
 
   _getAmbientFacilityLog() {
     const n = this.stage?.number ?? 0;
+    if (n >= 49) return '✔ 司令室ログ: ARK-5北方回線・MMU砂箱＆K/U特権保護プロトコル構築中';
+    if (n >= 43) return '✔ 司令室ログ: ARK-5救難符号受信中・統一RAM＆周辺機器バス拡張稼働';
     if (n >= 36) return '✔ 地上ログ: ARK-7(118)+ARK-3(124)=242人 拠点ホライズン稼働中';
     if (n >= 27) return '✔ 地上ログ: 42年ぶりの青空・太陽光＆風力マイクログリッド設営中';
     if (n >= 18) return '✔ 施設ログ: 夜間の揺れ1件・点検済み / 配給・水耕正常';
@@ -320,6 +337,28 @@ export class SceneCanvas {
 
     const out0 = this.outputs[0] ? 1 : 0;
     const in0 = this.inputs[0] ? 1 : 0;
+
+    if (this.stage?.kind === 'ark8_os_program') {
+      const t = this.osTelemetry || {};
+      const isUser = t.kMode === 0;
+      const modeTag = isUser ? 'U' : 'K';
+      const pc = t.pc ?? this.inputs[0] ?? 0;
+      const sp = t.sp ?? 0xf0;
+      const spHex = sp.toString(16).toUpperCase().padStart(2, '0');
+      const crtRaw = String(t.crtText || '').replace(/[\r\n]+/g, ' ');
+      const crtView = crtRaw.length > 10 ? crtRaw.slice(-10) : crtRaw;
+      const cursor = Math.floor(this.time * 2.4) % 2 === 0 ? '▌' : '';
+
+      ctx.font = `bold ${compact ? 9 : 9.5}px monospace`;
+      ctx.fillStyle = isUser ? '#7ee8ff' : '#ffd166';
+      ctx.fillText(`OS[${modeTag}] PC:${pc} SP:${spHex}`, bx + 9, hdrY, boxW - 16);
+
+      ctx.font = `bold ${compact ? 11.5 : 13}px monospace`;
+      ctx.fillStyle = crtView ? '#6effc8' : '#58a88b';
+      ctx.fillText(crtView ? `>${crtView}${cursor}` : `>CRT READY${cursor}`, bx + 9, bodyY, boxW - 16);
+      ctx.restore();
+      return;
+    }
 
     if (this.stage?.kind === 'ark8_program') {
       const ram2 = this._bitsToNum(this.outputs, 0, 8);

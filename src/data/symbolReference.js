@@ -60,9 +60,144 @@ export const SYMBOL_CATALOG = [
   {
     key: 'HALT',
     tokens: ['HALT'],
-    en: 'Halt CPU（CPU停止）',
-    ja: 'PC の更新を止めてプログラムを安全に完了させる命令（第3章・機械語 111）',
+    en: 'Halt CPU（CPU停止・特権命令）',
+    ja: 'PC の更新を止めてプログラムを安全に完了させる命令（第4章ではカーネル専用：ユーザー実行は特権違反トラップ！）',
     category: 'opcode',
+  },
+  // Chapter 4 OS Extensions (Opcodes 8..15)
+  {
+    key: 'POP',
+    tokens: ['POP'],
+    en: 'Pop from Stack（スタックから取り出し）',
+    ja: 'スタック先頭 MEM[SP] の1バイトを Rd へ読み込み、SP を +1 進める命令（機械語 1000）',
+    category: 'opcode',
+  },
+  {
+    key: 'RET',
+    tokens: ['RET'],
+    en: 'Return from Subroutine（サブルーチン復帰）',
+    ja: 'スタックから戻り番地 MEM[SP] を取り出して PC へ戻し、SP を +1 進める命令（機械語 1001）',
+    category: 'opcode',
+  },
+  {
+    key: 'PUSH',
+    tokens: ['PUSH'],
+    en: 'Push to Stack（スタックへ積む）',
+    ja: 'SP を -1 下げ、レジスタ Rs の1バイトを MEM[SP−1] へ積む命令（機械語 1010）',
+    category: 'opcode',
+  },
+  {
+    key: 'CALL',
+    tokens: ['CALL'],
+    en: 'Call Subroutine（サブルーチン呼出）',
+    ja: 'SP を -1 下げて戻り番地 PC+1 をスタックへ積み、指定番地 addr へ飛ぶ命令（機械語 1011）',
+    category: 'opcode',
+  },
+  {
+    key: 'LDR',
+    tokens: ['LDR'],
+    en: 'Load Indirect via Pointer（間接メモリ読込）',
+    ja: 'レジスタ Rs の値を番地（ポインタ）として MEM[Rs] から Rd へ1バイト読み込む命令（機械語 1100）',
+    category: 'opcode',
+  },
+  {
+    key: 'STR',
+    tokens: ['STR'],
+    en: 'Store Indirect via Pointer（間接メモリ書込）',
+    ja: 'レジスタ Rs の値を番地（ポインタ）として Rd の1バイトを MEM[Rs] へ書き込む命令（機械語 1101）',
+    category: 'opcode',
+  },
+  {
+    key: 'SYSCALL',
+    tokens: ['SYSCALL', 'SYS'],
+    en: 'System Call（OSシステムコール要求）',
+    ja: 'ユーザーアプリがOSへ処理を依頼する公式窓口。EPC←PC+1 を保存し K_MODE=1 で 0x08番地へ飛ぶ（機械語 1110）',
+    category: 'opcode',
+  },
+  {
+    key: 'IRET',
+    tokens: ['IRET'],
+    en: 'Interrupt Return（割込・特権復帰・特権命令）',
+    ja: 'カーネルから EPC 番地へ復帰しつつユーザーモード（K=0）へ戻す特権命令。Uモード実行は特権違反トラップ（機械語 1111）',
+    category: 'opcode',
+  },
+  // Chapter 4 Hardware Pins & OS Signals
+  {
+    key: 'VA / PA',
+    tokens: ['VA', 'PA'],
+    en: 'Virtual Address / Physical Address（仮想番地／物理番地）',
+    ja: 'VA はアプリから見える仮想番地、PA は MMU が BASE を足して変換した本物の物理RAM番地（K=1では PA=VA）',
+    category: 'signal',
+  },
+  {
+    key: 'BASE / LIMIT',
+    tokens: ['BASE', 'LIMIT'],
+    en: 'MMU Base & Limit Registers（開始番地と上限サイズ）',
+    ja: 'ユーザーアプリに許可する砂場区画の開始番地（BASE）と上限幅（LIMIT）。VA >= LIMIT で即座に FAULT=1！',
+    category: 'signal',
+  },
+  {
+    key: 'SP / EA',
+    tokens: ['SP', 'EA', 'SP_LD'],
+    en: 'Stack Pointer / Effective Address（スタックポインタ＆実効番地）',
+    ja: 'SP はスタック先頭番地（リセットで 0xF0=240）。PUSH時は EA=SP−1、POP時は EA=SP。SP_LD=1でOSが直接書換可能',
+    category: 'signal',
+  },
+  {
+    key: 'K_MODE',
+    tokens: ['K_MODE', 'PRIV', 'PRIV_OP'],
+    en: 'Kernel Mode / Privilege（特権モード 1=カーネル / 0=ユーザー）',
+    ja: '1 なら全メモリ・MMIO・特権命令を使えるOS特権状態。0 のユーザー状態では MMU隔離と特権遮断が強制発動',
+    category: 'signal',
+  },
+  {
+    key: 'IRQ / IRQ_EFF',
+    tokens: ['IRQ', 'IRQ_EFF', 'PERIOD', 'CNT'],
+    en: 'Interrupt Request（ハードウェア割り込み要求＆タイマー）',
+    ja: 'タイマー TMR_IRQ が PERIOD からカウントダウンして 1 に達すると IRQ=1！ K=0 のとき実効割込 IRQ_EFF=1 で 0x04 へ強制介入',
+    category: 'signal',
+  },
+  {
+    key: 'EPC',
+    tokens: ['EPC', 'PC1'],
+    en: 'Exception Program Counter（例外・割込復帰番地）',
+    ja: 'TRAP 発生時の戻り先を自動保存する専用レジスタ（SYSCALLは次命令 PC+1、IRQ/FAULTは現在命令 PC を退避）',
+    category: 'signal',
+  },
+  {
+    key: 'TRAP / FAULT / SAFE',
+    tokens: ['TRAP', 'FAULT', 'MMU_FAULT', 'SAFE'],
+    en: 'Trap / Protection Fault / Safe Write Gate（トラップ＆書込保護）',
+    ja: 'FAULT(違反)・SYSCALL・IRQ のいずれかで TRAP=1 となり、SAFE=!TRAP が 0 に落ちて不正なRAM/レジスタ書込を物理遮断！',
+    category: 'signal',
+  },
+  {
+    key: 'DSEL / BOOT / ROM_EN / MMIO_EN / RAM_WE',
+    tokens: ['DSEL', 'BOOT', 'ROM_EN', 'MMIO_EN', 'RAM_WE', 'DA'],
+    en: 'Unified Bus & Memory Map Signals（統一バス＆領域保護信号）',
+    ja: 'DSEL で命令番地(PC)とデータ番地(DA)を切替。0x00..0x0F(BOOT時)は ROM_EN、0xF0..0xFF は MMIO_EN、それ以外の書込だけ RAM_WE=1',
+    category: 'signal',
+  },
+  {
+    key: 'CRT / KB / DSK / TMR_SEL',
+    tokens: ['CRT_SEL', 'KB_SEL', 'DSK_SEL', 'TMR_SEL', 'DEV_WE'],
+    en: 'MMIO Peripheral Select Lines（周辺機器ポート選択信号）',
+    ja: '0xF0=CRT文字画面、0xF1=キーボード、0xF2=ディスク、0xF3=タイマーを識別。DEV_WE=MMIO_EN & WE で機器への書込を許可',
+    category: 'signal',
+  },
+  {
+    key: 'EQ / LT / GE',
+    tokens: ['EQ', 'LT', 'GE'],
+    en: 'Equal / Less Than / Greater or Equal（符号なし8bit比較出力）',
+    ja: 'ALU_8B の引き算フラグから導く比較結果：EQ(A==B)=Z、GE(A>=B)=C、LT(A<B)=NOT(C)。MMU上限判定の心臓',
+    category: 'signal',
+  },
+  {
+    key: 'FLOW',
+    tokens: ['FLOW', 'RDATA', 'WDATA'],
+    en: 'Control Flow Bundle / Memory Data（制御フロー束線＆読み書きデータ）',
+    ja: 'FLOW[3:0]=[BR, CALL, RET, HALT] の4ビット制御束線。RDATA はメモリ読出値、WDATA はメモリ書込値',
+    category: 'signal',
   },
   {
     key: 'RST',
@@ -317,14 +452,33 @@ export const ARK4_ISA_TABLE = [
 ];
 
 export const ARK8_ISA_TABLE = [
-  { code: '000', op: 'LDI Rd, n', reading: 'エルディーアイ', full: 'Load Immediate', meaning: '8bit即値 n（0〜255）をレジスタ Rd へ直接代入', pins: 'WD=01, REG_WE=1' },
-  { code: '001', op: 'ADD Rd, Rs', reading: 'アド', full: 'Add Registers', meaning: 'Rd ← Rd + Rs（レジスタ同士の8bit加算）', pins: 'WD=00, REG_WE=1' },
-  { code: '010', op: 'SUB Rd, Rs', reading: 'サブ', full: 'Subtract Registers', meaning: 'Rd ← Rd − Rs（レジスタ同士の8bit減算）', pins: 'SUB=1, REG_WE=1' },
-  { code: '011', op: 'JNZ Rd, addr', reading: 'ジェイエヌゼット', full: 'Jump if Not Zero', meaning: 'Rd ≠ 0 なら addr 番地へジャンプ（0なら通過）', pins: 'BR=1, REG_WE=0' },
-  { code: '100', op: 'LOAD Rd, [a]', reading: 'ロード', full: 'Load from SRAM', meaning: 'SRAM の a 番地（0〜15）から Rd へ 1バイト読込', pins: 'WD=10, REG_WE=1' },
-  { code: '101', op: 'STOR Rs, [a]', reading: 'ストア', full: 'Store to SRAM', meaning: 'Rs の 1バイトを SRAM の a 番地（0〜15）へ書込', pins: 'MEM_WE=1' },
-  { code: '110', op: 'ADDI Rd, n', reading: 'アドアイ', full: 'Add Immediate', meaning: 'Rd ← Rd + n（レジスタに即値 n を加算）', pins: 'ALU_B=1, REG_WE=1' },
-  { code: '111', op: 'HALT', reading: 'ハルト', full: 'Halt CPU', meaning: 'PC を停止させてプログラムを安全に完了する', pins: 'HALT=1' },
+  { mnemonic: 'LDI Rd, n', en: 'Load Immediate（即値代入）', bits: '000', effect: '8bit即値 n（0〜255）をレジスタ Rd へ直接代入', ctrl: 'WD=01, REG_WE=1', code: '000', op: 'LDI Rd, n', reading: 'エルディーアイ', full: 'Load Immediate', meaning: '8bit即値 n（0〜255）をレジスタ Rd へ直接代入', pins: 'WD=01, REG_WE=1' },
+  { mnemonic: 'ADD Rd, Rs', en: 'Add Registers（レジスタ加算）', bits: '001', effect: 'Rd ← Rd + Rs（レジスタ同士の8bit加算）', ctrl: 'WD=00, REG_WE=1', code: '001', op: 'ADD Rd, Rs', reading: 'アド', full: 'Add Registers', meaning: 'Rd ← Rd + Rs（レジスタ同士の8bit加算）', pins: 'WD=00, REG_WE=1' },
+  { mnemonic: 'SUB Rd, Rs', en: 'Subtract Registers（レジスタ減算）', bits: '010', effect: 'Rd ← Rd − Rs（レジスタ同士の8bit減算）', ctrl: 'SUB=1, REG_WE=1', code: '010', op: 'SUB Rd, Rs', reading: 'サブ', full: 'Subtract Registers', meaning: 'Rd ← Rd − Rs（レジスタ同士の8bit減算）', pins: 'SUB=1, REG_WE=1' },
+  { mnemonic: 'JNZ Rd, addr', en: 'Jump if Not Zero（非ゼロ分岐）', bits: '011', effect: 'Rd ≠ 0 なら addr 番地へジャンプ（0なら通過）', ctrl: 'BR=1, REG_WE=0', code: '011', op: 'JNZ Rd, addr', reading: 'ジェイエヌゼット', full: 'Jump if Not Zero', meaning: 'Rd ≠ 0 なら addr 番地へジャンプ（0なら通過）', pins: 'BR=1, REG_WE=0' },
+  { mnemonic: 'LOAD Rd, [a]', en: 'Load from SRAM（メモリ読込）', bits: '100', effect: 'SRAM の a 番地（0〜15）から Rd へ 1バイト読込', ctrl: 'WD=10, REG_WE=1', code: '100', op: 'LOAD Rd, [a]', reading: 'ロード', full: 'Load from SRAM', meaning: 'SRAM の a 番地（0〜15）から Rd へ 1バイト読込', pins: 'WD=10, REG_WE=1' },
+  { mnemonic: 'STOR Rs, [a]', en: 'Store to SRAM（メモリ書込）', bits: '101', effect: 'Rs の 1バイトを SRAM の a 番地（0〜15）へ書込', ctrl: 'MEM_WE=1', code: '101', op: 'STOR Rs, [a]', reading: 'ストア', full: 'Store to SRAM', meaning: 'Rs の 1バイトを SRAM の a 番地（0〜15）へ書込', pins: 'MEM_WE=1' },
+  { mnemonic: 'ADDI Rd, n', en: 'Add Immediate（即値加算）', bits: '110', effect: 'Rd ← Rd + n（レジスタに即値 n を加算）', ctrl: 'ALU_B=1, REG_WE=1', code: '110', op: 'ADDI Rd, n', reading: 'アドアイ', full: 'Add Immediate', meaning: 'Rd ← Rd + n（レジスタに即値 n を加算）', pins: 'ALU_B=1, REG_WE=1' },
+  { mnemonic: 'HALT', en: 'Halt CPU（CPU停止）', bits: '111', effect: 'PC を停止させてプログラムを安全に完了する', ctrl: 'HALT=1', code: '111', op: 'HALT', reading: 'ハルト', full: 'Halt CPU', meaning: 'PC を停止させてプログラムを安全に完了する', pins: 'HALT=1' },
+];
+
+export const ARK8_OS_ISA_TABLE = [
+  { mnemonic: 'LDI Rd, n', en: 'Load Immediate（即値代入）', bits: '0000 (0)', effect: 'Rd ← n（8bit即値 0〜255 を代入）', ctrl: 'WD=01, REG_WE=1' },
+  { mnemonic: 'ADD Rd, Rs', en: 'Add Registers（レジスタ加算）', bits: '0001 (1)', effect: 'Rd ← Rd + Rs（8bit加算）', ctrl: 'WD=00, REG_WE=1' },
+  { mnemonic: 'SUB Rd, Rs', en: 'Subtract Registers（レジスタ減算）', bits: '0010 (2)', effect: 'Rd ← Rd − Rs（8bit減算）', ctrl: 'SUB=1, REG_WE=1' },
+  { mnemonic: 'JNZ Rd, addr', en: 'Jump if Not Zero（非ゼロ分岐）', bits: '0011 (3)', effect: 'Rd ≠ 0 なら addr へジャンプ（0なら次命令）', ctrl: 'BR=1' },
+  { mnemonic: 'LOAD Rd, [a]', en: 'Load Direct（直接メモリ読込）', bits: '0100 (4)', effect: 'Rd ← MEM[a]（番地 a から1バイト読込）', ctrl: 'WD=10, REG_WE=1, MEM_OP=1' },
+  { mnemonic: 'STOR Rs, [a]', en: 'Store Direct（直接メモリ書込）', bits: '0101 (5)', effect: 'MEM[a] ← Rs（番地 a へ1バイト書込）', ctrl: 'MEM_WE=1, MEM_OP=1' },
+  { mnemonic: 'ADDI Rd, n', en: 'Add Immediate（即値加算）', bits: '0110 (6)', effect: 'Rd ← Rd + n（即値加算）', ctrl: 'ALU_B=1, REG_WE=1' },
+  { mnemonic: 'HALT', en: 'Halt CPU（特権・CPU停止）', bits: '0111 (7)', effect: 'K=1で安全停止／ユーザー(K=0)実行は特権違反トラップ', ctrl: 'HALT=1, PRIV=1' },
+  { mnemonic: 'POP Rd', en: 'Pop Stack（スタック読出）', bits: '1000 (8)', effect: 'Rd ← MEM[SP], SP ← SP + 1', ctrl: 'STK=POP, WD=10, REG_WE=1' },
+  { mnemonic: 'RET', en: 'Return（サブルーチン復帰）', bits: '1001 (9)', effect: 'PC ← MEM[SP], SP ← SP + 1', ctrl: 'STK=POP, RET=1' },
+  { mnemonic: 'PUSH Rs', en: 'Push Stack（スタック書込）', bits: '1010 (10)', effect: 'SP ← SP − 1, MEM[SP−1] ← Rs', ctrl: 'STK=PUSH, MEM_WE=1' },
+  { mnemonic: 'CALL addr', en: 'Call Subroutine（関数呼出）', bits: '1011 (11)', effect: 'SP ← SP − 1, MEM[SP−1] ← PC+1, PC ← addr', ctrl: 'STK=PUSH, CALL=1, MEM_WE=1' },
+  { mnemonic: 'LDR Rd, [Rs]', en: 'Load Indirect（ポインタ読込）', bits: '1100 (12)', effect: 'Rd ← MEM[Rs]（Rsの指す番地から1バイト読込）', ctrl: 'IND=1, WD=10, REG_WE=1' },
+  { mnemonic: 'STR Rd, [Rs]', en: 'Store Indirect（ポインタ書込）', bits: '1101 (13)', effect: 'MEM[Rs] ← Rd（Rsの指す番地へRdを1バイト書込）', ctrl: 'IND=1, MEM_WE=1' },
+  { mnemonic: 'SYSCALL n', en: 'System Call（OS呼出）', bits: '1110 (14)', effect: 'EPC ← PC+1, K ← 1, PC ← 0x08（OS窓口へ昇格）', ctrl: 'SYS=1' },
+  { mnemonic: 'IRET', en: 'Interrupt Return（特権・割込復帰）', bits: '1111 (15)', effect: 'K=1で K ← 0, PC ← EPC／K=0実行は特権違反トラップ', ctrl: 'IRET=1, PRIV=1' },
 ];
 
 /**
@@ -349,13 +503,19 @@ export function getStageSymbolReferences(stage) {
     ),
   ];
   const fullText = corpusParts.join(' ');
-  const exactPins = new Set([...(stage.inputs || []), ...(stage.outputs || [])]);
+  const exactPins = new Set(
+    [...(stage.inputs || []), ...(stage.outputs || [])].map((p) => String(p).replace(/\[.*\]$/, ''))
+  );
 
   const matches = [];
   for (const entry of SYMBOL_CATALOG) {
     // Avoid showing single-letter S/R/D/Q/Z on unrelated early stages unless actually a pin of this stage
     const isHit = entry.tokens.some((tok) => {
-      if (tok.length <= 2 && /^[A-Z][0-9]?$/.test(tok) && tok !== 'PC' && tok !== 'OP' && tok !== 'WE' && tok !== 'BR' && tok !== 'JNZ') {
+      if (
+        tok.length <= 2 &&
+        /^[A-Z][0-9]?$/.test(tok) &&
+        !['PC', 'OP', 'WE', 'BR', 'SP', 'EA', 'VA', 'PA', 'EQ', 'LT', 'GE', 'DA'].includes(tok)
+      ) {
         return exactPins.has(tok);
       }
       const re = new RegExp(`(?<![A-Za-z0-9_])${tok}(?![A-Za-z0-9_])`);
@@ -373,7 +533,7 @@ export function getStageSymbolReferences(stage) {
  */
 export function stageUsesIsaTable(stage) {
   if (!stage) return false;
-  if (stageUsesArk8IsaTable(stage)) return false;
+  if (stageUsesArk8OsIsaTable(stage) || stageUsesArk8IsaTable(stage)) return false;
   return (
     stage.kind === 'assembly_program' ||
     stage.id === 'stage_17' ||
@@ -389,10 +549,25 @@ export function stageUsesIsaTable(stage) {
  */
 export function stageUsesArk8IsaTable(stage) {
   if (!stage) return false;
+  if (stageUsesArk8OsIsaTable(stage)) return false;
   return (
     stage.kind === 'ark8_program' ||
     stage.id === 'stage_38' ||
     stage.id === 'stage_39' ||
     stage.id === 'stage_40'
+  );
+}
+
+/**
+ * Whether this stage involves the Chapter 4 ARK-8 OS-Ready 16-instruction set (LDI..IRET).
+ */
+export function stageUsesArk8OsIsaTable(stage) {
+  if (!stage) return false;
+  return (
+    stage.kind === 'ark8_os_program' ||
+    stage.id === 'stage_51' ||
+    stage.id === 'stage_52' ||
+    stage.id === 'stage_53' ||
+    stage.id === 'stage_54'
   );
 }

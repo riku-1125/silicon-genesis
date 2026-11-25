@@ -25,7 +25,7 @@ import {
   resetArk8Hardware,
   runArk8Program,
   evaluateArk8Stage,
-} from '../engine/romRunner8.js?v=39';
+} from '../engine/romRunner8.js?v=40';
 
 const EDITABLE_OPCODES = ['LDI', 'ADD', 'SUB', 'JNZ', 'LOAD', 'STOR', 'ADDI', 'HALT'];
 const CLEAR_ARM_MSG = '⚠ もう一度「消去?」を押すと全番地の命令をクリアします';

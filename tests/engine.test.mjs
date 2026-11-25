@@ -8,7 +8,9 @@ import {
   buildChapter1EndingSteps,
   buildChapter2EndingSteps,
   buildChapter3EndingSteps,
+  buildChapter4EndingSteps,
 } from '../src/data/endings.js';
+import { CHARACTERS, SCENES } from '../src/data/characters.js';
 import {
   GLOSSARY_TERMS,
   MODULE_ENCYCLOPEDIA_IDS,
@@ -31,6 +33,8 @@ import {
   isChapter2Cleared,
   isChapter3Unlocked,
   isChapter3Cleared,
+  isChapter4Unlocked,
+  isChapter4Cleared,
 } from '../src/state/storage.js';
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
@@ -61,6 +65,17 @@ import {
   runArk8Program,
   evaluateArk8Stage,
 } from '../src/engine/romRunner8.js';
+import {
+  ARK8_OS_OPCODES,
+  MMIO_PORTS,
+  parseArk8OsLine,
+  assembleArk8OsProgramText,
+  formatArk8OsProgramText,
+  buildArk8OsRowMap,
+  compileArk8OsHardware,
+  runArk8OsProgram,
+  evaluateArk8OsStage,
+} from '../src/engine/osHwRunner.js';
 import { exportSiliconBlueprint } from '../src/engine/siliconExport.js';
 
 /**
@@ -94,8 +109,8 @@ function registerChip(customChips, stage, circuit) {
   };
 }
 
-test('Full 45-stage campaign (Ch.1 + Ch.2 + Ch.3): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
-  assert.equal(STAGES.length, 45);
+test('Full 57-stage campaign (Ch.1 + Ch.2 + Ch.3 + Ch.4): circuit stages 00-C (NAND) through 23 (ROM_4W) compile and pass bottom-up', () => {
+  assert.equal(STAGES.length, 57);
   assert.equal(STAGES[0].id, 'stage_00a');
   assert.equal(STAGES[1].id, 'stage_00b');
   const customChips = {};
@@ -879,7 +894,7 @@ test('Story Glossary tokenizer: longest-match, ASCII boundaries, round-trip pres
   assert.ok(animKeys.size >= 30, `Expected 30+ distinct live story & goal diagrams across all 20 stages, got ${animKeys.size}`);
 
   // 4. Every module in MODULE_ENCYCLOPEDIA_IDS exists and has a live animated diagram (`anim`)
-  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 42);
+  assert.equal(MODULE_ENCYCLOPEDIA_IDS.length, 52);
   for (const modId of MODULE_ENCYCLOPEDIA_IDS) {
     const entry = getGlossaryTerm(modId);
     assert.ok(entry, `Missing module encyclopedia entry '${modId}'`);
@@ -1947,10 +1962,327 @@ test('v39 Chapter 3 6-Chapter Continuity: zero stale 16-bit CPU/RAM rebuild text
     assert.ok(ark8CodexText.includes(token), `CODEX_ENTRIES.ark8_horizon missing '${token}'`);
   }
 
-  // 6. Cache version consistently bumped to v39 with zero leftover v38 references
+  // 6. Cache version moved past v38 with zero leftover v38 references
   for (const relPath of ['index.html', 'sw.js', 'src/main.js', 'src/ui/modals.js', 'src/ui/ark8Ide.js']) {
     const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
     assert.equal(/\?v=38|silicon-genesis-v38/.test(src), false, `Leftover v38 cache string in ${relPath}`);
-    assert.equal(/\?v=39|silicon-genesis-v39/.test(src), true, `Missing v39 cache string in ${relPath}`);
+    assert.equal(/\?v=(?:39|40)|silicon-genesis-v(?:39|40)/.test(src), true, `Missing v39/v40 cache string in ${relPath}`);
+  }
+});
+
+test('v40 Chapter 4: OS-Ready PC Hardware (ARK8_OS_HW 12,588 MOSFETs), ARK5_CRT, GUARD_TRAP 3-Vector Sandbox, Fault Propagation, Verilog-2001 & Ending', () => {
+  const customChips = {};
+  provisionStandardChips(customChips, { includeChapter4Hardware: true, provisioned: false });
+
+  // 1. All 10 Chapter 4 hardware stages (STAGE 43 MEM_BUS8 .. STAGE 52 ARK8_OS_HW) compile & pass bottom-up
+  //    strictly on real Stage 00-C MOSFETs (isPhysicalSilicon === true, nandGateCount === 0) with exact BOMs!
+  const expectedCh4Boms = {
+    MEM_BUS8: [244, 488, 244],
+    MMIO_DEC: [26, 52, 26],
+    STACK_PTR: [1090, 2180, 1090],
+    CMP_8B: [223, 446, 223],
+    TMR_IRQ: [923, 1846, 923],
+    MMU_8B: [821, 1642, 821],
+    PRIV_CTRL: [46, 92, 46],
+    IRQ_VEC: [1694, 3388, 1694],
+    INST_DEC16: [113, 226, 113],
+    ARK8_OS_HW: [6294, 12588, 6294],
+  };
+
+  const ch4HwStages = STAGES.filter((s) => s.chapter === 4 && s.mode !== 'physics');
+  assert.equal(ch4HwStages.length, 10);
+  for (const st of ch4HwStages) {
+    const chipId = st.rewardChip.id;
+    const def = customChips[chipId];
+    assert.ok(def?.circuit, `Missing Chapter 4 blueprint for ${chipId}`);
+    const sim = compileCircuit(def.circuit, customChips);
+    assert.equal(sim.isPhysicalSilicon, true, `${chipId} must run on real Stage 00-C MOSFETs`);
+    assert.equal(sim.nandGateCount, 0, `${chipId} must have 0 primitive NAND gates`);
+    const res = evaluateStage(st, def.circuit, customChips);
+    assert.equal(res.passed, true, `Stage ${st.code} (${chipId}) failed: ${JSON.stringify(res)}`);
+    const [expN, expSw, expPull] = expectedCh4Boms[chipId];
+    assert.equal(res.metrics.nandCount, expN, `${chipId} NAND count mismatch`);
+    assert.equal(res.metrics.swCount, expSw, `${chipId} MOSFET count mismatch`);
+    assert.equal(res.metrics.pullCount, expPull, `${chipId} PULL count mismatch`);
+  }
+
+  // Exact compiled motherboard & ARK8_OS_HW silicon stats
+  assert.equal(Object.keys(ARK8_OS_OPCODES).length, 16);
+  const hwOs = compileArk8OsHardware(customChips);
+  assert.equal(hwOs.cpuSim.isPhysicalSilicon, true);
+  assert.equal(hwOs.cpuSim.nandGateCount, 0);
+  assert.equal(hwOs.siliconStats.isPhysicalSilicon, true);
+  assert.equal(hwOs.siliconStats.nandCount, 6294);
+  assert.equal(hwOs.siliconStats.swCount, 12588);
+  assert.equal(hwOs.siliconStats.pullCount, 6294);
+  assert.equal(hwOs.siliconStats.boardSwCount, 18880);
+  assert.equal(hwOs.siliconStats.sram16Verified, true);
+  assert.equal(hwOs.siliconStats.sram16SwCount, 9156);
+
+  // Parser checks: hex, char literal, MMIO port alias, indirect register, invalid opcode
+  assert.equal(parseArk8OsLine('0: LDI R1, 0x60 ; radio string').part.imm, 96);
+  assert.equal(parseArk8OsLine('8: STOR R1, [CRT]').part.imm, MMIO_PORTS.CRT);
+  assert.equal(parseArk8OsLine("12: LDI R0, '!'").part.imm, 33);
+  assert.equal(parseArk8OsLine('5: LDR R0, [R1]').part.op, 'LDR');
+  assert.equal(parseArk8OsLine('BADOP R0, 1').ok, false);
+
+  // 2. Stage 53 (`stage_53`, ARK5_CRT): passes primary ("ARK5:SOS") & secondary anti-cheat ("HI,ARK7!")
+  //    on live MOSFET ARK8_OS_HW, exercises real CALL/RET + SP stack, and rejects hardcoded shortcuts!
+  const st53 = getStageById('stage_53');
+  const asm53Text = [
+    '0: LDI R1, 0x60',
+    '1: CALL 5',
+    '2: HALT',
+    '5: LDR R0, [R1]',
+    '6: JNZ R0, 8',
+    '7: RET',
+    '8: STOR R0, [0xF0]',
+    '9: ADDI R1, 1',
+    '10: LDI R3, 1',
+    '11: JNZ R3, 5',
+  ].join('\n');
+  const parsed53 = assembleArk8OsProgramText(asm53Text, st53);
+  assert.equal(parsed53.ok, true, `Stage 53 parse failed: ${JSON.stringify(parsed53.errors)}`);
+  const rt53 = assembleArk8OsProgramText(formatArk8OsProgramText(st53, parsed53.slots), st53);
+  assert.equal(rt53.ok, true);
+  assert.deepEqual(rt53.slots, parsed53.slots);
+
+  const eval53 = evaluateArk8OsStage(st53, parsed53.slots, customChips);
+  assert.equal(eval53.passed, true, `Stage 53 (ARK5_CRT) failed: ${eval53.message}`);
+  assert.equal(eval53.run.final.crtText, 'ARK5:SOS');
+  assert.equal(eval53.run.haltedNormally, true);
+  assert.equal(eval53.run.stats.usedCall, true);
+  assert.equal(eval53.run.stats.usedRet, true);
+  assert.equal(eval53.run.stats.usedLdr, true);
+  assert.equal(eval53.run.stats.minSp, 239, 'CALL must physically decrement SP 240 -> 239');
+  assert.equal(eval53.run.final.sp, 240, 'RET must physically restore SP 239 -> 240');
+
+  // Verify Stage 53 rejects direct hardcoded shortcut (no CALL/RET or LDR)
+  const cheat53Direct = assembleArk8OsProgramText(
+    '0: LDI R0, 65\n1: STOR R0, [240]\n2: HALT',
+    st53
+  );
+  assert.equal(evaluateArk8OsStage(st53, cheat53Direct.slots, customChips).passed, false);
+
+  // Verify Stage 53 rejects LDR loop without CALL/RET stack usage
+  const cheat53NoCall = assembleArk8OsProgramText(
+    [
+      '0: LDI R1, 0x60',
+      '1: LDR R0, [R1]',
+      '2: JNZ R0, 4',
+      '3: HALT',
+      '4: STOR R0, [0xF0]',
+      '5: ADDI R1, 1',
+      '6: LDI R3, 1',
+      '7: JNZ R3, 1',
+    ].join('\n'),
+    st53
+  );
+  assert.equal(evaluateArk8OsStage(st53, cheat53NoCall.slots, customChips).passed, false);
+
+  // 3. Stage 54 (`stage_54`, GUARD_TRAP): passes primary ("A5!") & secondary anti-cheat ("OK!")
+  //    with real User-mode SYSCALL, TMR_IRQ preemption, and physical MMU_8B/PRIV_CTRL blocking
+  //    rogue User STOR [0xF0] 'X' attack without touching CRT or Kernel RAM!
+  const st54 = getStageById('stage_54');
+  assert.equal(st54.isChapter4Finale, true);
+  const asm54Text = [
+    '0: LDI R0, 64',
+    '1: STOR R0, [244]',
+    '2: LDI R0, 32',
+    '3: JNZ R0, 16',
+    '4: ADDI R3, 1',
+    '5: IRET',
+    '8: STOR R1, [240]',
+    '9: ADDI R2, 1',
+    '10: IRET',
+    "12: LDI R0, '!'",
+    '13: STOR R0, [240]',
+    '14: HALT',
+    '16: STOR R0, [245]',
+    '17: LDI R0, 4',
+    '18: STOR R0, [243]',
+    '19: IRET',
+  ].join('\n');
+  const parsed54 = assembleArk8OsProgramText(asm54Text, st54);
+  assert.equal(parsed54.ok, true, `Stage 54 parse failed: ${JSON.stringify(parsed54.errors)}`);
+  const rt54 = assembleArk8OsProgramText(formatArk8OsProgramText(st54, parsed54.slots), st54);
+  assert.equal(rt54.ok, true);
+  assert.deepEqual(rt54.slots, parsed54.slots);
+
+  // Attempting to overwrite locked Boot line 0 is cleanly rejected
+  const badLock54 = assembleArk8OsProgramText('0: HALT\n4: ADDI R3, 1\n5: IRET', st54);
+  assert.equal(badLock54.ok, false);
+
+  const eval54 = evaluateArk8OsStage(st54, parsed54.slots, customChips);
+  assert.equal(eval54.passed, true, `Stage 54 (GUARD_TRAP) failed: ${eval54.message}`);
+  assert.equal(eval54.run.final.crtText, 'A5!');
+  assert.equal(eval54.run.final.crtText.includes('X'), false, 'Rogue User STOR "X" must never touch CRT');
+  assert.equal(eval54.run.haltedNormally, true);
+  assert.equal(eval54.run.final.kMode, 1, 'Must halt cleanly in Kernel mode');
+  assert.equal(eval54.run.stats.enteredUserMode, true);
+  assert.equal(eval54.run.stats.syscallCount, 2);
+  assert.equal(eval54.run.final.regs[2], 2);
+  assert.ok(eval54.run.stats.irqCount >= 1 && eval54.run.final.regs[3] >= 1, 'Real TMR_IRQ preemption must fire');
+  assert.ok(eval54.run.stats.faultCount >= 1 && eval54.run.stats.blockedAttacks >= 1, 'MMU_8B/PRIV_CTRL must physically block rogue STOR');
+  // Kernel RAM Boot/Vector region (0x00..0x27) must remain byte-for-byte intact after rogue User attack!
+  assert.deepEqual(
+    eval54.run.final.ram.slice(0, 0x28),
+    eval54.run.init.ram.slice(0, 0x28),
+    'Kernel Boot & Trap Vector RAM must remain completely untouched by rogue User attack'
+  );
+
+  // Verify Stage 54 rejects hardcoded SYSCALL that fails secondary "OK!" generalization check
+  const cheat54Hardcoded = assembleArk8OsProgramText(
+    [
+      '0: LDI R0, 64', '1: STOR R0, [244]', '2: LDI R0, 32', '3: JNZ R0, 16',
+      '4: ADDI R3, 1', '5: IRET',
+      '8: LDI R0, 65', '9: STOR R0, [240]', '10: IRET',
+      '12: LDI R0, 33', '13: STOR R0, [240]', '14: HALT',
+      '16: STOR R0, [245]', '17: LDI R0, 4', '18: STOR R0, [243]', '19: IRET',
+    ].join('\n'),
+    st54
+  );
+  assert.equal(evaluateArk8OsStage(st54, cheat54Hardcoded.slots, customChips).passed, false);
+
+  // 4. Physical fault propagation: breaking Stage 00-C NAND OR breaking MMU_8B / PRIV_CTRL / SRAM_16B fails Stage 54!
+  for (const faultChipId of ['NAND', 'MMU_8B', 'PRIV_CTRL', 'SRAM_16B']) {
+    const brokenChips = { ...customChips };
+    const brokenCircuit = cloneCircuit(customChips[faultChipId].circuit);
+    brokenCircuit.wires = brokenCircuit.wires.filter((w) => w.to.kind !== 'output');
+    brokenChips[faultChipId] = { ...customChips[faultChipId], circuit: brokenCircuit };
+    const faultRes = evaluateArk8OsStage(st54, parsed54.slots, brokenChips);
+    assert.equal(faultRes.passed, false, `Breaking ${faultChipId} must propagate and fail Stage 54`);
+  }
+
+  // 5. exportSiliconBlueprint(..., { romArch: 'ark8_os' }) & { romArch: 'auto' } emit balanced IEEE 1364-2001 Verilog-2001
+  const rowMap54 = buildArk8OsRowMap(st54, parsed54.slots);
+  const bpOs = exportSiliconBlueprint(customChips, {
+    romRows: rowMap54,
+    romArch: 'ark8_os',
+    stageTitle: 'STAGE 54: 三種の防壁・OSトラップ防衛戦',
+  });
+  for (const expectedMod of [
+    /module sg_nmos_sw\b/,
+    /module sg_pullup\b/,
+    /module MEM_BUS8\b/,
+    /module MMIO_DEC\b/,
+    /module STACK_PTR\b/,
+    /module CMP_8B\b/,
+    /module TMR_IRQ\b/,
+    /module MMU_8B\b/,
+    /module PRIV_CTRL\b/,
+    /module IRQ_VEC\b/,
+    /module INST_DEC16\b/,
+    /module ARK8_OS_HW\b/,
+    /ARK8_OS_UNIFIED_RAM/,
+    /Board Silicon/,
+  ]) {
+    assert.match(bpOs.verilog, expectedMod, `Verilog export missing ${expectedMod}`);
+  }
+  const opensOs = (bpOs.verilog.match(/^\s*module\s+[A-Za-z_]/gm) || []).length;
+  const closesOs = (bpOs.verilog.match(/^\s*endmodule\b/gm) || []).length;
+  assert.equal(opensOs, closesOs, 'Balanced module/endmodule count required');
+  assert.ok(opensOs >= 50, `Expected >=50 Verilog modules for full ARK8_OS_HW stack, got ${opensOs}`);
+  assert.equal(bpOs.stats.cpuNandCount, 6294);
+  assert.equal(bpOs.stats.cpuSwCount, 12588);
+  assert.equal(bpOs.stats.cpuPullCount, 6294);
+  assert.equal(bpOs.stats.romNandCount, 0);
+  assert.equal(bpOs.stats.totalSwCount, bpOs.stats.totalNandCount * 2);
+  assert.equal(bpOs.stats.totalPullCount, bpOs.stats.totalNandCount);
+
+  // Auto-detect export (used by Codex modal after clearing Ch.4) must also select ARK8_OS_HW cleanly
+  const bpAuto = exportSiliconBlueprint(customChips, {
+    romArch: 'auto',
+    stageTitle: 'STAGE 54: Codex Export',
+  });
+  assert.match(bpAuto.verilog, /Board Silicon/);
+  assert.equal(bpAuto.stats.cpuNandCount, 6294);
+  assert.equal(bpAuto.stats.romNandCount, 0);
+
+  // 6. Chapter 4 progression locks, Ending beats, anim/asset wiring & ?v=40 cache consistency
+  const preCh4Save = { clearedStages: ['stage_17', 'stage_24', 'stage_41'], chapter4Unlocked: true };
+  assert.equal(isChapter4Unlocked(preCh4Save), false, 'Stale chapter4Unlocked flag must not bypass stage_42');
+  assert.equal(isChapter4Cleared(preCh4Save), false);
+  assert.equal(isStageUnlocked(preCh4Save, 'stage_43'), false);
+
+  const postCh3Save = { clearedStages: ['stage_17', 'stage_24', 'stage_42'] };
+  assert.equal(isChapter4Unlocked(postCh3Save), true);
+  assert.equal(isChapter4Cleared(postCh3Save), false);
+  assert.equal(isStageUnlocked(postCh3Save, 'stage_43'), true);
+  assert.equal(isStageUnlocked(postCh3Save, 'stage_44'), false);
+
+  const postCh4Save = { clearedStages: ['stage_17', 'stage_24', 'stage_42', 'stage_54'] };
+  assert.equal(isChapter4Cleared(postCh4Save), true);
+
+  // Chapter 4 Ending beats: dynamic stats, 3 choices, ren speaker valid, lossless glossary round-trip, zero raw markdown
+  assert.ok(CHARACTERS.ren && CHARACTERS.ren.portrait === './assets/portrait_ren.jpg');
+  assert.ok(SCENES.ark5_station && SCENES.ark5_station.image === './assets/scene_ark5_station.jpg');
+
+  const ch4Ending = buildChapter4EndingSteps({
+    ark8OsNandCount: 6294,
+    ark8OsSwCount: 12588,
+    ark8OsPullCount: 6294,
+  });
+  assert.ok(ch4Ending.length >= 10, `Expected >=10 Chapter 4 ending beats, got ${ch4Ending.length}`);
+  assert.ok(ch4Ending.some((s) => s.text.includes('6294') && s.text.includes('12588')));
+  assert.ok(ch4Ending.some((s) => s.speaker === 'ren'));
+  assert.ok(ch4Ending.some((s) => Array.isArray(s.choices) && s.choices.length === 3));
+
+  const validCh4Speakers = new Set([null, 'kagari', 'mina', 'hako', 'kai', 'ren']);
+  for (const step of ch4Ending) {
+    assert.ok(validCh4Speakers.has(step.speaker), `Unexpected Ch4 ending speaker '${step.speaker}'`);
+    assert.ok(!step.text.includes('**') && !step.text.includes('`'), `Raw markdown in Ch4 ending: ${step.text}`);
+    assert.equal(tokenizeGlossaryText(step.text).map((t) => t.text).join(''), step.text);
+    for (const c of step.choices || []) {
+      assert.ok(validCh4Speakers.has(c.replySpeaker), `Unexpected Ch4 choice speaker '${c.replySpeaker}'`);
+      assert.ok(!c.replyText.includes('**') && !c.replyText.includes('`'));
+      assert.equal(tokenizeGlossaryText(c.replyText).map((t) => t.text).join(''), c.replyText);
+    }
+  }
+
+  // Zero raw markdown across all Chapter 4 stages & all anim keys present in storyDiagram.js
+  const storyDiagramSrc = readFileSync(new URL('../src/ui/storyDiagram.js', import.meta.url), 'utf8');
+  for (const st of STAGES.filter((s) => s.chapter === 4)) {
+    for (const line of [...(st.introDialogue || []), ...(st.outroDialogue || [])]) {
+      assert.ok(validCh4Speakers.has(line.speaker), `Unexpected Ch4 speaker '${line.speaker}' in ${st.id}`);
+      assert.ok(!line.text.includes('**') && !line.text.includes('`'), `Raw markdown in ${st.id}: ${line.text}`);
+      assert.equal(tokenizeGlossaryText(line.text).map((t) => t.text).join(''), line.text);
+      if (line.visualCard?.anim) {
+        assert.ok(
+          new RegExp(`\\b${line.visualCard.anim}\\b`).test(storyDiagramSrc),
+          `Missing storyDiagram.js anim '${line.visualCard.anim}' used in ${st.id}`
+        );
+      }
+    }
+  }
+  for (const modId of MODULE_ENCYCLOPEDIA_IDS.slice(42)) {
+    const entry = getGlossaryTerm(modId);
+    assert.ok(entry?.anim, `Missing Ch4 glossary anim for ${modId}`);
+    assert.ok(
+      new RegExp(`\\b${entry.anim}\\b`).test(storyDiagramSrc),
+      `Missing storyDiagram.js anim '${entry.anim}' for glossary module '${modId}'`
+    );
+  }
+
+  // Cache consistency: ?v=40 across index.html, sw.js & UI modules, zero v=39 leftovers, Ren & ARK-5 assets in sw.js
+  const swSrc = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(swSrc, /portrait_ren\.jpg/);
+  assert.match(swSrc, /scene_ark5_station\.jpg/);
+  assert.match(swSrc, /osHwRunner\.js\?v=40/);
+  assert.match(swSrc, /ark8OsIde\.js\?v=40/);
+  for (const relPath of [
+    'index.html',
+    'sw.js',
+    'src/main.js',
+    'src/ui/modals.js',
+    'src/ui/prologue.js',
+    'src/ui/ark8Ide.js',
+    'src/ui/ark8OsIde.js',
+    'src/ui/dialogue.js',
+    'src/ui/storyDiagram.js',
+  ]) {
+    const src = readFileSync(new URL(`../${relPath}`, import.meta.url), 'utf8');
+    assert.equal(/\?v=39|silicon-genesis-v39/.test(src), false, `Leftover v39 cache string in ${relPath}`);
+    assert.equal(/\?v=40|silicon-genesis-v40/.test(src), true, `Missing v40 cache string in ${relPath}`);
   }
 });

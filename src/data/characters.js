@@ -35,6 +35,14 @@ export const CHARACTERS = {
     color: '#56ccf2',
     bgTint: 'rgba(86, 204, 242, 0.16)',
   },
+  ren: {
+    id: 'ren',
+    name: 'レン（アーク5）',
+    role: 'アーク5 北方気象観測シェルター通信技師',
+    portrait: './assets/portrait_ren.jpg',
+    color: '#7ee8ff',
+    bgTint: 'rgba(126, 232, 255, 0.16)',
+  },
 };
 
 export const SCENES = {
@@ -57,5 +65,10 @@ export const SCENES = {
     id: 'horizon_camp',
     image: './assets/scene_horizon_camp.jpg',
     label: '開拓拠点ホライズン（地上）',
+  },
+  ark5_station: {
+    id: 'ark5_station',
+    image: './assets/scene_ark5_station.jpg',
+    label: 'ホライズン電算司令室',
   },
 };

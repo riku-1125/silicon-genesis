@@ -353,24 +353,47 @@ export function exportSiliconBlueprint(
 
   // Normalize optional live assembly ROM rows into a Map<addr, { part }>
   const normalizedRomMap = normalizeRomRows(romRows);
+  const isAutoArch = !romArch || romArch === 'auto';
+  const isArk8Os =
+    romArch === 'ark8_os' ||
+    (isAutoArch && Boolean(workingChips.ARK8_OS_HW?.circuit) && !normalizedRomMap);
   const isArk8Rom =
-    romArch === 'ark8' ||
-    (normalizedRomMap && Array.from(normalizedRomMap.values()).some((e) => e.part?.word16 !== undefined));
-  const romModName = isArk8Rom ? 'ARK8_PROGRAM_ROM' : 'ARK4_PROGRAM_ROM';
+    !isArk8Os &&
+    (romArch === 'ark8' ||
+      (normalizedRomMap && Array.from(normalizedRomMap.values()).some((e) => e.part?.word16 !== undefined)));
+  const romModName = isArk8Os ? 'ARK8_OS_UNIFIED_RAM' : isArk8Rom ? 'ARK8_PROGRAM_ROM' : 'ARK4_PROGRAM_ROM';
 
   // Lazily build canonical fallback chips ONLY to fill any missing referenced dependency
   let canonicalFallback = null;
   const getFallback = () => {
     if (!canonicalFallback) {
-      canonicalFallback = provisionStandardChips({}, { includeChapter3Hardware: true, provisioned: true });
+      canonicalFallback = provisionStandardChips(
+        {},
+        { includeChapter3Hardware: true, includeChapter4Hardware: isArk8Os || Boolean(workingChips.ARK8_OS_HW), provisioned: true }
+      );
     }
     return canonicalFallback;
   };
 
-  // Build live programmable ROM circuit if romRows (or romCircuit) is supplied
+  // Ensure full Chapter 4 motherboard modules are included when exporting `romArch: 'ark8_os'`
+  if (isArk8Os) {
+    const fb = getFallback();
+    const ch4Reqs = [
+      'NAND', 'ASM_ENC', 'ASM_ENC8', 'REG_8B', 'SRAM_16B',
+      'MEM_BUS8', 'MMIO_DEC', 'STACK_PTR', 'CMP_8B', 'TMR_IRQ',
+      'MMU_8B', 'PRIV_CTRL', 'IRQ_VEC', 'INST_DEC16', 'ARK8_OS_HW',
+    ];
+    for (const req of ch4Reqs) {
+      if (!workingChips[req] && fb[req]) {
+        workingChips[req] = fb[req];
+      }
+    }
+  }
+
+  // Build live programmable ROM circuit if romRows (or romCircuit) is supplied (Ch.2 / Ch.3 Mask ROMs)
   let liveRomCircuit = romCircuit || null;
   let fuseMatrix = null;
-  if (!liveRomCircuit && normalizedRomMap) {
+  if (!isArk8Os && !liveRomCircuit && normalizedRomMap) {
     const fb = getFallback();
     const reqs = isArk8Rom
       ? ['NAND', 'NOT', 'AND', 'OR', 'DEC_2TO4', 'ASM_ENC', 'ASM_ENC8']
@@ -472,19 +495,50 @@ export function exportSiliconBlueprint(
 
   // Compute physical Bill of Materials (BOM)
   const zeroM = { nandCount: 0, swCount: 0, pullCount: 0 };
-  const cpuDef = workingChips.ARK8_SYS || workingChips.ARK4_SYS || workingChips.ARK4_CORE || null;
+  const cpuDef =
+    (romArch === 'ark4'
+      ? workingChips.ARK4_SYS || workingChips.ARK4_CORE
+      : romArch === 'ark8'
+        ? workingChips.ARK8_SYS
+        : isArk8Os
+          ? workingChips.ARK8_OS_HW
+          : workingChips.ARK8_OS_HW || workingChips.ARK8_SYS || workingChips.ARK4_SYS || workingChips.ARK4_CORE) || null;
   const cpuM = cpuDef?.circuit ? computeCircuitMetrics(cpuDef.circuit, workingChips) : zeroM;
   const encDef = workingChips.ASM_ENC8 || workingChips.ASM_ENC || null;
   const encM = encDef?.circuit ? computeCircuitMetrics(encDef.circuit, workingChips) : zeroM;
   const romM = liveRomCircuit
     ? computeCircuitMetrics(liveRomCircuit, workingChips)
-    : workingChips.ROM_4W?.circuit
+    : !isArk8Os && workingChips.ROM_4W?.circuit
       ? computeCircuitMetrics(workingChips.ROM_4W.circuit, workingChips)
       : zeroM;
 
   let totalNandCount = cpuM.nandCount + encM.nandCount + romM.nandCount;
   let totalSwCount = cpuM.swCount + encM.swCount + romM.swCount;
   let totalPullCount = cpuM.pullCount + encM.pullCount + romM.pullCount;
+
+  // If exporting full Chapter 4 OS-ready motherboard, also report motherboard support silicon
+  let boardSupportM = zeroM;
+  if (isArk8Os) {
+    const supIds = ['MEM_BUS8', 'MMIO_DEC', 'TMR_IRQ', 'MMU_8B'];
+    for (const sid of supIds) {
+      if (workingChips[sid]?.circuit) {
+        const sm = computeCircuitMetrics(workingChips[sid].circuit, workingChips);
+        boardSupportM = {
+          nandCount: boardSupportM.nandCount + sm.nandCount,
+          swCount: boardSupportM.swCount + sm.swCount,
+          pullCount: boardSupportM.pullCount + sm.pullCount,
+        };
+      }
+    }
+    if (workingChips.REG_8B?.circuit) {
+      const rm = computeCircuitMetrics(workingChips.REG_8B.circuit, workingChips);
+      boardSupportM = {
+        nandCount: boardSupportM.nandCount + rm.nandCount * 4,
+        swCount: boardSupportM.swCount + rm.swCount * 4,
+        pullCount: boardSupportM.pullCount + rm.pullCount * 4,
+      };
+    }
+  }
 
   // If player exported early (before forging ARK4_CORE/SYS), summarize top-most forged module
   if (totalNandCount === 0 && totalSwCount === 0 && orderedIds.length > 0) {
@@ -521,8 +575,14 @@ export function exportSiliconBlueprint(
     '// SILICON GENESIS — Full Physical Silicon Netlist (IEEE 1364-2001 Verilog HDL)',
     ...(stageTitle ? [`// Stage / Target : ${stageTitle}`] : []),
     `// CPU Silicon    : ${cpuDef ? cpuDef.id : 'NONE'} (${stats.cpuNandCount} NAND = ${stats.cpuSwCount} MOSFET + ${stats.cpuPullCount} Pull-up Resistors)`,
+    ...(isArk8Os
+      ? [
+          `// Board Silicon  : MEM_BUS8 + MMIO_DEC + TMR_IRQ + MMU_8B + 4xREG_8B (${boardSupportM.nandCount} NAND = ${boardSupportM.swCount} MOSFET + ${boardSupportM.pullCount} Pull-up Resistors)`,
+          '// Unified Memory : 256-Byte Von Neumann RAM (16x verified SRAM_16B banks, 0x00..0xEF RAM / 0xF0..0xFF MMIO)',
+        ]
+      : []),
     `// Key Encoder    : ${encDef ? encDef.id : 'NONE'} (${stats.encNandCount} NAND = ${stats.encSwCount} MOSFET + ${stats.encPullCount} Pull-up Resistors)`,
-    `// Program ROM    : ${liveRomCircuit ? romModName : workingChips.ROM_4W ? 'ROM_4W' : 'NONE'} (${stats.romNandCount} NAND = ${stats.romSwCount} MOSFET + ${stats.romPullCount} Pull-up Resistors)`,
+    `// Program Memory : ${isArk8Os ? 'ARK8_OS_UNIFIED_RAM (256B)' : liveRomCircuit ? romModName : workingChips.ROM_4W ? 'ROM_4W' : 'NONE'} (${stats.romNandCount} NAND = ${stats.romSwCount} MOSFET + ${stats.romPullCount} Pull-up Resistors)`,
     `// TOTAL SILICON  : ${stats.totalNandCount} NAND = ${stats.totalSwCount} MOSFET + ${stats.totalPullCount} Pull-up Resistors (${stats.moduleCount} Modules)`,
     '// ============================================================================',
     '',
@@ -600,6 +660,22 @@ export function exportSiliconBlueprint(
         commentLines: romComments,
       })
     );
+  } else if (isArk8Os && normalizedRomMap && normalizedRomMap.size > 0) {
+    const progComments = [
+      '// ============================================================================',
+      '// ARK8_OS_UNIFIED_RAM — 256B Unified Von Neumann Program Image (16-Bit Words)',
+    ];
+    const sorted = Array.from(normalizedRomMap.entries()).sort((a, b) => a[0] - b[0]);
+    for (const [addr, entry] of sorted) {
+      if (!entry?.part) continue;
+      const ba = (addr << 1) & 0xff;
+      const baHex = `0x${ba.toString(16).toUpperCase().padStart(2, '0')}`;
+      progComments.push(
+        `//   [PC ${String(addr).padStart(2, ' ')} @ ${baHex}]: ${(entry.part.name || '').padEnd(16, ' ')} -> ${entry.part.hex16 || ''}`
+      );
+    }
+    progComments.push('// ============================================================================');
+    blocks.push(progComments.join('\n'));
   }
 
   const verilog = `${blocks.join('\n\n')}\n`;

@@ -1,9 +1,10 @@
 /**
- * SILICON GENESIS — 45-Stage Bottom-Up Campaign (Chapter I, II & III / 10 Acts)
+ * SILICON GENESIS — 57-Stage Bottom-Up Campaign (Chapter I–IV / 12 Acts)
  * Every stage builds strictly from silicon physics & NAND + custom chips the player has forged.
  */
 
 import { CHAPTER3_STAGES } from './chapter3Stages.js';
+import { CHAPTER4_STAGES } from './chapter4Stages.js';
 
 function bits4(n) {
   const v = ((n % 16) + 16) % 16;
@@ -123,6 +124,8 @@ export const ACTS = [
   { id: 7, roman: 'ACT VII', title: '第二章：青空へのプログラム', subtitle: 'アセンブリ言語と地上大ハッチ開門', color: '#6fcf97', chapter: 2 },
   { id: 8, roman: 'ACT VIII', title: '第三章：記憶の大地（RAMと1バイト）', subtitle: 'バス束線・書換可能SRAM・8bit ALU', color: '#52e3b6', chapter: 3 },
   { id: 9, roman: 'ACT IX', title: '第三章：8ビット汎用計算機『ARK-8』', subtitle: 'R0〜R3・16B SRAM・汎用アルゴリズム', color: '#ffd166', chapter: 3 },
+  { id: 10, roman: 'ACT X', title: '第四章：統一メモリ・スタックと周辺機器', subtitle: '統一バス・MMIO・SP・タイマー割込・MMU', color: '#7ee8ff', chapter: 4 },
+  { id: 11, roman: 'ACT XI', title: '第四章：特権保護とOS対応CPU『ARK8_OS_HW』', subtitle: 'K/Uリング・割込ベクタ・16命令・OS保護実戦', color: '#ff8cb0', chapter: 4 },
 ];
 
 export const STAGES = [
@@ -3374,6 +3377,7 @@ export const STAGES = [
     codexUnlock: ['software_algorithm'],
   },
   ...CHAPTER3_STAGES,
+  ...CHAPTER4_STAGES,
 ];
 
 export const SANDBOX_STAGE = {

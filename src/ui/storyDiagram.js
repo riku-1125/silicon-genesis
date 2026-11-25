@@ -9,7 +9,7 @@
  * without advancing the story dialogue.
  */
 
-import { sound } from '../audio/sound.js?v=39';
+import { sound } from '../audio/sound.js?v=40';
 
 const W = 340;
 const H = 126;
@@ -317,6 +317,211 @@ const GOAL_SPECS = {
       { ins: [['RAM[0]=22', 1], ['RAM[1]=11', 1]], outs: [['R0=22, R1=11', 1], ['R2=0, R3=1', 1]], msg: '① LOAD で被乗数と回数を R0, R1 へ読込、R2=0・R3=1 で準備！' },
       { ins: [['ADD R2, R0', 1], ['SUB R1, R3', 1]], outs: [['R2=+22累積', 1], ['JNZ R1, 4!', 1]], msg: '② R1 が 0 になるまで 11回ループして 22 を足し込み続ける！' },
       { ins: [['STOR R2,[2]', 1], ['HALT', 1]], outs: [['RAM[2]=242!', 1], ['完了停止!', 1]], msg: '③ R2=242 を SRAM[2] へ書き込み HALT！ 15×6=90 も同じコードで解ける！' },
+    ],
+  },
+  // Chapter 4 Live Diagrams (12 Stage Goals + 10 Module Encyclopedia)
+  goal_mem_bus8: {
+    boxTitle: 'MEM_BUS8',
+    boxSub: '統一256Bメモリバス',
+    accent: '#7ee8ff',
+    steps: [
+      { ins: [['PC=0x02, DSEL=0', 1], ['BOOT=1, WE=0', 1]], outs: [['ADDR=0x02', 1], ['ROM_EN=1, RAM_WE=0', 1]], msg: '① 起動時(BOOT=1)に 0x00〜0x0F を読出 ▶ Boot ROM が有効、書込禁止で保護！' },
+      { ins: [['DA=0x60, DSEL=1', 1], ['WE=1 (RAM書込)', 1]], outs: [['ADDR=0x60', 1], ['RAM_WE=1!', 1]], msg: '② データ番地 0x60 へ書込 ▶ ROMでもMMIOでもないので RAM_WE=1 が通る！' },
+      { ins: [['DA=0xF0, DSEL=1', 1], ['WE=1 (CRT書込)', 1]], outs: [['MMIO_EN=1!', 1], ['RAM_WE=0 (遮断)', 0]], msg: '③ 0xF0〜0xFF は周辺機器(MMIO)領域 ▶ MMIO_EN=1 になり RAM書込は自動遮断！' },
+    ],
+  },
+  mem_bus8: {
+    boxTitle: 'MEM_BUS8',
+    boxSub: '命令・データ統一バス',
+    accent: '#7ee8ff',
+    steps: [
+      { ins: [['DSEL=0 (PC読出)', 1], ['BOOT=1, 0x04', 1]], outs: [['ROM_EN=1', 1], ['RAM_WE=0', 0]], msg: '① ノイマン統一バス：PC と DA を MUX4_8B で切替え 256B 空間を共有！' },
+      { ins: [['DSEL=1, DA=0xF0', 1], ['上位4bit=1111', 1]], outs: [['MMIO_EN=1', 1], ['RAM_WE=0', 0]], msg: '② 0xF0〜0xFF を MMIO 窓口に分離し、ROM/MMIO 領域への誤書込を物理保護！' },
+    ],
+  },
+  goal_mmio_dec: {
+    boxTitle: 'MMIO_DEC',
+    boxSub: '0xF0〜F3 周辺選択',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['ADDR=0xF0 (CRT)', 1], ['MMIO_EN=1, WE=1', 1]], outs: [['CRT_SEL=1!', 1], ['DEV_WE=1', 1]], msg: '① 0xF0 書込 ▶ CRT_SEL=1 ＆ DEV_WE=1 で緑色画面に1文字出力！' },
+      { ins: [['ADDR=0xF3 (TMR)', 1], ['MMIO_EN=1, WE=1', 1]], outs: [['TMR_SEL=1!', 1], ['DEV_WE=1', 1]], msg: '② 0xF3 書込 ▶ TMR_SEL=1 でタイマー周期を設定（KB=0xF1, DSK=0xF2）！' },
+      { ins: [['ADDR=0xF4 (MMU)', 1], ['b2=1 (上位枠)', 1]], outs: [['全SEL=0 (誤作動0!)', 0]], msg: '③ 0xF4〜0xFF は !(b2|b3) ガードで遮断 ▶ 制御ポートとの衝突（エイリアス）を完全防止！' },
+    ],
+  },
+  mmio_dec: {
+    boxTitle: 'MMIO_DEC',
+    boxSub: 'DEC2_4 + 誤作動防止',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['0xF0..0xF3', 1], ['MMIO_EN=1', 1]], outs: [['CRT/KB/DSK/TMR', 1]], msg: '① メモリ番地を周辺機器の選択線へ翻訳するメモリマップドI/O（MMIO）の心臓！' },
+      { ins: [['0xF4..0xFF', 0], ['!(b2|b3)=0', 0]], outs: [['全SEL=0 保護', 0]], msg: '② たった 26 NAND（52 MOSFET）で 4周辺機器デコードと衝突防止を両立！' },
+    ],
+  },
+  goal_stack_ptr: {
+    boxTitle: 'STACK_PTR',
+    boxSub: '降順スタックポインタ',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['RST=1, CLK↑', 1]], outs: [['SP=0xF0 (240)', 1]], msg: '① 初期化(RST=1) ▶ SP はスタック最上端 0xF0（240番地）へセット！' },
+      { ins: [['PUSH=1, EN=1', 1], ['CLK↑', 1]], outs: [['EA=0xEF (書込先)', 1], ['SP → 0xEF (-1)', 1]], msg: '② PUSH/CALL ▶ SP を 1 下げて 0xEF へ戻り番地やレジスタを積む！' },
+      { ins: [['POP=1, EN=1', 1], ['CLK↑', 1]], outs: [['EA=0xEF (読出先)', 1], ['SP → 0xF0 (+1)', 1]], msg: '③ POP/RET ▶ 今の SP(0xEF) から取り出しつつ SP を 0xF0 へ戻す！' },
+    ],
+  },
+  stack_ptr: {
+    boxTitle: 'STACK_PTR',
+    boxSub: 'PUSH(-1) / POP(+1)',
+    accent: '#ffd166',
+    steps: [
+      { ins: [['PUSH=1, EN=1', 1], ['SP=0xF0', 1]], outs: [['EA=0xEF, SP→0xEF', 1]], msg: '① フル降順スタック：PUSH/CALL は SP-1 へ積み、ネストした関数呼出を実現！' },
+      { ins: [['EN=0 (トラップ!)', 0], ['SP凍結', 1]], outs: [['SP 変化なし(保護)', 1]], msg: '② 違反発生時は EN=0 で SP を凍結し、壊れた命令によるスタック破壊を防止！' },
+    ],
+  },
+  goal_cmp_8b: {
+    boxTitle: 'CMP_8B',
+    boxSub: '8bit 符号なし大小比較',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['A = 32', 1], ['B = 32', 1]], outs: [['EQ=1, GE=1', 1], ['LT=0', 0]], msg: '① 32 vs 32 ▶ A−B=0 なので Z=1(EQ=1)、借りなし C=1(GE=1)！' },
+      { ins: [['A = 12', 1], ['B = 32 (上限)', 1]], outs: [['LT=1 (範囲内!)', 1], ['EQ=0, GE=0', 0]], msg: '② 12 < 32 ▶ 引き算で借り(C=0)が発生 → LT=!C=1 で範囲内を確認！' },
+      { ins: [['A = 40', 1], ['B = 32 (上限)', 1]], outs: [['GE=1 (上限超過!)', 1], ['LT=0', 0]], msg: '③ 40 >= 32 ▶ C=1 → GE=1 が点灯！ MMU の境界オーバー検知に直結！' },
+    ],
+  },
+  cmp_8b: {
+    boxTitle: 'CMP_8B',
+    boxSub: 'ALU_8B(SUB) + NOT',
+    accent: '#ff8a7a',
+    steps: [
+      { ins: [['A[7:0], B[7:0]', 1], ['SUB=1 固定', 1]], outs: [['EQ=Z, GE=C, LT=!C', 1]], msg: '① 自作 ALU_8B の減算フラグ(Z/C)に NOT を1個足すだけで 8bit 比較器が完成！' },
+    ],
+  },
+  goal_tmr_irq: {
+    boxTitle: 'TMR_IRQ',
+    boxSub: '周期タイマー割込器',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['PERIOD=4, LOAD=1', 1], ['CLK↑', 1]], outs: [['CNT=4', 1], ['IRQ=0', 0]], msg: '① 周期 4 をセット ▶ 毎拍 4 → 3 → 2 → 1 と自動カウントダウン！' },
+      { ins: [['CNT=1 到達!', 1], ['LOAD=0', 0]], outs: [['IRQ=1 (強制割込!)', 1]], msg: '② CNT=1 になった瞬間に IRQ=1 が点灯 ▶ 無限ループでも CPU を OS へ戻す！' },
+      { ins: [['次の CLK↑', 1], ['自動リロード', 1]], outs: [['CNT → 4 復帰', 1], ['IRQ=0', 0]], msg: '③ 次の拍で自動的に PERIOD(4) を再読込し、一定リズムで割込を刻み続ける！' },
+    ],
+  },
+  tmr_irq: {
+    boxTitle: 'TMR_IRQ',
+    boxSub: 'プリエンプション時計',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['CNT: 3→2→1', 1], ['CLK↑', 1]], outs: [['CNT=1で IRQ=1!', 1]], msg: '① プリエンプティブ・マルチタスクの心臓！ 暴走アプリからCPU時間を強制回収！' },
+    ],
+  },
+  goal_mmu_8b: {
+    boxTitle: 'MMU_8B',
+    boxSub: 'Base/Limit 砂箱保護',
+    accent: '#7ee8ff',
+    steps: [
+      { ins: [['K_MODE=1 (OS)', 1], ['VA=0xF0 (CRT)', 1]], outs: [['PA=0xF0 (直通)', 1], ['FAULT=0, MMIO=1', 1]], msg: '① カーネル(K=1) ▶ 仮想番地そのまま直通、MMIO も自由にアクセス可能！' },
+      { ins: [['K_MODE=0, VA=0x05', 1], ['BASE=0x40, LIM=0x20', 1]], outs: [['PA=0x45 (翻訳!)', 1], ['FAULT=0 (安全)', 1]], msg: '② ユーザー(K=0)で範囲内(5<32) ▶ BASE+VA=0x45 の砂箱内へ自動翻訳！' },
+      { ins: [['K_MODE=0, VA=0x30', 1], ['VA>=LIM (0x20!)', 1]], outs: [['FAULT=1 (違反遮断!)', 1]], msg: '③ 上限超過(48>=32)や桁溢れ加算 ▶ FAULT=1 を即点灯し OS 領域を物理死守！' },
+    ],
+  },
+  mmu_8b: {
+    boxTitle: 'MMU_8B',
+    boxSub: 'BASE+VA & 境界監視',
+    accent: '#7ee8ff',
+    steps: [
+      { ins: [['K=0, BASE=0x40', 1], ['VA=0x04 < 0x20', 1]], outs: [['PA=0x44, FAULT=0', 1]], msg: '① CMP_8B と ADD_8B でユーザー空間を物理隔離！ 桁溢れラップアラウンドも完全遮断！' },
+      { ins: [['K=0, VA>=LIMIT', 1], ['または加算溢れ', 1]], outs: [['FAULT=1 発報!', 1]], msg: '② 821 NAND（1,642 MOSFET）で実現する本物のハードウェアメモリ保護機構！' },
+    ],
+  },
+  goal_priv_ctrl: {
+    boxTitle: 'PRIV_CTRL',
+    boxSub: 'K/U 特権リング制御',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['RST=1 → IRET=1', 1], ['特権降格', 1]], outs: [['K_MODE: 1→0 (User)', 1], ['SAFE=1', 1]], msg: '① 起動時は K=1(OS)。IRET 実行で安全に K=0(ユーザーモード) へ降格！' },
+      { ins: [['K=0, MMIO=1', 1], ['不正直叩き!', 1]], outs: [['FAULT=1, TRAP=1', 1], ['SAFE=0, K→1!', 1]], msg: '② ユーザーが MMIO や HALT/IRET を叩くと即 FAULT! SAFE=0 で書込遮断し OS へ昇格！' },
+      { ins: [['K=0, SYSCALL=1', 1], ['正規依頼', 1]], outs: [['TRAP=1, K→1', 1], ['FAULT=0 (正常)', 1]], msg: '③ 正規の SYSCALL や タイマーIRQ でも安全に K=1 へ戻り OS が処理を引き継ぐ！' },
+    ],
+  },
+  priv_ctrl: {
+    boxTitle: 'PRIV_CTRL',
+    boxSub: 'Ring 0(K) / Ring 3(U)',
+    accent: '#c89bff',
+    steps: [
+      { ins: [['K=0 + PRIV/MMIO', 1]], outs: [['SAFE=0 (書込禁止)', 1], ['TRAP=1, K→1', 1]], msg: '① 1個の D_FF と 46 NAND で CPU 特権リング（カーネル/ユーザー保護）を物理実装！' },
+    ],
+  },
+  goal_irq_vec: {
+    boxTitle: 'IRQ_VEC',
+    boxSub: '割込ベクタ & EPC',
+    accent: '#ffb84d',
+    steps: [
+      { ins: [['IRQ=1 (PC=0x03)', 1]], outs: [['PC → 0x04 (IRQ)', 1], ['EPC ← 0x03', 1]], msg: '① タイマーIRQ ▶ 現在PCを EPC へ退避し、0x04番地(IRQハンドラ)へ自動ジャンプ！' },
+      { ins: [['SYSCALL=1 (PC=0x05)', 1]], outs: [['PC → 0x08 (SYS)', 1], ['EPC ← 0x06 (PC+1)', 1]], msg: '② SYSCALL ▶ 次の命令 PC+1 を EPC へ退避し、0x08番地(OS窓口)へジャンプ！' },
+      { ins: [['FAULT=1 (最優先!)', 1]], outs: [['PC → 0x0C (FAULT)', 1], ['EPC ← 違反PC', 1]], msg: '③ 違反FAULT ▶ 最優先で 0x0C番地へ強制退避！ IRET 時は EPC へ一発復帰！' },
+    ],
+  },
+  irq_vec: {
+    boxTitle: 'IRQ_VEC',
+    boxSub: '0x04/0x08/0x0C + EPC',
+    accent: '#ffb84d',
+    steps: [
+      { ins: [['FAULT>SYS>IRQ', 1], ['ASM_ENC 優先符号', 1]], outs: [['PC→ベクタ, EPC保存', 1]], msg: '① 自作 PC_8B・ASM_ENC・REG_8B を統合し、3系統のハードウェア例外ベクタを実現！' },
+    ],
+  },
+  goal_inst_dec16: {
+    boxTitle: 'INST_DEC16',
+    boxSub: '16命令フル解読器',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['OP=0xxx (0〜7)', 1], ['第3章 8命令', 1]], outs: [['INST_DEC8 直結!', 1], ['HALT→PRIV=1', 1]], msg: '① OP3=0 ▶ 第3章の INST_DEC8 を100%再利用！ 既存8命令がそのまま動く！' },
+      { ins: [['OP=1011 (CALL)', 1], ['OP3=1 拡張枠', 1]], outs: [['STK=PUSH, CALL=1', 1], ['MEM_WE=1', 1]], msg: '② OP=8〜11 ▶ POP/RET/PUSH/CALL のスタック制御線を生成！' },
+      { ins: [['OP=1110/1111', 1], ['SYSCALL / IRET', 1]], outs: [['SYS=1 / IRET=1', 1], ['IRET→PRIV=1', 1]], msg: '③ OP=12〜15 ▶ ポインタ LDR/STR と OS 特権命令 SYSCALL/IRET を全解読！' },
+    ],
+  },
+  inst_dec16: {
+    boxTitle: 'INST_DEC16',
+    boxSub: 'INST_DEC8 + OS拡張',
+    accent: '#56ccf2',
+    steps: [
+      { ins: [['OP[3:0] (16命令)', 1]], outs: [['CORE/MEM/STK/OS', 1]], msg: '① 第3章の予備ビット OP3 を解放し、113 NAND で OS 対応 16 命令 ISA を完成！' },
+    ],
+  },
+  goal_ark8_os_hw: {
+    boxTitle: 'ARK8_OS_HW',
+    boxSub: 'OS対応PC CPU完成',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['CALL/LDR/STR', 1], ['STACK + MMIO', 1]], outs: [['SP自動更新', 1], ['CRT 0xF0出力!', 1]], msg: '① スタック・ポインタ・MMIO を駆使して文字列を緑色 CRT 画面へ連続出力！' },
+      { ins: [['User SYSCALL', 1], ['K=0 → K=1', 1]], outs: [['PC→0x08, EPC保存', 1], ['OS代行実行!', 1]], msg: '② ユーザー空間の SYSCALL を安全に捕捉し、カーネルが代理で画面出力！' },
+      { ins: [['User 不正STOR', 1], ['MMU+PRIV 防衛!', 1]], outs: [['TRAP→0x0C', 1], ['書込物理遮断!', 1]], msg: '③ 暴走アプリの直接 MMIO 攻撃を SAFE=0 で物理遮断！ 12,588 MOSFET の真のOS対応CPU！' },
+    ],
+  },
+  ark8_os_hw: {
+    boxTitle: 'ARK8_OS_HW',
+    boxSub: '6,294N / 12,588 FET',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['16命令 + MMU + PRIV', 1], ['STACK + IRQ_VEC', 1]], outs: [['PA/PC/SP/EPC/K/TRAP', 1]], msg: '① 砂から積上げた全チップを結集した 12,588 MOSFET の OS 対応マイクロプロセッサ！' },
+    ],
+  },
+  goal_ark5_crt: {
+    boxTitle: 'ARK5_CRT',
+    boxSub: 'CALL+LDR → CRT出力',
+    accent: '#52e3b6',
+    steps: [
+      { ins: [['R1←0x60 (文字列)', 1], ['CALL 印刷関数', 1]], outs: [['SP-1 戻り番地保存', 1], ['LDR R0,[R1]', 1]], msg: '① 先頭番地を R1 に入れて CALL ▶ 戻り番地をスタックへ積み印刷関数へ！' },
+      { ins: [['LDR R0,[R1]', 1], ['STOR R0,[0xF0]', 1]], outs: [['CRT: "ARK5:SOS"', 1], ['R1+1 ループ!', 1]], msg: '② 0終端まで 1文字ずつポインタ読出＆0xF0 書込 → 緑色CRTに救難符号が灯る！' },
+      { ins: [['R0==0 終了', 1], ['RET → HALT', 1]], outs: [['SP+1 元の番地へ', 1], ['完全停止!', 1]], msg: '③ RET でスタックから戻り番地を復元し安全停止！ 別文字列 "HI,ARK7!" も汎用出力！' },
+    ],
+  },
+  goal_guard_trap: {
+    boxTitle: 'GUARD_TRAP',
+    boxSub: '3大トラップ防衛テスト',
+    accent: '#7ee8ff',
+    steps: [
+      { ins: [['User SYSCALL', 1], ['R0="A", "5"', 1]], outs: [['0x08: STOR [0xF0]', 1], ['IRET → CRT "A5"', 1]], msg: '① 0x08 SYSCALL窓口：ユーザーが渡した文字をカーネルが安全に CRT へ代行出力し IRET！' },
+      { ins: [['TMR_IRQ 割込!', 1], ['暴走防止時計', 1]], outs: [['0x04: 割込処理', 1], ['IRET で無事復帰!', 1]], msg: '② 0x04 IRQ窓口：定期タイマー割込を受け止めて即 IRET、アプリ実行を止めずに復帰！' },
+      { ins: [['User 不正STOR "X"', 1], ['MMU/PRIV 遮断!', 1]], outs: [['0x0C: CRT "!"', 1], ['HALT (隔離完了!)', 1]], msg: '③ 0x0C FAULT窓口："X" 攻撃を物理遮断した上で警告 "!" を出力し安全停止 → "A5!"！' },
     ],
   },
   goal_sr_latch: {

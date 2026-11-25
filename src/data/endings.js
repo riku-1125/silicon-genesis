@@ -25,6 +25,12 @@ function formatStats(stats = {}) {
     Number.isFinite(stats.ark8SysSwCount) && stats.ark8SysSwCount > 0 ? stats.ark8SysSwCount : ark8SysNand * 2;
   const ark8SysPull =
     Number.isFinite(stats.ark8SysPullCount) && stats.ark8SysPullCount > 0 ? stats.ark8SysPullCount : ark8SysNand;
+  const ark8OsNand =
+    Number.isFinite(stats.ark8OsNandCount) && stats.ark8OsNandCount > 0 ? stats.ark8OsNandCount : 6294;
+  const ark8OsTr =
+    Number.isFinite(stats.ark8OsSwCount) && stats.ark8OsSwCount > 0 ? stats.ark8OsSwCount : ark8OsNand * 2;
+  const ark8OsPull =
+    Number.isFinite(stats.ark8OsPullCount) && stats.ark8OsPullCount > 0 ? stats.ark8OsPullCount : ark8OsNand;
   const forgedChips = Number.isFinite(stats.forgedChipCount) && stats.forgedChipCount > 0 ? stats.forgedChipCount : 18;
   const clearedCount = Number.isFinite(stats.clearedCount) && stats.clearedCount > 0 ? stats.clearedCount : 20;
   return {
@@ -37,6 +43,9 @@ function formatStats(stats = {}) {
     ark8SysNand,
     ark8SysTr,
     ark8SysPull,
+    ark8OsNand,
+    ark8OsTr,
+    ark8OsPull,
     forgedChips,
     clearedCount,
   };
@@ -477,6 +486,146 @@ export function buildChapter3EndingSteps(rawStats = {}) {
       },
       speaker: null,
       text: `バス束線・書き込み可能SRAM・リセット付8bitレジスタ・Z/C/Nフラグ付ALU・4本汎用レジスタ・16バイト主記憶・16ビット拡張命令対応【ARK8_SYS】──すべての部品を砂のMOSFETから1ミリの飛躍もなく組み上げ、242人の地上拠点「ホライズン」に計算の記憶が宿った。\nそして全6章の物語は後半戦へ──第3章の8ビット部品を1つも捨てず統一RAM・スタック（SP）・画面/キーボード/ディスクMMIO・タイマー割込（IRQ）・Base/Limit MMUを完成させる第4章『OS対応PCハードウェア完結』、ブートローダ・ヒープ確保（alloc/free）・プロセス別スタック切替マルチタスクを築く第5章『OSカーネル中核』、そして簡易ファイルシステムと対話シェル『arksh』が複数アプリを同時稼働させる第6章『UNIX環境 ARK-OS』へと続く！`,
+    },
+  ];
+}
+
+/**
+ * CHAPTER IV GRAND ENDING — Clearing Stage 54 (`stage_54`, GUARD_TRAP: 3-Vector OS Trap Guard & Hardware Half Complete!)
+ */
+export function buildChapter4EndingSteps(rawStats = {}) {
+  const s = formatStats(rawStats);
+  return [
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:12 // ホライズン電算司令室・全3ベクタ保護稼働',
+      mood: 'amber',
+      bgm: 'finale',
+      fx: 'shake',
+      sfx: 'powerup',
+      speaker: 'hako',
+      text: `『……全トラップ検証オールグリーン！！ お前が鍛えた OS対応CPU【ARK8_OS_HW（${s.ark8OsNand} NAND／実機 MOSFET ${s.ark8OsTr}個＋プルアップ抵抗 ${s.ark8OsPull}本）】と 256バイト統一RAMマザーボード上で、ユーザー SYSCALL（0x08）・タイマー強制割込 IRQ（0x04）・そして不正な直書き攻撃を物理遮断する FAULT（0x0C）が完璧に連動した！！\nエメラルドCRTに映った文字列は──【"A5!"】！！ 破壊工作コード "X" は MMU_8B と PRIV_CTRL の物理ゲートで1ビットも通さず叩き落としたぞ！！』`,
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:13 // 砂場が守った命と通信',
+      mood: 'calm',
+      speaker: null,
+      text: '太陽フレアのノイズで破損した北方バイナリが、MMIO 領域 0xF0番地へ暴走書込を仕掛けたその一瞬──PRIV_CTRL が SAFE 線を 0 へ落とし、カーネル領域も画面も拠点の生命維持リレーも、ただの一度も揺らぐことなく守り抜かれた。\nエメラルドの走査線が静かに呼吸し、司令室のスピーカーからノイズの奥のクリアな搬送波が立ち上がる。',
+    },
+    {
+      scene: './assets/scene_surface_rover.jpg',
+      canvasScene: 'fx_beacon',
+      canvasPhase: 1,
+      dateline: '2094.12.04 20:14 // 北方420km・オーロラ帯からの本回線ロック',
+      mood: 'dawn',
+      sfx: 'powerup',
+      speaker: 'mina',
+      text: '……あっ！！ 主任さん、見て！！ エメラルドのCRT画面に、さっきの緊急コードだけじゃない──北方からの双方向テキスト回線が開通したよ！！ 音声搬送波もピタッと同期してる！！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: 'CHAPTER IV ENDING // 20:15 — 鉄壁の箱庭、光の対話',
+      mood: 'dawn',
+      sfx: 'powerup',
+      chapterCard: {
+        roman: 'CHAPTER IV · ENDING',
+        title: '鉄壁の箱庭、光の対話',
+        sub: `OS対応CPU ARK8_OS_HW (${s.ark8OsNand} NAND / MOSFET ${s.ark8OsTr}個) 稼働`,
+      },
+      speaker: 'ren',
+      text: '『……聞こえる！？ こちら北方420km、気象観測シェルター・アーク5の通信技師、レン！！\nすごい……本当に届いたんだ！！ さっきの磁気嵐で送信バイナリの一部が化けちゃったのに、そっちのシステム、落ちずに弾いて応答コード "A5!" まで返してくれたんだね！！ アーク5の86人、全員生きてるよ！！』',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:16 // 328人の声が繋がった夜',
+      mood: 'dawn',
+      speaker: 'kai',
+      text: 'やったな主任！！ アーク7の118人、俺たちアーク3の124人、それに北方アーク5の86人──ぜんぶで 328人 が、お前が組んだエメラルドCRTの向こうで繋がっちまったぜ！！ 磁気嵐の化けバイナリを物理回路で叩き落とした瞬間、マジで痺れたな！！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:17 // 1粒の砂から、OS対応PCハードウェア完結へ',
+      mood: 'amber',
+      speaker: 'kagari',
+      text: '……見届けたぞ、最高主任技師！ 統一ノイマン・バス MEM_BUS8、周辺機器 MMIO_DEC、降順スタック STACK_PTR、符号なし比較器 CMP_8B、自動再装填タイマー TMR_IRQ、Base/Limit MMU_8B、特権リング PRIV_CTRL、3ベクタ割込シーケンサ IRQ_VEC、16命令フルISAデコーダ INST_DEC16──そして統合CPU【ARK8_OS_HW】。\n第3章の8ビット部品を1つも捨てず、全6章の前半戦となる「OSが動く本物のPCハードウェア」が、今夜ついに100%完結したのだ！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: '2094.12.04 20:18 // 黄昏の窓とエメラルドの走査線',
+      mood: 'calm',
+      speaker: null,
+      text: '鋼鉄と木材で組まれたホライズン電算司令室の大きな窓の向こう、薄明の海空に淡い北方オーロラの光が揺れている。\n手元のCRTにはアーク5からの気象テレメトリが整然と流れ、キーボードの打鍵待ちカーソルが緑色に点滅していた。',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:19 // レンからの問いかけ',
+      mood: 'amber',
+      speaker: 'ren',
+      text: '『ねぇ、ホライズンの主任技師さん！ 砂からここまで完璧なOS対応ハードウェアを創り上げちゃうなんて、正直まだ信じられないよ。──ハードが完成した今、この新しいパソコンで一番最初に何を動かしたい？』',
+      choices: [
+        {
+          label: '「気象解析も発電監視も通信も、止まらず同時稼働する本物の『OSカーネル』を動かします！」',
+          replySpeaker: 'kagari',
+          replyText: 'これ以上ない答えだ！ もうハードウェアを1本も作り直す必要はない。タイマー割込 IRQ・スタック SP・MMU のすべてが、そのまま第5章のマルチタスク・カーネルへ火を入れる準備万端だぞ！',
+        },
+        {
+          label: '「アーク5の86人とも、このCRTとキーボードで自由に語り合える端末を作ります！」',
+          replySpeaker: 'ren',
+          replyText: '『ふふっ、約束だよ！ ずっと氷の下で孤独に計器だけ見ていたから、ホライズンのみんなとキーボードで「おはよう」って言い合える日を、アーク5のみんなで待ってるからね！』',
+        },
+        {
+          label: '「どんな未知のプログラムが届いても絶対に壊れない、328人の安全な街の土台にします！」',
+          replySpeaker: 'mina',
+          replyText: 'うん！ さっき化けた信号を物理の防壁がピシャッと止めてくれたとき、私ほんとうに安心したよ。あなたが創ったこの機械なら、子どもたちの未来もずっと守れるね！',
+        },
+      ],
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:21 // 迫る成層圏ストームと次なる壁',
+      mood: 'amber',
+      speaker: 'ren',
+      text: '『……それでね、すぐ相談があるんだ。北の成層圏で異常低気圧が発達していて、これから毎日、気象解析プログラム・電力制御・長距離通信リレーの3つをホライズン側で同時に回し続けなきゃいけないの。\n今はまだプログラムを1本ずつ手作業で焼いて動かしてるけど、ディスクから自動で読み込んで、メモリを分け合って、タイマー割込でいくつもの処理を同時並行で切り替えられる仕組み──作れるかな？』',
+    },
+    {
+      scene: './assets/scene_horizon_camp.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:22 // ハードウェアから「魂（OSカーネル）」へ',
+      mood: 'amber',
+      sfx: 'powerup',
+      speaker: 'kagari',
+      text: 'もちろん作れるさ、レン君！ 君が言ったそれこそが【OSカーネル】そのものだ！\nハードウェアは今夜で100%完成した──次なる第5章『OSカーネル中核』では、この ARK8_OS_HW の実機上でディスクからOSを起動する「ブートローダ」、メモリを必要なぶんだけ貸し借りする動的ヒープ「kalloc / kfree」、そしてタイマー割込 IRQ で各プロセスのスタックとレジスタを丸ごと切り替える「プリエンプティブ・マルチタスク」を創り上げるぞ！',
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_hub_awaken',
+      dateline: '2094.12.04 20:23 // 古い相棒の敬礼',
+      mood: 'calm',
+      speaker: 'hako',
+      text: `『……へっ。暗い地下4階でたった1個のトランジスタを拝んでた日が嘘みてえだな。\n${s.ark8OsNand} 個の NAND と ${s.ark8OsTr} 個の MOSFET、そして MMU と特権リングで武装したお前のマシンが、ついに420km先の仲間を救った。──ハードウェア前半、完全制覇おめでとう、最高主任技師！』`,
+    },
+    {
+      scene: './assets/scene_ark5_station.jpg',
+      canvasScene: 'fx_bluesky_breeze',
+      dateline: 'CHAPTER IV COMPLETE // HARDWARE HALF COMPLETE · NEXT: OSカーネル中核',
+      mood: 'dawn',
+      sfx: 'powerup',
+      chapterCard: {
+        roman: 'CHAPTER IV · COMPLETE',
+        title: 'OS対応PCハードウェア完結',
+        sub: `全6章ハードウェア前半・完全制覇 · ARK8_OS_HW (${s.ark8OsNand} NAND / ${s.ark8OsTr} MOSFET)`,
+      },
+      speaker: null,
+      text: `砂の1粒から始まった壮大なハードウェア構築の旅は、統一メモリバス MEM_BUS8・周辺機器 MMIO_DEC・スタック STACK_PTR・比較器 CMP_8B・タイマー割込 TMR_IRQ・Base/Limit MMU_8B・特権制御 PRIV_CTRL・割込ベクタ IRQ_VEC・16命令デコーダ INST_DEC16・そして完全体OS対応CPU【ARK8_OS_HW（${s.ark8OsNand} NAND／実機 MOSFET ${s.ark8OsTr}個＋プルアップ抵抗 ${s.ark8OsPull}本）】の稼働をもって、全6章の前半戦を完璧に完結させた。\nもう二度とCPUを作り直すことはない──物語はいよいよソフトウェア後半戦、ディスク・ブートローダ、動的ヒープ確保（kalloc / kfree）、プロセス別スタック切替マルチタスクを築く第5章『OSカーネル中核』、そして簡易ファイルシステムと対話シェル『arksh』が輝く第6章『UNIX環境 ARK-OS』へと駆け上がる！`,
     },
   ];
 }
