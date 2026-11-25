@@ -43,7 +43,7 @@ import {
 import { createEmptyCircuit, cloneCircuit, connectWire, computeCircuitMetrics } from '../src/engine/circuit.js';
 import { compileCircuit } from '../src/engine/simulator.js';
 import { evaluateStage, reproduceDiagnosticState } from '../src/engine/evaluator.js';
-import { provisionStandardChips } from '../src/engine/blueprints.js';
+import { provisionStandardChips, buildBlueprintCircuit } from '../src/engine/blueprints.js';
 import {
   ARK4_OPCODES,
   runRomProgram,
@@ -2842,4 +2842,46 @@ test('v42 Chapter 5 Complete: STACK_ABI, MALLOC_STRDUP & RAM Write-Blame Observa
       `Leftover v41 cache string found in ${relPath}`
     );
   }
+});
+
+test('Stage 12 (D_LATCH) respects hold-time locking across all 16 commutative NAND/AND pin permutations', () => {
+  const st12 = getStageById('stage_12');
+  const baseChips = {};
+  provisionStandardChips(baseChips, { includeChapter1Hardware: true });
+
+  for (let mask = 0; mask < 16; mask++) {
+    const swapNand = Boolean(mask & 1);
+    const swapAnd = Boolean(mask & 2);
+    const swapAs = Boolean(mask & 4);
+    const swapAr = Boolean(mask & 8);
+
+    const chips = JSON.parse(JSON.stringify(baseChips));
+    if (swapNand) {
+      for (const w of chips.NAND.circuit.wires) {
+        if (w.from.kind === 'input') w.from.pin = 1 - w.from.pin;
+      }
+    }
+    if (swapAnd) {
+      for (const w of chips.AND.circuit.wires) {
+        if (w.from.kind === 'input') w.from.pin = 1 - w.from.pin;
+      }
+    }
+    const c12 = buildBlueprintCircuit('stage_12');
+    for (const w of c12.wires) {
+      if (swapAs && w.to.kind === 'node' && w.to.nodeId === 'as') w.to.pin = 1 - w.to.pin;
+      if (swapAr && w.to.kind === 'node' && w.to.nodeId === 'ar') w.to.pin = 1 - w.to.pin;
+    }
+
+    const res = evaluateStage(st12, c12, chips);
+    assert.equal(
+      res.passed,
+      true,
+      `Stage 12 failed for permutation mask=${mask} (swapNand=${swapNand}, swapAnd=${swapAnd}, swapAs=${swapAs}, swapAr=${swapAr}): ${JSON.stringify(res.results)}`
+    );
+  }
+
+  // Negative check: pass-through wire D -> Q (no WE lock) must still FAIL
+  const broken = buildCircuit(st12, [], [[inp(0), out(0)]]);
+  const badRes = evaluateStage(st12, broken, baseChips);
+  assert.equal(badRes.passed, false, 'Broken pass-through D->Q must fail Stage 12');
 });

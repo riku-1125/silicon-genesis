@@ -1711,9 +1711,9 @@ export const STAGES = [
     ],
     tests: [
       { label: '① 0を書き込む (D=0, WE=1) → Q=0', input: [0, 1], expected: [0] },
-      { label: '② ロック中にD=1へ変化 (D=1, WE=0) → Q=0のまま!', input: [1, 0], expected: [0] },
+      { label: '② ロック中にD=1へ変化 (D=1, WE=0) → Q=0のまま!', displayInput: [1, 0], phases: [[0, 0], [1, 0]], expected: [0] },
       { label: '③ 1を書き込む (D=1, WE=1) → Q=1', input: [1, 1], expected: [1] },
-      { label: '④ ロック中にD=0へ変化 (D=0, WE=0) → Q=1のまま!', input: [0, 0], expected: [1] },
+      { label: '④ ロック中にD=0へ変化 (D=0, WE=0) → Q=1のまま!', displayInput: [0, 0], phases: [[1, 0], [0, 0]], expected: [1] },
       { label: '⑤ ロック継続 (D=1, WE=0) → Q=1のまま', input: [1, 0], expected: [1] },
       { label: '⑥ 0で上書き (D=0, WE=1) → Q=0', input: [0, 1], expected: [0] },
     ],
