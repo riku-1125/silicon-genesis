@@ -2243,7 +2243,16 @@ export class ModalManager {
       bodyHtml: `
         <div class="silicon-bom-hero">
           <div class="silicon-bom-eyebrow">PHOTOLITHOGRAPHY &amp; FPGA READY // REAL VERILOG HDL</div>
-          <div class="silicon-bom-tagline">このまま半導体露光・FPGA合成に持ち込める実ネットリスト</div>
+          <div class="silicon-bom-tagline">このまま<button type="button" class="term-link" data-term-id="photolithography">半導体露光</button>・<button type="button" class="term-link" data-term-id="fpga">FPGA合成</button>に持ち込める<button type="button" class="term-link" data-term-id="netlist">実ネットリスト</button>（<button type="button" class="term-link" data-term-id="verilog_hdl">Verilog HDL</button>）</div>
+          <div class="silicon-realworld-row">
+            <span class="silicon-rw-hint">💡 現実の半導体とどう繋がる？ タップで解説</span>
+            <div class="silicon-rw-links">
+              <button type="button" class="silicon-rw-link" data-term-id="verilog_hdl">📘 Verilogとは？</button>
+              <button type="button" class="silicon-rw-link" data-term-id="netlist">🔌 実ネットリストとは？</button>
+              <button type="button" class="silicon-rw-link" data-term-id="fpga">⚡ FPGAで実機動作</button>
+              <button type="button" class="silicon-rw-link" data-term-id="photolithography">🏭 半導体工場での露光</button>
+            </div>
+          </div>
           ${summaryJa ? `<p class="silicon-bom-summary">${esc(summaryJa)}</p>` : ''}
           <div class="silicon-bom-grid">
             <div class="silicon-bom-cell">
@@ -2284,6 +2293,16 @@ export class ModalManager {
         ${onBack ? `<button type="button" class="btn btn-ghost" id="btn-verilog-back">${esc(backLabel)}</button>` : ''}
         <button type="button" class="btn btn-ghost" data-close-modal>閉じる</button>
       `,
+    });
+
+    this.bodyEl.querySelectorAll('[data-term-id]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tid = btn.dataset.termId;
+        if (!tid) return;
+        sound.playSwitch(true);
+        glossaryPopover.open(tid);
+      });
     });
 
     const copyBtn = this.footerEl.querySelector('#btn-verilog-copy');

@@ -2884,4 +2884,15 @@ test('Stage 12 (D_LATCH) respects hold-time locking across all 16 commutative NA
   const broken = buildCircuit(st12, [], [[inp(0), out(0)]]);
   const badRes = evaluateStage(st12, broken, baseChips);
   assert.equal(badRes.passed, false, 'Broken pass-through D->Q must fail Stage 12');
+
+  // Verify real-world Verilog / Netlist / FPGA / Photolithography explainer glossary links
+  const freshSave = { clearedStages: [], customChips: {}, discoveredTerms: [] };
+  const modalsSrc = readFileSync(new URL('../src/ui/modals.js', import.meta.url), 'utf8');
+  for (const tid of ['verilog_hdl', 'netlist', 'fpga', 'photolithography']) {
+    const term = getGlossaryTerm(tid);
+    assert.ok(term, `Missing glossary term ${tid}`);
+    assert.equal(isGlossaryTermUnlocked(tid, freshSave), true, `${tid} should be unlocked from start`);
+    assert.equal(/\*\*|`/.test(term.summary + (term.analogy || '')), false, `No raw markdown in ${tid}`);
+    assert.ok(modalsSrc.includes(`data-term-id="${tid}"`), `modals.js must link ${tid}`);
+  }
 });

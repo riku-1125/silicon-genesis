@@ -52,7 +52,47 @@ export const GLOSSARY_TERMS = {
     summary:
       '1枚の設計図（原板）に光を当てて、シリコンの板に何千・何万もの同じ電子回路を一気にコピー印刷する機械。本物の半導体工場でもこの原理でチップを量産しています。',
     analogy: '1枚のハンコ（原板）さえ彫ってしまえば、あとはポンポン何千枚でも複製できる「光のスタンプ機」。',
-    related: ['silicon', 'nand', 'ic_chip'],
+    related: ['silicon', 'photolithography', 'verilog_hdl', 'ic_chip'],
+  },
+  verilog_hdl: {
+    id: 'verilog_hdl',
+    title: 'Verilog HDL（ハードウェア記述言語）',
+    reading: 'Verilog Hardware Description Language (IEEE 1364)',
+    category: '現実の半導体・設計',
+    summary:
+      'あなたが盤面でつないだ論理回路やCPUの配線を、現実の半導体工場やFPGAボードがそのまま読み込める「テキスト版の回路設計図」として記述する世界標準言語です。PythonやJavaScriptが「CPUに実行させる手順」を書く言語なのに対し、Verilogは「電子回路そのものの形と配線」を表します。実際のIntel・Apple・NVIDIAのエンジニアもこの言語でCPUを設計しています。',
+    analogy: '普通のプログラミング言語が「料理のレシピ」なら、Verilogは「キッチンと調理器具そのものの建築設計図」。',
+    related: ['netlist', 'fpga', 'photolithography', 'silicon'],
+  },
+  netlist: {
+    id: 'netlist',
+    title: '実ネットリスト（配線接続表）',
+    reading: 'Gate / Transistor-Level Netlist',
+    category: '現実の半導体・設計',
+    summary:
+      '回路の中にあるすべての素子（MOSFETスイッチ SW・プルアップ抵抗 PULL・NANDゲートなど）について、「どの部品のどのピンと、どの部品のどのピンが電線で繋がっているか」を1本残らず書き出した配線台帳です。このゲームで書き出す .v ファイルは、あなたが自作したチップを最下層の物理素子までごまかしゼロで展開した本物のネットリストになっています。',
+    analogy: '駅名と線路のつながりをすべて記録した「電子回路の完全な配線台帳」。これさえあれば誰でも寸分違わず同じ実物回路を再現できる。',
+    related: ['verilog_hdl', 'fpga', 'photolithography', 'wafer_press'],
+  },
+  fpga: {
+    id: 'fpga',
+    title: 'FPGA（書き換え可能チップ・FPGA合成）',
+    reading: 'Field-Programmable Gate Array',
+    category: '現実の半導体・電子工作',
+    summary:
+      '市販の数千円〜の電子工作ボードに載っている「中身の回路配線をソフトで何度でも書き換えられる万能シリコンチップ」です。このゲームで書き出した Verilog（.v）ファイルを専用の合成ツールに通して FPGA ボードへ書き込むと、工場に発注しなくても、あなたがゲーム内で作った回路やCPUが机の上で本物の電気で動き出します。',
+    analogy: '設計図（Verilog）を流し込むだけで、一瞬にして「あなたの自作CPUの実物」に変身する魔法の電子基板。',
+    related: ['verilog_hdl', 'netlist', 'photolithography', 'ic_chip'],
+  },
+  photolithography: {
+    id: 'photolithography',
+    title: '半導体露光（フォトリソグラフィ / ASIC製造）',
+    reading: 'Photolithography & Silicon Wafer Fabrication',
+    category: '現実の半導体・製造',
+    summary:
+      'Verilog の実ネットリストから「配置配線（レイアウト）」という工程を経てフォトマスク（原板）を作り、極細のレーザー光でシリコンウエハの表面に何万・何億個もの MOSFET と配線を焼き付けて本物の物理チップを量産する工程です。TSMCなどの最先端半導体工場は、まさにこの流れでスマホやPCのCPUを製造しています。',
+    analogy: '回路設計図を写真のネガ（原板）にして、シリコンの板に光で超高精細に焼き付ける「ナノスケールの写真現像」。',
+    related: ['verilog_hdl', 'netlist', 'fpga', 'wafer_press', 'silicon'],
   },
   silicon: {
     id: 'silicon',
@@ -2280,6 +2320,14 @@ const TERM_ALIASES = [
   ['ARK_KERNEL_CORE', 'ark_kernel_core'],
   ['マイクロカーネル', 'microkernel'],
   ['OSカーネル', 'microkernel'],
+  ['Verilog HDL', 'verilog_hdl'],
+  ['Verilog', 'verilog_hdl'],
+  ['実ネットリスト', 'netlist'],
+  ['ネットリスト', 'netlist'],
+  ['FPGA合成', 'fpga'],
+  ['FPGA', 'fpga'],
+  ['半導体露光', 'photolithography'],
+  ['フォトリソグラフィ', 'photolithography'],
 ];
 
 const SORTED_ALIASES = [...TERM_ALIASES].sort((a, b) => b[0].length - a[0].length);
